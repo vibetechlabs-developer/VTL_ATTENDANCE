@@ -1,0 +1,28 @@
+from django.urls import path
+from .views import (
+    LoginView, LogoutView, MeView,
+    EmployeesListView, EmployeesCreateView,
+    EmployeesUpdateView, EmployeeFaceRegisterByAdminView,
+    AuditLogsView, SecurityOverviewView, EmployeeFaceDataView,
+    PushPublicKeyView, PushSubscribeView, PushUnsubscribeView, PushLunchReminderView,
+    MyNotificationsView, MarkNotificationsReadView,
+)
+
+urlpatterns = [
+    path('login/', LoginView.as_view(), name='login'),
+    path('logout/', LogoutView.as_view(), name='logout'),
+    path('me/', MeView.as_view(), name='me'),
+    path('employees/', EmployeesListView.as_view(), name='employees-list'),
+    path('employees/create/', EmployeesCreateView.as_view(), name='employees-create'),
+    path('employees/<int:pk>/update/', EmployeesUpdateView.as_view(), name='employees-update'),
+    path('employees/<int:pk>/register-face/', EmployeeFaceRegisterByAdminView.as_view(), name='employees-register-face'),
+    path('employees/<int:pk>/face-data/', EmployeeFaceDataView.as_view(), name='employees-face-data'),
+    path('audit-logs/', AuditLogsView.as_view(), name='audit-logs'),
+    path('security-overview/', SecurityOverviewView.as_view(), name='security-overview'),
+    path('push/public-key/', PushPublicKeyView.as_view(), name='push-public-key'),
+    path('push/subscribe/', PushSubscribeView.as_view(), name='push-subscribe'),
+    path('push/unsubscribe/', PushUnsubscribeView.as_view(), name='push-unsubscribe'),
+    path('push/send-lunch/', PushLunchReminderView.as_view(), name='push-send-lunch'),
+    path('notifications/', MyNotificationsView.as_view(), name='my-notifications'),
+    path('notifications/mark-read/', MarkNotificationsReadView.as_view(), name='mark-notifications-read'),
+]
