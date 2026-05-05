@@ -26,9 +26,13 @@ BASE_DIR = Path(__file__).resolve().parent.parent
 SECRET_KEY = 'django-insecure-rlv)j$g+ic#&43$4c7jy$)ax!p&n=e*%jnn2xqlrr2-ldigxwl'
 
 # SECURITY WARNING: don't run with debug turned on in production!
-DEBUG = True
+DEBUG = (os.getenv("DEBUG", "false").strip().lower() in ["1", "true", "yes", "y"])
 
-ALLOWED_HOSTS = ['localhost', '127.0.0.1']
+_allowed_hosts = (os.getenv("ALLOWED_HOSTS", "") or "").strip()
+if _allowed_hosts:
+    ALLOWED_HOSTS = [h.strip() for h in _allowed_hosts.split(",") if h.strip()]
+else:
+    ALLOWED_HOSTS = ['localhost', '127.0.0.1']
 
 
 # Application definition
@@ -141,7 +145,12 @@ STATIC_ROOT = BASE_DIR / 'staticfiles'
 MEDIA_URL = '/media/'
 MEDIA_ROOT = BASE_DIR / 'media'
 
-CORS_ALLOW_ALL_ORIGINS = True
+_cors_allowed = (os.getenv("CORS_ALLOWED_ORIGINS", "") or "").strip()
+if _cors_allowed:
+    CORS_ALLOW_ALL_ORIGINS = False
+    CORS_ALLOWED_ORIGINS = [h.strip() for h in _cors_allowed.split(",") if h.strip()]
+else:
+    CORS_ALLOW_ALL_ORIGINS = True
 
 REST_FRAMEWORK = {
     'DEFAULT_AUTHENTICATION_CLASSES': (
