@@ -61,6 +61,14 @@ const hrNav = [
     group: "Personal", items: [
       { title: "My Dashboard", url: "/employee", icon: LayoutDashboard, end: true },
       { title: "My Attendance", url: "/employee/attendance", icon: Clock },
+      { title: "Daily Updates", url: "/employee/updates", icon: MessageSquare },
+      { title: "My Leaves", url: "/employee/leaves", icon: CalendarDays },
+      { title: "Approvals", url: "/employee/approvals", icon: CheckCircle2 },
+    ]
+  },
+  {
+    group: "Team", items: [
+      { title: "Team Attendance", url: "/admin/attendance", icon: Users },
     ]
   },
 ];

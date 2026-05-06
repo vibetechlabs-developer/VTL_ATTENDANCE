@@ -59,11 +59,17 @@ const App = () => {
               <Route path="/" element={<Index />} />
               <Route path="/login" element={<Login />} />
 
-              {/* Admin & Manager shared routes */}
+              {/* Admin/Manager shared routes + HR limited admin access */}
+              <Route element={<ProtectedRoute allow={["admin", "manager", "hr"]} />}>
+                <Route element={<DashboardLayout />}>
+                  <Route path="/admin/attendance" element={<AttendanceManagement />} />
+                </Route>
+              </Route>
+
+              {/* Admin & Manager shared routes (HR excluded) */}
               <Route element={<ProtectedRoute allow={["admin", "manager"]} />}>
                 <Route element={<DashboardLayout />}>
                   <Route path="/admin" element={<RoleBasedAdminDashboard />} />
-                  <Route path="/admin/attendance" element={<AttendanceManagement />} />
                   <Route path="/admin/leaves" element={<LeaveManagement />} />
                   <Route path="/admin/leave-usage" element={<LeaveUsageOverview />} />
                   <Route path="/admin/updates" element={<DailyUpdatesFeed />} />
@@ -79,22 +85,16 @@ const App = () => {
                 </Route>
               </Route>
 
-              {/* Employee base pages (HR also allowed for check-in flow) */}
+              {/* Employee pages (also accessible by manager/admin/hr for personal flow) */}
               <Route element={<ProtectedRoute allow={["employee", "manager", "admin", "hr"]} />}>
                 <Route element={<DashboardLayout />}>
                   <Route path="/employee" element={<EmployeeDashboard />} />
                   <Route path="/employee/attendance" element={<EmployeeAttendance />} />
-                  <Route path="/profile" element={<Profile />} />
-                  <Route path="/preferences" element={<Preferences />} />
-                </Route>
-              </Route>
-
-              {/* Employee extended pages (HR not allowed) */}
-              <Route element={<ProtectedRoute allow={["employee", "manager", "admin"]} />}>
-                <Route element={<DashboardLayout />}>
                   <Route path="/employee/updates" element={<EmployeeUpdates />} />
                   <Route path="/employee/leaves" element={<EmployeeLeaves />} />
                   <Route path="/employee/approvals" element={<EmployeeApprovals />} />
+                  <Route path="/profile" element={<Profile />} />
+                  <Route path="/preferences" element={<Preferences />} />
                 </Route>
               </Route>
 
