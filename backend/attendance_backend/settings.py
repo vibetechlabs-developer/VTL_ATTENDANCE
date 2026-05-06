@@ -32,7 +32,12 @@ _allowed_hosts = (os.getenv("ALLOWED_HOSTS", "") or "").strip()
 if _allowed_hosts:
     ALLOWED_HOSTS = [h.strip() for h in _allowed_hosts.split(",") if h.strip()]
 else:
-    ALLOWED_HOSTS = ['localhost', '127.0.0.1']
+    ALLOWED_HOSTS = [
+        'localhost',
+        '127.0.0.1',
+        'attend-api.vibetechlabs.cloud',
+        'attend.vibetechlabs.cloud',
+    ]
 
 
 # Application definition
@@ -145,12 +150,21 @@ STATIC_ROOT = BASE_DIR / 'staticfiles'
 MEDIA_URL = '/media/'
 MEDIA_ROOT = BASE_DIR / 'media'
 
+_default_cors_origins = {
+    "https://attend.vibetechlabs.cloud",
+    "http://localhost:5173",
+    "http://127.0.0.1:5173",
+}
 _cors_allowed = (os.getenv("CORS_ALLOWED_ORIGINS", "") or "").strip()
 if _cors_allowed:
-    CORS_ALLOW_ALL_ORIGINS = False
-    CORS_ALLOWED_ORIGINS = [h.strip() for h in _cors_allowed.split(",") if h.strip()]
+    _env_cors_origins = {h.strip() for h in _cors_allowed.split(",") if h.strip()}
+    CORS_ALLOWED_ORIGINS = sorted(_default_cors_origins.union(_env_cors_origins))
 else:
-    CORS_ALLOW_ALL_ORIGINS = True
+    CORS_ALLOWED_ORIGINS = sorted(_default_cors_origins)
+
+CORS_ALLOW_ALL_ORIGINS = False
+CORS_ALLOW_CREDENTIALS = True
+CSRF_TRUSTED_ORIGINS = CORS_ALLOWED_ORIGINS.copy()
 
 REST_FRAMEWORK = {
     'DEFAULT_AUTHENTICATION_CLASSES': (
