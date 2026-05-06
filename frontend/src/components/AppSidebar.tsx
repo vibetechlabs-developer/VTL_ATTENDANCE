@@ -55,6 +55,28 @@ const managerNav = [
   },
 ];
 
+const hrNav = [
+  {
+    group: "Overview", items: [
+      { title: "Dashboard", url: "/admin", icon: LayoutDashboard, end: true },
+    ]
+  },
+  {
+    group: "HR Operations", items: [
+      { title: "Attendance", url: "/admin/attendance", icon: Clock },
+      { title: "Leaves", url: "/admin/leaves", icon: CalendarDays },
+      { title: "Leave Usage", url: "/admin/leave-usage", icon: BarChart3 },
+      { title: "Daily Updates", url: "/admin/updates", icon: MessageSquare },
+    ]
+  },
+  {
+    group: "Personal", items: [
+      { title: "My Attendance", url: "/employee/attendance", icon: Clock },
+      { title: "My Leaves", url: "/employee/leaves", icon: CalendarDays },
+    ]
+  },
+];
+
 const employeeNav = [
   {
     group: "You", items: [
@@ -82,7 +104,14 @@ export function AppSidebar() {
     await logout();
     navigate("/login", { replace: true });
   };
-  const nav = user?.role === "employee" ? employeeNav : user?.role === "manager" ? managerNav : adminNav;
+  const nav =
+    user?.role === "employee"
+      ? employeeNav
+      : user?.role === "manager"
+        ? managerNav
+        : user?.role === "hr"
+          ? hrNav
+          : adminNav;
 
   const isActive = (url: string, end?: boolean) =>
     end ? pathname === url : pathname.startsWith(url);

@@ -149,7 +149,7 @@ class EmployeesCreateView(APIView):
     permission_classes = [IsAuthenticated]
 
     def post(self, request):
-        if request.user.role not in ['admin', 'manager', 'hr']:
+        if request.user.role not in ['admin', 'manager']:
             return Response({'error': 'Permission denied'}, status=status.HTTP_403_FORBIDDEN)
 
         serializer = EmployeeCreateSerializer(data=request.data)
@@ -170,7 +170,7 @@ class EmployeesUpdateView(APIView):
     permission_classes = [IsAuthenticated]
 
     def patch(self, request, pk):
-        if request.user.role not in ['admin', 'manager', 'hr']:
+        if request.user.role not in ['admin', 'manager']:
             return Response({'error': 'Permission denied'}, status=status.HTTP_403_FORBIDDEN)
 
         employee = Employee.objects.select_related('user').filter(pk=pk).first()
@@ -188,7 +188,7 @@ class EmployeeFaceRegisterByAdminView(APIView):
     permission_classes = [IsAuthenticated]
 
     def post(self, request, pk):
-        if request.user.role not in ['admin', 'manager', 'hr']:
+        if request.user.role not in ['admin', 'manager']:
             return Response({'error': 'Permission denied'}, status=status.HTTP_403_FORBIDDEN)
 
         employee = Employee.objects.select_related('user').filter(pk=pk).first()
@@ -232,7 +232,7 @@ class EmployeeFaceDataView(APIView):
     permission_classes = [IsAuthenticated]
 
     def get(self, request, pk):
-        if request.user.role not in ['admin', 'manager', 'hr']:
+        if request.user.role not in ['admin', 'manager']:
             return Response({'error': 'Permission denied'}, status=status.HTTP_403_FORBIDDEN)
 
         employee = Employee.objects.select_related('user').filter(pk=pk).first()

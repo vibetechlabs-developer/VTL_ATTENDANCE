@@ -38,7 +38,7 @@ const queryClient = new QueryClient();
 
 const RoleBasedAdminDashboard = () => {
   const { user } = useAuthStore();
-  return user?.role === "manager" ? <ManagerDashboard /> : <AdminDashboard />;
+  return user?.role === "manager" || user?.role === "hr" ? <ManagerDashboard /> : <AdminDashboard />;
 };
 
 const App = () => {
