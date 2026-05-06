@@ -2,6 +2,7 @@ try:
     import face_recognition
 except ImportError:  # optional in dev environments
     face_recognition = None
+from django.conf import settings
 import cv2
 import numpy as np
 import base64
@@ -97,8 +98,12 @@ def match_face(live_encoding, all_employees):
     best_index = np.argmin(distances)
     best_distance = distances[best_index]
 
-    # 0.6 thi ochhu = same person
-    if best_distance < 0.6:
-        return employees[best_index], round(float(best_distance), 3)
+    # Lower threshold = stricter matching (reduce false positives).
+    threshold = getattr(settings, "FACE_MATCH_THRESHOLD", 0.5)
+    best_distance = float(best_distance)
 
-    return None, None
+    if best_distance < float(threshold):
+        return employees[best_index], round(best_distance, 3)
+
+    # Return best_distance for better error messaging/debugging.
+    return None, round(best_distance, 3)

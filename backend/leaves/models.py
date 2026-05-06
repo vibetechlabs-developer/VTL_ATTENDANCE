@@ -3,12 +3,12 @@ from users.models import Employee, User  # ← users thi import
 
 class LeaveBalance(models.Model):
     employee = models.OneToOneField(Employee, on_delete=models.CASCADE)
-    casual_total = models.IntegerField(default=12)
-    casual_used = models.IntegerField(default=0)
-    sick_total = models.IntegerField(default=10)
-    sick_used = models.IntegerField(default=0)
-    earned_total = models.IntegerField(default=15)
-    earned_used = models.IntegerField(default=0)
+    casual_total = models.DecimalField(max_digits=5, decimal_places=1, default=12)
+    casual_used = models.DecimalField(max_digits=5, decimal_places=1, default=0)
+    sick_total = models.DecimalField(max_digits=5, decimal_places=1, default=10)
+    sick_used = models.DecimalField(max_digits=5, decimal_places=1, default=0)
+    earned_total = models.DecimalField(max_digits=5, decimal_places=1, default=15)
+    earned_used = models.DecimalField(max_digits=5, decimal_places=1, default=0)
 
     def __str__(self):
         return f"Balance - {self.employee.name}"
@@ -29,6 +29,7 @@ class LeaveRequest(models.Model):
     leave_type = models.CharField(max_length=20, choices=LEAVE_TYPES)
     start_date = models.DateField()
     end_date = models.DateField()
+    is_half_day = models.BooleanField(default=False)
     reason = models.TextField()
     status = models.CharField(max_length=20, choices=STATUS_CHOICES, default='pending')
     applied_at = models.DateTimeField(auto_now_add=True)

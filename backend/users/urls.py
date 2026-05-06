@@ -19,6 +19,8 @@ urlpatterns = [
     path('employees/<int:pk>/face-data/', EmployeeFaceDataView.as_view(), name='employees-face-data'),
     path('audit-logs/', AuditLogsView.as_view(), name='audit-logs'),
     path('security-overview/', SecurityOverviewView.as_view(), name='security-overview'),
+    # Backwards-compat alias (some clients call underscore route)
+    path('security_overview/', SecurityOverviewView.as_view(), name='security-overview-underscore'),
     path('push/public-key/', PushPublicKeyView.as_view(), name='push-public-key'),
     path('push/subscribe/', PushSubscribeView.as_view(), name='push-subscribe'),
     path('push/unsubscribe/', PushUnsubscribeView.as_view(), name='push-unsubscribe'),

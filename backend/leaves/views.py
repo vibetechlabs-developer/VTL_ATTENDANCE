@@ -9,6 +9,7 @@ from .serializers import (
 )
 from users.models import Employee
 from users.models import AppNotification
+from decimal import Decimal
 
 
 # ─── Leave Apply ───────────────────────────────────────
@@ -24,8 +25,12 @@ class LeaveApplyView(APIView):
         employee = request.user.employee
 
         # Total days calculate karo
-        delta = data['end_date'] - data['start_date']
-        days = delta.days + 1
+        is_half_day = data.get('is_half_day', False)
+        if is_half_day:
+            days = Decimal('0.5')
+        else:
+            delta = data['end_date'] - data['start_date']
+            days = Decimal(delta.days + 1)
 
         # Balance check karo
         balance = LeaveBalance.objects.get(employee=employee)
@@ -50,6 +55,7 @@ class LeaveApplyView(APIView):
             leave_type=leave_type,
             start_date=data['start_date'],
             end_date=data['end_date'],
+            is_half_day=is_half_day,
             reason=data['reason'],
             status='pending'
         )
@@ -91,8 +97,11 @@ class LeaveApproveView(APIView):
         leave.save()
 
         # Balance update karo
-        delta = leave.end_date - leave.start_date
-        days = delta.days + 1
+        if leave.is_half_day:
+            days = Decimal('0.5')
+        else:
+            delta = leave.end_date - leave.start_date
+            days = Decimal(delta.days + 1)
         balance = LeaveBalance.objects.get(employee=leave.employee)
 
         if leave.leave_type == 'casual':
@@ -113,7 +122,7 @@ class LeaveApproveView(APIView):
 
         return Response({
             'message': 'Leave approved.',
-            'days_deducted': days
+            'days_deducted': float(days)
         })
 
 
@@ -248,7 +257,7 @@ class LeaveUsageSummaryView(APIView):
             row = summary.get(leave.employee_id)
             if not row:
                 continue
-            days = (leave.end_date - leave.start_date).days + 1
+            days = Decimal('0.5') if leave.is_half_day else Decimal((leave.end_date - leave.start_date).days + 1)
             row['total_requests'] += 1
             if leave.status == 'approved':
                 row['approved_requests'] += 1
@@ -270,4 +279,19 @@ class LeaveUsageSummaryView(APIView):
             key=lambda r: (r['approved_days'], r['pending_requests'], r['total_requests']),
             reverse=True
         )
-        return Response(rows)
+
+        # Keep payload JSON-safe across renderers (some fail on Decimal).
+        decimal_fields = {
+            'approved_days', 'pending_days', 'casual_days', 'sick_days', 'earned_days',
+            'casual_total', 'sick_total', 'earned_total', 'casual_used', 'sick_used',
+            'earned_used', 'total_entitled', 'total_used', 'total_remaining'
+        }
+        normalized_rows = []
+        for row in rows:
+            out = dict(row)
+            for key in decimal_fields:
+                val = out.get(key, 0)
+                out[key] = float(val) if val is not None else 0.0
+            normalized_rows.append(out)
+
+        return Response(normalized_rows)

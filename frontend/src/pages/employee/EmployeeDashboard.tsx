@@ -37,7 +37,7 @@ type VerifyStep = "face" | "location" | "done" | null;
 export default function EmployeeDashboard() {
   const { user, accessToken } = useAuthStore();
   const { leaves } = useDataStore();
-  const { status, checkInAt, checkOutAt, workedMsToday, totalBreakMs, breakStartAt, breaks, setCheckInAt, hydrateSession, startBreak, endBreak, checkOut } = useAttendanceStore();
+  const { status, checkInAt, checkOutAt, workedMsToday, totalBreakMs, breakStartAt, breaks, setCheckInAt, hydrateSession, startBreak, endBreak, checkOut, reset } = useAttendanceStore();
   const [now, setNow] = useState(Date.now());
   const [coDialog, setCoDialog] = useState(false);
   const [workNote, setWorkNote] = useState("");
@@ -54,6 +54,8 @@ export default function EmployeeDashboard() {
   useEffect(() => {
     if (!accessToken) return;
     const restore = async () => {
+      // Always clear previous session state when switching users.
+      reset();
       const res = await attendanceSessionRequest(accessToken);
       if (!res.ok) return;
       const body = (await res.json().catch(() => ({}))) as {
@@ -65,7 +67,11 @@ export default function EmployeeDashboard() {
         active_break_start?: string | null;
         breaks?: { start: string; end: string }[];
       };
-      if (!body.checked_in_at) return;
+      if (!body.checked_in_at) {
+        // Not checked-in today for this employee.
+        reset();
+        return;
+      }
 
       const breakList = (body.breaks || [])
         .map((b) => ({ start: new Date(b.start).getTime(), end: new Date(b.end).getTime() }))
@@ -86,7 +92,7 @@ export default function EmployeeDashboard() {
       });
     };
     void restore();
-  }, [accessToken, hydrateSession]);
+  }, [accessToken, hydrateSession, reset]);
 
   const currentBreak = status === "on-break" && breakStartAt ? now - breakStartAt : 0;
   const liveWorkMs = checkInAt ? now - checkInAt - totalBreakMs - currentBreak : 0;

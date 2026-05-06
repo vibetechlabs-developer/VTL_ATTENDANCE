@@ -210,7 +210,13 @@ export async function leaveHistoryRequest(accessToken: string): Promise<Response
 
 export async function leaveApplyRequest(
   accessToken: string,
-  payload: { leave_type: LeaveTypeApi; start_date: string; end_date: string; reason: string }
+  payload: {
+    leave_type: LeaveTypeApi;
+    start_date: string;
+    end_date: string;
+    reason: string;
+    is_half_day?: boolean;
+  }
 ): Promise<Response> {
   return fetch(apiUrl("/api/leaves/apply/"), {
     method: "POST",

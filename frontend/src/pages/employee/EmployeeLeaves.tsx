@@ -56,12 +56,13 @@ export default function EmployeeLeaves() {
   const handleApply = async () => {
     if (!accessToken) { toast.error("Session expired. Please login again."); return; }
     if (!from || !to || !reason.trim()) { toast.error("Please fill all fields"); return; }
-    if (half) { toast.error("Half-day is not supported by API yet."); return; }
+    if (half && from !== to) { toast.error("For half-day, From and To date must be same."); return; }
     const res = await leaveApplyRequest(accessToken, {
       leave_type: type,
       start_date: from,
       end_date: to,
       reason: reason.trim(),
+      is_half_day: half,
     });
     const body = (await res.json().catch(() => ({}))) as { error?: string; message?: string };
     if (!res.ok) {
@@ -85,7 +86,7 @@ export default function EmployeeLeaves() {
           <DialogTrigger asChild>
             <Button className="bg-gradient-primary shadow-md"><Plus className="h-4 w-4 mr-2" /> Apply leave</Button>
           </DialogTrigger>
-          <DialogContent className="sm:max-w-[460px]">
+          <DialogContent className="sm:max-w-[460px] max-h-[85vh] overflow-y-auto">
             <DialogHeader>
               <DialogTitle>Apply for leave</DialogTitle>
               <DialogDescription>
@@ -104,7 +105,7 @@ export default function EmployeeLeaves() {
                   </SelectContent>
                 </Select>
               </div>
-              <div className="grid grid-cols-2 gap-3">
+              <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
                 <div className="space-y-1.5"><Label>From</Label><Input type="date" value={from} onChange={(e) => setFrom(e.target.value)} /></div>
                 <div className="space-y-1.5"><Label>To</Label><Input type="date" value={to} onChange={(e) => setTo(e.target.value)} /></div>
               </div>
@@ -118,8 +119,10 @@ export default function EmployeeLeaves() {
               </div>
             </div>
             <DialogFooter>
-              <Button variant="outline" onClick={() => setOpen(false)}>Cancel</Button>
-              <Button onClick={handleApply} className="bg-gradient-primary">Submit request</Button>
+              <div className="flex flex-col-reverse sm:flex-row sm:justify-end gap-2 w-full">
+                <Button variant="outline" className="w-full sm:w-auto" onClick={() => setOpen(false)}>Cancel</Button>
+                <Button onClick={handleApply} className="bg-gradient-primary w-full sm:w-auto">Submit request</Button>
+              </div>
             </DialogFooter>
           </DialogContent>
         </Dialog>
@@ -134,7 +137,7 @@ export default function EmployeeLeaves() {
             </div>
             <p className="text-3xl font-bold tracking-tight">{b.remaining}<span className="text-base text-muted-foreground font-normal">/{b.total}</span></p>
             <p className="text-xs text-muted-foreground mb-2">days remaining</p>
-            <Progress value={(b.remaining / b.total) * 100} className="h-1.5" />
+            <Progress value={b.total > 0 ? (b.remaining / b.total) * 100 : 0} className="h-1.5" />
           </Card>
         ))}
       </div>
@@ -144,7 +147,7 @@ export default function EmployeeLeaves() {
           {history.length === 0 ? (
             <p className="text-sm text-muted-foreground p-6 text-center">You have no leave history yet.</p>
           ) : history.map((l: any) => (
-            <div key={l.id} className="p-4 flex flex-wrap items-center justify-between gap-3">
+            <div key={l.id} className="p-4 flex flex-col sm:flex-row sm:items-center sm:justify-between gap-3">
               <div>
                 <p className="font-medium text-sm">{String(l.leave_type).toUpperCase()} leave</p>
                 <p className="text-xs text-muted-foreground">{l.start_date} → {l.end_date}</p>

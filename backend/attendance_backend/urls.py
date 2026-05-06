@@ -1,5 +1,6 @@
 from django.conf import settings
 from django.conf.urls.static import static
+import os
 from django.contrib import admin
 from django.urls import path, include
 
@@ -11,5 +12,9 @@ urlpatterns = [
     path('api/updates/', include('updates.urls')),
 ]
 
-if settings.DEBUG:
+# Serve uploaded media in local/dev environments.
+# By default, this project only serves /media/ when DEBUG=true.
+# If you run local with DEBUG=false, set: SERVE_MEDIA=1
+_serve_media = os.getenv("SERVE_MEDIA", "").strip().lower() in ["1", "true", "yes", "y"]
+if settings.DEBUG or _serve_media:
     urlpatterns += static(settings.MEDIA_URL, document_root=settings.MEDIA_ROOT)

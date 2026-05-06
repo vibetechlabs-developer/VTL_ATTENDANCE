@@ -29,6 +29,56 @@ export function CheckInModal({ open, onOpenChange, onVerified, mode = "check-in"
 
     const accessToken = useAuthStore((s) => s.accessToken);
 
+    const ensureVideoReady = async (): Promise<boolean> => {
+        const v = videoRef.current;
+        if (!v) return false;
+
+        const hasSize = () => (v.videoWidth || 0) > 0 && (v.videoHeight || 0) > 0;
+        if (hasSize()) return true;
+
+        // Retry for slow mobile/webcam initialization cases.
+        // Some mobile browsers take longer than 1-2 seconds to update dimensions.
+        const hardTimeoutMs = 6500;
+        const start = Date.now();
+
+        while (Date.now() - start < hardTimeoutMs) {
+            try {
+                if (streamRef.current) {
+                    // Always reattach to current stream; srcObject equality checks can be unreliable.
+                    v.srcObject = streamRef.current;
+                }
+                await v.play();
+            } catch {
+                // Ignore autoplay/play race and keep retrying.
+            }
+
+            if (hasSize()) return true;
+
+            // Wait for the browser to populate metadata/canplay.
+            await new Promise<boolean>((resolve) => {
+                if (hasSize()) return resolve(true);
+
+                const done = (ok: boolean) => {
+                    v.removeEventListener("loadedmetadata", onMeta);
+                    v.removeEventListener("canplay", onCanPlay);
+                    resolve(ok);
+                };
+
+                const onMeta = () => done(hasSize());
+                const onCanPlay = () => done(hasSize());
+
+                v.addEventListener("loadedmetadata", onMeta, { once: true });
+                v.addEventListener("canplay", onCanPlay, { once: true });
+
+                window.setTimeout(() => done(hasSize()), 600);
+            });
+
+            if (hasSize()) return true;
+        }
+
+        return hasSize();
+    };
+
     useEffect(() => {
         if (open) {
             setStep("face");
@@ -51,7 +101,11 @@ export function CheckInModal({ open, onOpenChange, onVerified, mode = "check-in"
         if (!open) return;
         const startCamera = async () => {
             try {
-                const stream = await navigator.mediaDevices.getUserMedia({ video: true, audio: false });
+                // Provide facingMode hint for mobile to reduce stream init flakiness.
+                const stream = await navigator.mediaDevices.getUserMedia({
+                    video: { facingMode: "user", width: { ideal: 640 }, height: { ideal: 480 } },
+                    audio: false,
+                });
                 streamRef.current = stream;
                 if (videoRef.current) {
                     const v = videoRef.current;
@@ -63,7 +117,8 @@ export function CheckInModal({ open, onOpenChange, onVerified, mode = "check-in"
                     };
                     const onReady = async () => {
                         try { await v.play(); } catch { /* ignore */ }
-                        markReadyIfSized();
+                        const ready = markReadyIfSized() || await ensureVideoReady();
+                        setCameraReady(ready);
                     };
                     if (!markReadyIfSized()) {
                         v.onloadedmetadata = () => void onReady();
@@ -114,10 +169,9 @@ export function CheckInModal({ open, onOpenChange, onVerified, mode = "check-in"
     const handleVerifyAndSubmit = async () => {
         if (!accessToken) { toast.error("Session expired. Please login again."); return; }
         if (!cameraReady) {
-            const v = videoRef.current;
-            const readyBySize = !!v && (v.videoWidth || 0) > 0 && (v.videoHeight || 0) > 0;
-            if (!readyBySize) {
-                toast.error("Camera is not ready yet. Please wait 1-2 seconds and retry.");
+            const ready = await ensureVideoReady();
+            if (!ready) {
+                toast.error("Camera stream not ready. Please allow camera access and close other camera apps.");
                 return;
             }
             setCameraReady(true);
@@ -234,8 +288,8 @@ export function CheckInModal({ open, onOpenChange, onVerified, mode = "check-in"
                                             : "Ready. Click start to verify."}
                                 </p>
                             </div>
-                            <div className="rounded-xl overflow-hidden border border-border/50 bg-muted/10">
-                                <video ref={videoRef} autoPlay playsInline muted className="w-full h-44 object-cover" />
+                            <div className="mx-auto h-44 w-44 rounded-full overflow-hidden border-2 border-primary/40 bg-muted/10 shadow-sm">
+                                <video ref={videoRef} autoPlay playsInline muted className="h-full w-full object-cover" />
                             </div>
                             <canvas ref={canvasRef} className="hidden" />
                         </motion.div>

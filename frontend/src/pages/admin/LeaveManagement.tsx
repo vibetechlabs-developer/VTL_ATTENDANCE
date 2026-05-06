@@ -55,11 +55,11 @@ export default function LeaveManagement() {
       </div>
 
       <Tabs defaultValue="pending">
-        <TabsList>
+        <TabsList className="w-full justify-start overflow-x-auto whitespace-nowrap">
           {tabs.map((t) => {
             const count = grouped[t].length;
             return (
-              <TabsTrigger key={t} value={t} className="gap-2">
+              <TabsTrigger key={t} value={t} className="gap-2 shrink-0">
                 {t.toUpperCase()} <span className="text-xs bg-muted px-1.5 py-0.5 rounded-full">{count}</span>
               </TabsTrigger>
             );

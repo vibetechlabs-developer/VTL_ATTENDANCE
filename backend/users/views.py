@@ -6,6 +6,9 @@ from rest_framework_simplejwt.tokens import RefreshToken
 from django.contrib.auth import authenticate
 from django.conf import settings
 from django.utils import timezone
+from django.core.files.base import ContentFile
+import base64
+import uuid
 from .serializers import LoginSerializer, EmployeeListSerializer, EmployeeCreateSerializer, EmployeeUpdateSerializer
 from .models import Employee, PushSubscription, User
 from attendance.face_utils import decode_base64_image, get_face_encoding
@@ -14,6 +17,7 @@ from leaves.models import LeaveRequest
 from updates.models import DailyUpdate
 from .push_utils import send_push_message
 from .serializers_notifications import AppNotificationSerializer
+import mimetypes
 
 class LoginView(APIView):
     permission_classes = []  
@@ -207,6 +211,18 @@ class EmployeeFaceRegisterByAdminView(APIView):
             return Response({'error': 'Face not detected'}, status=status.HTTP_400_BAD_REQUEST)
 
         employee.face_encoding = encoding.tolist()
+        # Save latest registered face snapshot for admin review/debugging.
+        try:
+            img_payload = image_data.split(',', 1)[1] if ',' in image_data else image_data
+            img_bytes = base64.b64decode(img_payload)
+            if img_bytes:
+                employee.profile_photo.save(
+                    f"face_{employee.id}_{uuid.uuid4().hex[:8]}.png",
+                    ContentFile(img_bytes),
+                )
+        except Exception:
+            # Keep registration successful even if photo save fails.
+            pass
         employee.save()
         row = EmployeeListSerializer(employee, context={'request': request}).data
         return Response({'employee': row, 'message': 'Face registered successfully'})
@@ -228,10 +244,25 @@ class EmployeeFaceDataView(APIView):
         if isinstance(encoding, list):
             preview = encoding[:12]
 
+        profile_photo_data_url = None
+        try:
+            if employee.profile_photo:
+                photo_path = employee.profile_photo.path
+                with open(photo_path, "rb") as f:
+                    photo_bytes = f.read()
+                mime, _ = mimetypes.guess_type(photo_path)
+                if not mime:
+                    mime = "image/png"
+                profile_photo_data_url = f"data:{mime};base64,{base64.b64encode(photo_bytes).decode('utf-8')}"
+        except Exception:
+            profile_photo_data_url = None
+
         return Response({
             'employee_id': employee.id,
             'employee_name': employee.name,
             'has_face': bool(employee.face_encoding),
+            'profile_photo': request.build_absolute_uri(employee.profile_photo.url) if employee.profile_photo else None,
+            'profile_photo_data_url': profile_photo_data_url,
             'vector_length': len(encoding) if isinstance(encoding, list) else 0,
             'vector_preview': preview,
         })

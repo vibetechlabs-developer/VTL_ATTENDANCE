@@ -48,6 +48,7 @@ export default function UserManagement() {
   const [faceDataOpen, setFaceDataOpen] = useState(false);
   const [faceData, setFaceData] = useState<any | null>(null);
   const [loadingFaceData, setLoadingFaceData] = useState(false);
+  const [facePhotoError, setFacePhotoError] = useState(false);
   const [cameraReady, setCameraReady] = useState(false);
   const videoRef = useRef<HTMLVideoElement | null>(null);
   const canvasRef = useRef<HTMLCanvasElement | null>(null);
@@ -306,6 +307,7 @@ export default function UserManagement() {
     setSelectedEmployee(employee);
     setFaceDataOpen(true);
     setLoadingFaceData(true);
+    setFacePhotoError(false);
     setFaceData(null);
     try {
       const res = await usersFaceDataRequest(accessToken, employee.id);
@@ -327,17 +329,17 @@ export default function UserManagement() {
           <h1 className="text-2xl sm:text-3xl font-bold tracking-tight">User Management</h1>
           <p className="text-muted-foreground mt-1">Manage employees, roles and access.</p>
         </div>
-        <div className="flex gap-2">
-          <Button variant="outline" onClick={() => exportCsv("employees.csv", filtered)}>
+        <div className="flex flex-col sm:flex-row gap-2 w-full sm:w-auto">
+          <Button variant="outline" className="w-full sm:w-auto" onClick={() => exportCsv("employees.csv", filtered)}>
             <Download className="h-4 w-4 mr-2" /> Export
           </Button>
           <Dialog open={open} onOpenChange={setOpen}>
             <DialogTrigger asChild>
-              <Button className="bg-gradient-primary shadow-md">
+              <Button className="bg-gradient-primary shadow-md w-full sm:w-auto">
                 <Plus className="h-4 w-4 mr-2" /> Add User
               </Button>
             </DialogTrigger>
-            <DialogContent className="sm:max-w-[480px]">
+            <DialogContent className="sm:max-w-[560px] max-h-[85vh] overflow-y-auto">
               <DialogHeader>
                 <DialogTitle>Add new employee</DialogTitle>
                 <DialogDescription>
@@ -345,7 +347,7 @@ export default function UserManagement() {
                 </DialogDescription>
               </DialogHeader>
               <div className="grid gap-3 py-2">
-                <div className="grid grid-cols-2 gap-3">
+                <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
                   <div className="space-y-1.5">
                     <Label>Full name</Label>
                     <Input value={form.name} onChange={(e) => setForm({ ...form, name: e.target.value })} />
@@ -359,7 +361,7 @@ export default function UserManagement() {
                   <Label>Email</Label>
                   <Input type="email" value={form.email} onChange={(e) => setForm({ ...form, email: e.target.value })} />
                 </div>
-                <div className="grid grid-cols-2 gap-3">
+                <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
                   <div className="space-y-1.5">
                     <Label>Role</Label>
                     <Select value={form.role} onValueChange={(v: Role) => setForm({ ...form, role: v })}>
@@ -377,7 +379,7 @@ export default function UserManagement() {
                     <Input value={form.department} onChange={(e) => setForm({ ...form, department: e.target.value })} />
                   </div>
                 </div>
-                <div className="grid grid-cols-2 gap-3">
+                <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
                   <div className="space-y-1.5">
                     <Label>Reports to</Label>
                     <Select value={form.reportsTo} onValueChange={(v) => setForm({ ...form, reportsTo: v })}>
@@ -398,7 +400,7 @@ export default function UserManagement() {
 
                 <div className="space-y-1.5">
                   <Label>Password (optional)</Label>
-                  <div className="flex gap-2">
+                  <div className="flex flex-col sm:flex-row gap-2">
                     <Input
                       type="text"
                       value={createPassword}
@@ -408,6 +410,7 @@ export default function UserManagement() {
                     <Button
                       type="button"
                       variant="outline"
+                      className="w-full sm:w-auto"
                       onClick={() => setCreatePassword(Math.random().toString(36).slice(2, 10) + "@123")}
                     >
                       Generate
@@ -428,8 +431,10 @@ export default function UserManagement() {
                 )}
               </div>
               <DialogFooter>
-                <Button variant="outline" onClick={() => setOpen(false)}>Cancel</Button>
-                <Button onClick={() => void handleAdd()} className="bg-gradient-primary">Add employee</Button>
+                <div className="flex flex-col-reverse sm:flex-row sm:justify-end gap-2 w-full">
+                  <Button variant="outline" className="w-full sm:w-auto" onClick={() => setOpen(false)}>Cancel</Button>
+                  <Button onClick={() => void handleAdd()} className="bg-gradient-primary w-full sm:w-auto">Add employee</Button>
+                </div>
               </DialogFooter>
             </DialogContent>
           </Dialog>
@@ -455,7 +460,95 @@ export default function UserManagement() {
         {filtered.length === 0 ? (
           <EmptyState title="No users found" description="Try adjusting your filters or search." />
         ) : (
-          <div className="overflow-x-auto rounded-lg border border-border">
+          <>
+            {/* Mobile/tablet: card list so actions never disappear */}
+            <div className="lg:hidden space-y-3">
+              {filtered.map((e) => (
+                <Card key={e.id} className="p-4 border-glow-shine">
+                  <div className="flex items-start justify-between gap-3">
+                    <div className="flex items-center gap-3 min-w-0">
+                      <Avatar className="h-9 w-9 shrink-0">
+                        <AvatarFallback className="bg-gradient-primary text-primary-foreground text-xs">
+                          {e.name.split(" ").map((n) => n[0]).join("").slice(0, 2)}
+                        </AvatarFallback>
+                      </Avatar>
+                      <div className="min-w-0">
+                        <p className="font-semibold truncate">{e.name}</p>
+                        <p className="text-xs text-muted-foreground truncate">{e.email}</p>
+                        <p className="text-[11px] text-muted-foreground font-mono mt-0.5">{e.empId}</p>
+                      </div>
+                    </div>
+                    <StatusPill
+                      label={e.role}
+                      variant={e.role === "admin" ? "info" : e.role === "manager" ? "warning" : e.role === "hr" ? "success" : "muted"}
+                    />
+                  </div>
+
+                  <div className="grid grid-cols-2 gap-2 mt-3 text-xs">
+                    <div className="rounded-lg bg-muted/30 px-3 py-2">
+                      <p className="text-muted-foreground">Department</p>
+                      <p className="font-medium text-sm truncate">{e.department}</p>
+                    </div>
+                    <div className="rounded-lg bg-muted/30 px-3 py-2">
+                      <p className="text-muted-foreground">Joined</p>
+                      <p className="font-medium text-sm">{e.joiningDate}</p>
+                    </div>
+                    <div className="rounded-lg bg-muted/30 px-3 py-2">
+                      <p className="text-muted-foreground">Reports to</p>
+                      <p className="font-medium text-sm truncate">{e.reportsTo}</p>
+                    </div>
+                    <div className="rounded-lg bg-muted/30 px-3 py-2">
+                      <p className="text-muted-foreground">Face</p>
+                      <div className="mt-1">
+                        <StatusPill label={e.faceStatus} variant={e.faceStatus === "registered" ? "success" : "warning"} />
+                      </div>
+                    </div>
+                  </div>
+
+                  <div className="grid grid-cols-2 gap-2 mt-3">
+                    <Button
+                      size="sm"
+                      variant="outline"
+                      className="w-full"
+                      disabled={!e.hasEmployeeProfile}
+                      onClick={() => void openFaceData(e)}
+                    >
+                      <Eye className="h-4 w-4 mr-2" /> View
+                    </Button>
+                    <Button
+                      size="sm"
+                      variant="outline"
+                      className="w-full"
+                      disabled={!e.hasEmployeeProfile}
+                      onClick={() => openFaceRegister(e)}
+                    >
+                      <Camera className="h-4 w-4 mr-2" /> Face
+                    </Button>
+                    <Button
+                      size="sm"
+                      variant="outline"
+                      className="w-full"
+                      disabled={!e.hasEmployeeProfile}
+                      onClick={() => openEdit(e)}
+                    >
+                      <Pencil className="h-4 w-4 mr-2" /> Edit
+                    </Button>
+                    <Button
+                      size="sm"
+                      variant="outline"
+                      className="w-full text-destructive border-destructive/30 hover:bg-destructive/10"
+                      disabled={!e.hasEmployeeProfile}
+                      onClick={() => { deleteEmployee(e.id); toast.success(`${e.name} removed`); }}
+                    >
+                      <Trash2 className="h-4 w-4 mr-2" /> Delete
+                    </Button>
+                  </div>
+                </Card>
+              ))}
+            </div>
+
+            {/* Desktop: table */}
+            <div className="hidden lg:block overflow-x-auto rounded-lg border border-border">
             <Table>
               <TableHeader>
                 <TableRow className="bg-muted/40">
@@ -543,11 +636,12 @@ export default function UserManagement() {
               </TableBody>
             </Table>
           </div>
+          </>
         )}
       </Card>
 
       <Dialog open={editOpen} onOpenChange={setEditOpen}>
-        <DialogContent className="sm:max-w-[480px]">
+        <DialogContent className="sm:max-w-[480px] max-h-[85vh] overflow-y-auto">
           <DialogHeader>
             <DialogTitle>Edit employee</DialogTitle>
             <DialogDescription>Update employee details and save to backend.</DialogDescription>
@@ -562,7 +656,7 @@ export default function UserManagement() {
                 <Label>Email</Label>
                 <Input type="email" value={selectedEmployee.email} onChange={(e) => setSelectedEmployee({ ...selectedEmployee, email: e.target.value })} />
               </div>
-              <div className="grid grid-cols-2 gap-3">
+              <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
                 <div className="space-y-1.5">
                   <Label>Role</Label>
                   <Select value={selectedEmployee.role} onValueChange={(v: Role) => setSelectedEmployee({ ...selectedEmployee, role: v })}>
@@ -610,10 +704,12 @@ export default function UserManagement() {
             </div>
           )}
           <DialogFooter>
-            <Button variant="outline" onClick={() => setEditOpen(false)} disabled={savingEdit}>Cancel</Button>
-            <Button onClick={() => void handleEditSave()} disabled={savingEdit} className="bg-gradient-primary">
-              {savingEdit ? "Saving..." : "Save changes"}
-            </Button>
+            <div className="flex flex-col-reverse sm:flex-row sm:justify-end gap-2 w-full">
+              <Button variant="outline" className="w-full sm:w-auto" onClick={() => setEditOpen(false)} disabled={savingEdit}>Cancel</Button>
+              <Button onClick={() => void handleEditSave()} disabled={savingEdit} className="bg-gradient-primary w-full sm:w-auto">
+                {savingEdit ? "Saving..." : "Save changes"}
+              </Button>
+            </div>
           </DialogFooter>
         </DialogContent>
       </Dialog>
@@ -643,7 +739,7 @@ export default function UserManagement() {
       </Dialog>
 
       <Dialog open={faceDataOpen} onOpenChange={setFaceDataOpen}>
-        <DialogContent className="sm:max-w-[560px]">
+        <DialogContent className="sm:max-w-[560px] max-h-[85vh] overflow-y-auto">
           <DialogHeader>
             <DialogTitle>Face DB Data</DialogTitle>
             <DialogDescription>
@@ -657,6 +753,28 @@ export default function UserManagement() {
               <p className="text-sm text-muted-foreground">No data found.</p>
             ) : (
               <>
+                {faceData.profile_photo ? (
+                  <div className="rounded-lg border border-border p-3">
+                    <p className="text-xs text-muted-foreground mb-2">Stored face photo</p>
+                    {facePhotoError ? (
+                      <div className="h-44 w-full rounded-md bg-muted/20 border border-border/50 flex items-center justify-center text-xs text-muted-foreground px-3 text-center">
+                        Image not available
+                      </div>
+                    ) : (
+                      <img
+                        src={faceData.profile_photo_data_url || faceData.profile_photo}
+                        alt={`${selectedEmployee?.name || "Employee"} face`}
+                        className="h-44 w-full object-cover rounded-md border border-border/50"
+                        onError={() => setFacePhotoError(true)}
+                      />
+                    )}
+                  </div>
+                ) : (
+                  <div className="rounded-lg border border-border p-3">
+                    <p className="text-xs text-muted-foreground">Stored face photo</p>
+                    <p className="text-sm mt-1">No face photo stored yet. Re-register face to save latest snapshot.</p>
+                  </div>
+                )}
                 <div className="grid grid-cols-3 gap-3">
                   <div className="rounded-lg border border-border p-3">
                     <p className="text-xs text-muted-foreground">Registered</p>
@@ -673,11 +791,13 @@ export default function UserManagement() {
                 </div>
                 <div className="rounded-lg border border-border p-3">
                   <p className="text-xs text-muted-foreground mb-2">Vector preview (first 12 values)</p>
-                  <code className="text-xs break-all">
-                    {Array.isArray(faceData.vector_preview) && faceData.vector_preview.length > 0
-                      ? JSON.stringify(faceData.vector_preview)
-                      : "No stored vector preview"}
-                  </code>
+                  <div className="max-h-[180px] overflow-y-auto rounded-md bg-muted/10 p-2">
+                    <code className="text-xs break-all">
+                      {Array.isArray(faceData.vector_preview) && faceData.vector_preview.length > 0
+                        ? JSON.stringify(faceData.vector_preview)
+                        : "No stored vector preview"}
+                    </code>
+                  </div>
                 </div>
               </>
             )}

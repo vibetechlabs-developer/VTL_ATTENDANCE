@@ -2,8 +2,12 @@ from rest_framework.views import APIView
 from rest_framework.response import Response
 from rest_framework.permissions import IsAuthenticated
 from django.utils import timezone
+from django.core.files.base import ContentFile
+from django.conf import settings
 from geopy.distance import geodesic
 import numpy as np
+import base64
+import uuid
 
 from users.models import Employee, OfficeLocation
 from leaves.models import LeaveRequest
@@ -13,23 +17,25 @@ from .face_utils import decode_base64_image, get_face_encoding, match_face
 
 
 # ─── Helper: Location check ────────────────────────────
-def is_within_office(user_lat, user_lng):
+def validate_office_radius(user_lat, user_lng):
     office = OfficeLocation.objects.first()
-    # If office isn't configured yet, allow within default 500m of (0,0) doesn't make sense,
-    # so we allow check-in/out for demo environments.
     if not office:
-        return True
+        return False, None, "Office location is not configured. Please contact admin."
 
     distance = geodesic(
         (user_lat, user_lng),
         (office.latitude, office.longitude)
     ).meters
 
-    radius = office.radius_meters or 0
-    # Enforce at least 500m radius as requested
-    if radius < 500:
-        radius = 500
-    return distance <= radius
+    # Strict policy: only 500m radius allowed.
+    radius = 500
+    if distance > radius:
+        return (
+            False,
+            distance,
+            f"You are outside office radius. Allowed: {radius}m, your distance: {int(distance)}m."
+        )
+    return True, distance, None
 
 
 # ─── Check In ──────────────────────────────────────────
@@ -45,9 +51,10 @@ class CheckInView(APIView):
         lat = serializer.validated_data['latitude']
         lng = serializer.validated_data['longitude']
 
-        if not is_within_office(lat, lng):
+        in_range, distance_m, location_error = validate_office_radius(lat, lng)
+        if not in_range:
             return Response(
-                {'error': 'You are outside the allowed office radius (500m).'},
+                {'error': location_error, 'distance_meters': int(distance_m) if distance_m is not None else None},
                 status=400
             )
 
@@ -64,34 +71,41 @@ class CheckInView(APIView):
                 status=400
             )
 
-        # 3. Face match karo
+        # 3. Face match (strict; compare against logged-in user's registered face)
         image_data = serializer.validated_data['image']
+        matched_employee = request.user.employee
+        distance = None
+        if not request.user.employee.face_encoding:
+            return Response(
+                {'error': 'Face is not registered for your account. Please contact admin or register face first.'},
+                status=400
+            )
         try:
             image = decode_base64_image(image_data)
             live_encoding = get_face_encoding(image)
+            if live_encoding is None:
+                return Response(
+                    {'error': 'Face not detected. Please look at the camera and try again.'},
+                    status=400
+                )
+
+            matched_employee, distance = match_face(live_encoding, [request.user.employee])
+
+            if matched_employee is None:
+                threshold = getattr(settings, "FACE_MATCH_THRESHOLD", 0.5)
+                return Response(
+                    {
+                        'error': 'Face does not match your registered profile. Please face camera clearly and retry.',
+                        'face_distance': distance,
+                        'threshold': threshold,
+                    },
+                    status=401
+                )
+
         except RuntimeError as err:
-            return Response({'error': str(err)}, status=503)
-
-        if live_encoding is None:
             return Response(
-                {'error': 'Face not detected. Please look at the camera and try again.'},
-                status=400
-            )
-
-        all_employees = Employee.objects.exclude(face_encoding=None)
-        matched_employee, distance = match_face(live_encoding, all_employees)
-
-        if matched_employee is None:
-            return Response(
-                {'error': 'Face did not match any registered employee.'},
-                status=401
-            )
-
-        # Logged in user sathe match karo
-        if matched_employee.user != request.user:
-            return Response(
-                {'error': 'Face does not match the logged-in user.'},
-                status=401
+                {'error': f'Face verification service unavailable: {str(err)}'},
+                status=503
             )
 
         # 4. Attendance mark karo
@@ -107,7 +121,8 @@ class CheckInView(APIView):
             'message': 'Check-in successful!',
             'name': matched_employee.name,
             'check_in': log.check_in,
-            'confidence': round((1 - distance) * 100, 1)
+            'confidence': round((1 - distance) * 100, 1) if distance is not None else None,
+            'distance_meters': int(distance_m) if distance_m is not None else None,
         })
 
 
@@ -123,9 +138,10 @@ class CheckOutView(APIView):
         lat = serializer.validated_data['latitude']
         lng = serializer.validated_data['longitude']
 
-        if not is_within_office(lat, lng):
+        in_range, distance_m, location_error = validate_office_radius(lat, lng)
+        if not in_range:
             return Response(
-                {'error': 'You are outside the allowed office radius (500m).'},
+                {'error': location_error, 'distance_meters': int(distance_m) if distance_m is not None else None},
                 status=400
             )
 
@@ -142,27 +158,38 @@ class CheckOutView(APIView):
                 status=400
             )
 
-        # Face verify for check-out too
+        # Face verify for check-out too (strict; compare against own profile)
         image_data = serializer.validated_data['image']
+        if not request.user.employee.face_encoding:
+            return Response(
+                {'error': 'Face is not registered for your account. Please contact admin or register face first.'},
+                status=400
+            )
         try:
             image = decode_base64_image(image_data)
             live_encoding = get_face_encoding(image)
+            if live_encoding is None:
+                return Response(
+                    {'error': 'Face not detected. Please look at the camera and try again.'},
+                    status=400
+                )
+
+            matched_employee, distance = match_face(live_encoding, [request.user.employee])
+
+            if matched_employee is None:
+                threshold = getattr(settings, "FACE_MATCH_THRESHOLD", 0.5)
+                return Response(
+                    {
+                        'error': 'Face does not match your registered profile. Please face camera clearly and retry.',
+                        'face_distance': distance,
+                        'threshold': threshold,
+                    },
+                    status=401
+                )
         except RuntimeError as err:
-            return Response({'error': str(err)}, status=503)
-
-        if live_encoding is None:
             return Response(
-                {'error': 'Face not detected. Please look at the camera and try again.'},
-                status=400
-            )
-
-        all_employees = Employee.objects.exclude(face_encoding=None)
-        matched_employee, distance = match_face(live_encoding, all_employees)
-
-        if matched_employee is None or matched_employee.user != request.user:
-            return Response(
-                {'error': 'Face does not match the logged-in user.'},
-                status=401
+                {'error': f'Face verification service unavailable: {str(err)}'},
+                status=503
             )
 
         log.check_out = timezone.now()
@@ -170,7 +197,7 @@ class CheckOutView(APIView):
         log.check_out_lng = lng
 
         # Total hours calculate karo
-        total_minutes = (log.check_out - log.check_in).seconds // 60
+        total_minutes = int((log.check_out - log.check_in).total_seconds() // 60)
         worked_minutes = total_minutes - log.break_minutes
         worked_hours = round(worked_minutes / 60, 2)
 
@@ -186,7 +213,8 @@ class CheckOutView(APIView):
             'message': 'Check-out successful!',
             'total_hours': log.total_hours,
             'overtime_hours': log.overtime_hours,
-            'check_out': log.check_out
+            'check_out': log.check_out,
+            'distance_meters': int(distance_m) if distance_m is not None else None,
         })
 
 
@@ -219,7 +247,7 @@ class MyAttendanceSessionView(APIView):
         active_break_start = None
         for b in breaks_qs:
             if b.break_end:
-                mins = int((b.break_end - b.break_start).seconds // 60)
+                mins = int((b.break_end - b.break_start).total_seconds() // 60)
                 total_break_minutes += mins
                 breaks.append({
                     'start': b.break_start.isoformat(),
@@ -280,7 +308,7 @@ class AdminAttendanceView(APIView):
             break_minutes = 0
             for b in breaks:
                 if b.break_end:
-                    break_minutes += int((b.break_end - b.break_start).seconds // 60)
+                    break_minutes += int((b.break_end - b.break_start).total_seconds() // 60)
             status = 'Absent'
             if emp.id in leave_emp_ids:
                 status = 'On Leave'
@@ -415,9 +443,9 @@ class BreakEndView(APIView):
         active_break.save()
 
         # Break minutes update karo
-        break_minutes = (
-            active_break.break_end - active_break.break_start
-        ).seconds // 60
+        break_minutes = int(
+            (active_break.break_end - active_break.break_start).total_seconds() // 60
+        )
 
         log.break_minutes += break_minutes
         log.save()
@@ -451,6 +479,17 @@ class FaceRegisterView(APIView):
 
         employee = request.user.employee
         employee.face_encoding = encoding.tolist()
+        # Keep latest registered face snapshot for verification support.
+        try:
+            img_payload = image_data.split(',', 1)[1] if ',' in image_data else image_data
+            img_bytes = base64.b64decode(img_payload)
+            employee.profile_photo.save(
+                f"face_{employee.id}_{uuid.uuid4().hex[:8]}.png",
+                ContentFile(img_bytes),
+                save=False
+            )
+        except Exception:
+            pass
         employee.save()
 
         return Response({'message': 'Face registered successfully.'})

@@ -107,7 +107,7 @@ export default function EmployeeAttendance() {
           <h1 className="text-2xl sm:text-3xl font-bold tracking-tight">My Attendance</h1>
           <p className="text-muted-foreground mt-1">Calendar view of your working days.</p>
         </div>
-        <Button variant="outline" onClick={handleExport}><Download className="h-4 w-4 mr-2" /> Export CSV</Button>
+        <Button variant="outline" onClick={handleExport} className="w-full sm:w-auto"><Download className="h-4 w-4 mr-2" /> Export CSV</Button>
       </div>
 
       <div className="grid gap-4 lg:grid-cols-3">
@@ -115,7 +115,7 @@ export default function EmployeeAttendance() {
           <CardHeader className="pb-2">
             <CardTitle className="text-base">{format(today, "MMMM yyyy")}</CardTitle>
           </CardHeader>
-          <CardContent className="flex justify-center">
+          <CardContent className="flex justify-center overflow-x-auto">
             <Calendar
               mode="single"
               selected={selected}

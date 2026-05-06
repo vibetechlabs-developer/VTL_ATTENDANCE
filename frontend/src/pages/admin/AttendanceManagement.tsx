@@ -4,6 +4,7 @@ import { format, addDays, subDays } from "date-fns";
 import { toast } from "sonner";
 import { exportCsv } from "@/utils/csv";
 import { Input } from "@/components/ui/input";
+import { Button } from "@/components/ui/button";
 import { useAuthStore } from "@/store/authStore";
 import { attendanceAdminRequest, attendanceForceCheckoutRequest } from "@/lib/api";
 
@@ -148,8 +149,75 @@ export default function AttendanceManagement() {
         </button>
       </div>
 
-      <div className="w-full overflow-x-auto text-sm rounded-2xl bg-card shadow-sm pb-2 border-glow-shine">
-        <table className="w-full">
+      {/* Mobile/tablet: card list; Desktop: table */}
+      <div className="lg:hidden space-y-3">
+        {rows.length === 0 ? (
+          <div className="rounded-2xl bg-card shadow-sm border-glow-shine p-6 text-center text-sm text-muted-foreground">
+            No records found.
+          </div>
+        ) : (
+          rows.map((r) => {
+            const role = r.role || "employee";
+            const isPresent = r.status === "Present" || r.status === "Late";
+            return (
+              <div key={r.id} className="rounded-2xl bg-card shadow-sm border-glow-shine p-4">
+                <div className="flex items-start justify-between gap-3">
+                  <div className="min-w-0">
+                    <p className="font-semibold truncate">{r.name}</p>
+                    <p className="text-xs text-muted-foreground font-mono">{String(r.empId).split("-")[1] || r.empId} · {r.department}</p>
+                    <p className="text-xs text-muted-foreground capitalize mt-0.5">{role}</p>
+                  </div>
+                  <div className={`inline-flex items-center gap-1.5 px-2 py-0.5 rounded text-xs font-semibold shrink-0 ${isPresent ? "bg-success/15 text-success" : r.status === "On Leave" ? "bg-warning/15 text-warning" : "bg-destructive/15 text-destructive"}`}>
+                    {isPresent ? <UserCheck className="h-3 w-3" /> : r.status === "On Leave" ? <Plane className="h-3 w-3" /> : <UserX className="h-3 w-3" />}
+                    {r.status}
+                  </div>
+                </div>
+
+                <div className="grid grid-cols-2 gap-2 mt-3 text-xs">
+                  <div className="rounded-lg bg-muted/30 px-3 py-2">
+                    <p className="text-muted-foreground">Check In</p>
+                    <p className="font-medium text-sm">{r.checkIn ? format(new Date(r.checkIn), "h:mm a") : "—"}</p>
+                  </div>
+                  <div className="rounded-lg bg-muted/30 px-3 py-2">
+                    <p className="text-muted-foreground">Check Out</p>
+                    <p className="font-medium text-sm">{r.checkOut ? format(new Date(r.checkOut), "h:mm a") : "—"}</p>
+                  </div>
+                  <div className="rounded-lg bg-muted/30 px-3 py-2">
+                    <p className="text-muted-foreground">Breaks</p>
+                    <p className="font-medium text-sm">
+                      {r.status === "Present"
+                        ? `${Math.floor((r.breakMinutes || 0) / 60)}h ${(r.breakMinutes || 0) % 60}m × ${r.breakCount || 0}`
+                        : "—"}
+                    </p>
+                  </div>
+                  <div className="rounded-lg bg-muted/30 px-3 py-2">
+                    <p className="text-muted-foreground">Hours</p>
+                    <p className="font-medium text-sm">{r.hours > 0 ? `${Math.floor(r.hours)}h ${Math.round((r.hours * 60) % 60)}m` : "—"}</p>
+                  </div>
+                </div>
+
+                {canForceCheckout && (
+                  <div className="mt-3">
+                    {!r.checkIn || r.checkOut || r.status === "Absent" || r.status === "On Leave" ? null : (
+                      <Button
+                        size="sm"
+                        variant="outline"
+                        className="w-full text-destructive border-destructive/30 hover:bg-destructive/10"
+                        onClick={() => void handleForceCheckout(r)}
+                      >
+                        Force Out
+                      </Button>
+                    )}
+                  </div>
+                )}
+              </div>
+            );
+          })
+        )}
+      </div>
+
+      <div className="hidden lg:block w-full overflow-x-auto text-sm rounded-2xl bg-card shadow-sm pb-2 border-glow-shine">
+        <table className="w-full min-w-[980px]">
           <thead>
             <tr className="border-b border-border/50">
               <th className="text-left py-4 px-6 text-[10px] font-bold text-muted-foreground uppercase tracking-widest">Employee</th>

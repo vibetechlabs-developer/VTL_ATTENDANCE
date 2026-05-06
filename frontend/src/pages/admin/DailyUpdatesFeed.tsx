@@ -1,5 +1,5 @@
-import { useEffect, useState } from "react";
-import { format } from "date-fns";
+import { useEffect, useRef, useState } from "react";
+import { format, parseISO } from "date-fns";
 import { Calendar as CalendarIcon, Pencil, Send } from "lucide-react";
 import { Card } from "@/components/ui/card";
 import { Avatar, AvatarFallback } from "@/components/ui/avatar";
@@ -12,8 +12,10 @@ import { Button } from "@/components/ui/button";
 import { toast } from "sonner";
 
 export default function DailyUpdatesFeed() {
-  const today = new Date().toISOString().slice(0, 10);
+  // Use local date string (avoid UTC shifting issues).
+  const today = format(new Date(), "yyyy-MM-dd");
   const [date, setDate] = useState<string>(today);
+  const dateRef = useRef<HTMLInputElement | null>(null);
   const accessToken = useAuthStore((s) => s.accessToken);
   const user = useAuthStore((s) => s.user);
   const [updates, setUpdates] = useState<any[]>([]);
@@ -54,8 +56,9 @@ export default function DailyUpdatesFeed() {
           <p className="text-muted-foreground mt-1">Share your progress and see what the team accomplished.</p>
         </div>
 
-        <div className="relative">
+        <div className="relative shrink-0 w-full sm:w-auto">
           <input
+            ref={dateRef}
             type="date"
             value={date}
             max={today}
@@ -63,12 +66,23 @@ export default function DailyUpdatesFeed() {
               const next = e.target.value;
               setDate(next > today ? today : next);
             }}
-            className="absolute inset-0 w-full h-full opacity-0 cursor-pointer"
+            className="sr-only"
           />
-          <div className="flex items-center gap-2 px-4 py-2 bg-card border border-border/50 rounded-xl shadow-sm cursor-pointer hover:bg-muted/50 transition-smooth">
-            <span className="font-medium">{format(new Date(date), "dd-MM-yyyy")}</span>
+          <button
+            type="button"
+            onClick={() => {
+              const el = dateRef.current;
+              if (!el) return;
+              // Chrome supports showPicker(); fallback to click().
+              // @ts-expect-error showPicker isn't in TS lib yet
+              if (typeof el.showPicker === "function") el.showPicker();
+              else el.click();
+            }}
+            className="w-full sm:w-auto flex items-center justify-between gap-2 px-4 py-2 bg-card border border-border/50 rounded-xl shadow-sm hover:bg-muted/50 transition-smooth"
+          >
+            <span className="font-medium">{format(parseISO(date), "dd-MM-yyyy")}</span>
             <CalendarIcon className="h-4 w-4 text-muted-foreground" />
-          </div>
+          </button>
         </div>
       </div>
 
@@ -100,7 +114,7 @@ export default function DailyUpdatesFeed() {
           <div className="h-12 w-12 rounded-2xl bg-muted/50 flex items-center justify-center mb-3">
             <Pencil className="h-6 w-6 text-muted-foreground/60" />
           </div>
-          <p className="text-muted-foreground">No updates posted on today yet.</p>
+          <p className="text-muted-foreground">No updates posted on this date yet.</p>
         </div>
       ) : (
         <div className="w-full space-y-3">
