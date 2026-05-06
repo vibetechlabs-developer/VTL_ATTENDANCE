@@ -49,6 +49,7 @@ const managerNav = [
   },
   {
     group: "Personal", items: [
+      { title: "My Dashboard", url: "/employee", icon: LayoutDashboard, end: true },
       { title: "My Attendance", url: "/employee/attendance", icon: Clock },
       { title: "My Leaves", url: "/employee/leaves", icon: CalendarDays },
     ]
@@ -57,22 +58,9 @@ const managerNav = [
 
 const hrNav = [
   {
-    group: "Overview", items: [
-      { title: "Dashboard", url: "/admin", icon: LayoutDashboard, end: true },
-    ]
-  },
-  {
-    group: "HR Operations", items: [
-      { title: "Attendance", url: "/admin/attendance", icon: Clock },
-      { title: "Leaves", url: "/admin/leaves", icon: CalendarDays },
-      { title: "Leave Usage", url: "/admin/leave-usage", icon: BarChart3 },
-      { title: "Daily Updates", url: "/admin/updates", icon: MessageSquare },
-    ]
-  },
-  {
     group: "Personal", items: [
+      { title: "My Dashboard", url: "/employee", icon: LayoutDashboard, end: true },
       { title: "My Attendance", url: "/employee/attendance", icon: Clock },
-      { title: "My Leaves", url: "/employee/leaves", icon: CalendarDays },
     ]
   },
 ];

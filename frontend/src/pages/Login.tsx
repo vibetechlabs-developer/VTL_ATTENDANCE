@@ -176,7 +176,7 @@ export default function Login() {
       }
       const authUser = profileToAuthUser(meBody as MeProfilePayload);
       setSession(authUser, access, refresh);
-      setRedirectTo(authUser.role === "employee" ? "/employee" : "/admin");
+      setRedirectTo(authUser.role === "employee" || authUser.role === "hr" ? "/employee" : "/admin");
       setStep("face");
       runFaceScan();
     } finally {
@@ -229,7 +229,7 @@ export default function Login() {
   }, []);
 
   if (user) {
-    return <Navigate to={user.role === "employee" ? "/employee" : "/admin"} replace />;
+    return <Navigate to={user.role === "employee" || user.role === "hr" ? "/employee" : "/admin"} replace />;
   }
 
   return (

@@ -38,7 +38,7 @@ const queryClient = new QueryClient();
 
 const RoleBasedAdminDashboard = () => {
   const { user } = useAuthStore();
-  return user?.role === "manager" || user?.role === "hr" ? <ManagerDashboard /> : <AdminDashboard />;
+  return user?.role === "manager" ? <ManagerDashboard /> : <AdminDashboard />;
 };
 
 const App = () => {
@@ -60,7 +60,7 @@ const App = () => {
               <Route path="/login" element={<Login />} />
 
               {/* Admin & Manager shared routes */}
-              <Route element={<ProtectedRoute allow={["admin", "manager", "hr"]} />}>
+              <Route element={<ProtectedRoute allow={["admin", "manager"]} />}>
                 <Route element={<DashboardLayout />}>
                   <Route path="/admin" element={<RoleBasedAdminDashboard />} />
                   <Route path="/admin/attendance" element={<AttendanceManagement />} />
@@ -80,13 +80,23 @@ const App = () => {
               </Route>
 
               {/* Employee (also accessible by manager/admin for personal view) */}
-              <Route element={<ProtectedRoute allow={["employee", "manager", "admin", "hr"]} />}>
+              <Route element={<ProtectedRoute allow={["employee", "manager", "admin"]} />}>
                 <Route element={<DashboardLayout />}>
                   <Route path="/employee" element={<EmployeeDashboard />} />
                   <Route path="/employee/attendance" element={<EmployeeAttendance />} />
                   <Route path="/employee/updates" element={<EmployeeUpdates />} />
                   <Route path="/employee/leaves" element={<EmployeeLeaves />} />
                   <Route path="/employee/approvals" element={<EmployeeApprovals />} />
+                  <Route path="/profile" element={<Profile />} />
+                  <Route path="/preferences" element={<Preferences />} />
+                </Route>
+              </Route>
+
+              {/* HR (limited personal access only) */}
+              <Route element={<ProtectedRoute allow={["hr"]} />}>
+                <Route element={<DashboardLayout />}>
+                  <Route path="/employee" element={<EmployeeDashboard />} />
+                  <Route path="/employee/attendance" element={<EmployeeAttendance />} />
                   <Route path="/profile" element={<Profile />} />
                   <Route path="/preferences" element={<Preferences />} />
                 </Route>
