@@ -21,6 +21,7 @@ export function CheckInModal({ open, onOpenChange, onVerified, mode = "check-in"
     const [locProgress, setLocProgress] = useState(0);
     const [cameraReady, setCameraReady] = useState(false);
     const [submitting, setSubmitting] = useState(false);
+    const [errorText, setErrorText] = useState<string>("");
     const startedRef = useRef(false);
 
     const videoRef = useRef<HTMLVideoElement | null>(null);
@@ -28,6 +29,65 @@ export function CheckInModal({ open, onOpenChange, onVerified, mode = "check-in"
     const streamRef = useRef<MediaStream | null>(null);
 
     const accessToken = useAuthStore((s) => s.accessToken);
+
+    const parseClientError = (err: unknown): string => {
+        const msg = typeof (err as { message?: unknown })?.message === "string"
+            ? (err as { message: string }).message
+            : "";
+        if (!msg) return mode === "check-in" ? "Check-in failed." : "Check-out failed.";
+        if (/permission/i.test(msg) && /geolocation/i.test(msg)) return "Location permission denied. Please allow GPS/location and retry.";
+        if (/timeout/i.test(msg) && /position/i.test(msg)) return "Could not fetch location in time. Please enable GPS and retry.";
+        if (/camera/i.test(msg)) return msg;
+        return msg;
+    };
+
+    const parseApiError = (
+        status: number,
+        body: {
+            error?: string;
+            message?: string;
+            detail?: string;
+            distance_meters?: number | null;
+            face_distance?: number | null;
+            threshold?: number | null;
+        }
+    ): string => {
+        const base = body.error || body.detail || body.message;
+        if (base) {
+            if (body.face_distance != null && body.threshold != null) {
+                return `${base} (score: ${body.face_distance}, required <= ${body.threshold})`;
+            }
+            return base;
+        }
+        if (status === 401) return "Face verification failed. Please align face clearly and retry.";
+        if (status === 403) return "You are not allowed to perform this action.";
+        if (status === 503) return "Face verification service is unavailable right now. Please retry in a moment.";
+        return mode === "check-in" ? "Check-in failed." : "Check-out failed.";
+    };
+
+    const restartCamera = async (): Promise<boolean> => {
+        try {
+            if (streamRef.current) {
+                streamRef.current.getTracks().forEach((t) => t.stop());
+                streamRef.current = null;
+            }
+            const stream = await navigator.mediaDevices.getUserMedia({
+                video: { facingMode: "user", width: { ideal: 640 }, height: { ideal: 480 } },
+                audio: false,
+            });
+            streamRef.current = stream;
+            const v = videoRef.current;
+            if (!v) return false;
+            v.srcObject = stream;
+            try { await v.play(); } catch { /* ignore */ }
+            const ready = ((v.videoWidth || 0) > 0 && (v.videoHeight || 0) > 0) || await ensureVideoReady();
+            setCameraReady(ready);
+            return ready;
+        } catch {
+            setCameraReady(false);
+            return false;
+        }
+    };
 
     const ensureVideoReady = async (): Promise<boolean> => {
         const v = videoRef.current;
@@ -86,6 +146,7 @@ export function CheckInModal({ open, onOpenChange, onVerified, mode = "check-in"
             setLocProgress(0);
             setCameraReady(false);
             setSubmitting(false);
+            setErrorText("");
             startedRef.current = false;
         } else {
             setStep(null);
@@ -100,40 +161,8 @@ export function CheckInModal({ open, onOpenChange, onVerified, mode = "check-in"
     useEffect(() => {
         if (!open) return;
         const startCamera = async () => {
-            try {
-                // Provide facingMode hint for mobile to reduce stream init flakiness.
-                const stream = await navigator.mediaDevices.getUserMedia({
-                    video: { facingMode: "user", width: { ideal: 640 }, height: { ideal: 480 } },
-                    audio: false,
-                });
-                streamRef.current = stream;
-                if (videoRef.current) {
-                    const v = videoRef.current;
-                    v.srcObject = stream;
-                    const markReadyIfSized = () => {
-                        const ok = (v.videoWidth || 0) > 0 && (v.videoHeight || 0) > 0;
-                        if (ok) setCameraReady(true);
-                        return ok;
-                    };
-                    const onReady = async () => {
-                        try { await v.play(); } catch { /* ignore */ }
-                        const ready = markReadyIfSized() || await ensureVideoReady();
-                        setCameraReady(ready);
-                    };
-                    if (!markReadyIfSized()) {
-                        v.onloadedmetadata = () => void onReady();
-                        v.oncanplay = () => void onReady();
-                        // Some cameras take a moment to report video dimensions.
-                        let tries = 0;
-                        const t = window.setInterval(() => {
-                            tries += 1;
-                            if (markReadyIfSized() || tries > 25) {
-                                window.clearInterval(t);
-                            }
-                        }, 120);
-                    }
-                }
-            } catch {
+            const ok = await restartCamera();
+            if (!ok) {
                 toast.error("Camera permission denied or camera unavailable");
                 onOpenChange(false);
             }
@@ -167,11 +196,14 @@ export function CheckInModal({ open, onOpenChange, onVerified, mode = "check-in"
     };
 
     const handleVerifyAndSubmit = async () => {
+        setErrorText("");
         if (!accessToken) { toast.error("Session expired. Please login again."); return; }
         if (!cameraReady) {
-            const ready = await ensureVideoReady();
+            const ready = await restartCamera();
             if (!ready) {
-                toast.error("Camera stream not ready. Please allow camera access and close other camera apps.");
+                const msg = "Camera stream not ready. Please allow camera access and close other camera apps, then retry.";
+                setErrorText(msg);
+                toast.error(msg);
                 return;
             }
             setCameraReady(true);
@@ -196,7 +228,9 @@ export function CheckInModal({ open, onOpenChange, onVerified, mode = "check-in"
                 total_hours?: number;
             };
             if (!res.ok) {
-                toast.error(body.error || (mode === "check-in" ? "Check-in failed" : "Check-out failed"));
+                const msg = parseApiError(res.status, body);
+                setErrorText(msg);
+                toast.error(msg);
                 setStep("face");
                 return;
             }
@@ -212,11 +246,29 @@ export function CheckInModal({ open, onOpenChange, onVerified, mode = "check-in"
                 });
             }, 400);
         } catch (e: any) {
-            toast.error(typeof e?.message === "string" ? e.message : (mode === "check-in" ? "Check-in failed" : "Check-out failed"));
+            const msg = parseClientError(e);
+            setErrorText(msg);
+            toast.error(msg);
             setStep("face");
         } finally {
             setSubmitting(false);
         }
+    };
+
+    const handleRetry = async () => {
+        if (submitting) return;
+        setErrorText("");
+        setFaceProgress(0);
+        setLocProgress(0);
+        setStep("face");
+        const ready = await restartCamera();
+        if (!ready) {
+            const msg = "Camera could not be re-initialized. Please close other camera apps and retry.";
+            setErrorText(msg);
+            toast.error(msg);
+            return;
+        }
+        await handleVerifyAndSubmit();
     };
 
     return (
@@ -370,12 +422,17 @@ export function CheckInModal({ open, onOpenChange, onVerified, mode = "check-in"
 
                 {step !== "done" && (
                     <DialogFooter className="mt-4 gap-2 sticky bottom-0 bg-card/95 pt-3">
+                        {errorText ? (
+                            <div className="w-full rounded-lg border border-destructive/30 bg-destructive/10 px-3 py-2 text-sm text-destructive">
+                                {errorText}
+                            </div>
+                        ) : null}
                         <Button variant="outline" onClick={() => onOpenChange(false)} disabled={submitting}>
                             Cancel
                         </Button>
                         <Button
-                            onClick={() => void handleVerifyAndSubmit()}
-                            disabled={!cameraReady || submitting}
+                            onClick={() => void (startedRef.current ? handleRetry() : handleVerifyAndSubmit())}
+                            disabled={submitting}
                             className="bg-sage-3d border-0 text-primary-foreground"
                         >
                             {submitting ? "Scanning..." : (startedRef.current ? "Retry scan" : "Start scan")}
