@@ -75,16 +75,27 @@ export function CheckInModal({ open, onOpenChange, onVerified, mode = "check-in"
                 streamRef.current.getTracks().forEach((t) => t.stop());
                 streamRef.current = null;
             }
+            const v = videoRef.current;
+            if (v) {
+                try { v.pause(); } catch { /* ignore */ }
+                v.srcObject = null;
+            }
+            // Small cooldown helps some mobile devices release prior camera handle.
+            await new Promise((r) => window.setTimeout(r, 180));
             const stream = await navigator.mediaDevices.getUserMedia({
-                video: { facingMode: "user", width: { ideal: 640 }, height: { ideal: 480 } },
+                video: {
+                    facingMode: "user",
+                    width: { ideal: 640, min: 240 },
+                    height: { ideal: 480, min: 180 },
+                    frameRate: { ideal: 24, max: 30 },
+                },
                 audio: false,
             });
             streamRef.current = stream;
-            const v = videoRef.current;
             if (!v) return false;
             v.srcObject = stream;
             try { await v.play(); } catch { /* ignore */ }
-            const ready = ((v.videoWidth || 0) > 0 && (v.videoHeight || 0) > 0) || await ensureVideoReady();
+            const ready = await ensureVideoReady();
             setCameraReady(ready);
             return ready;
         } catch {
@@ -98,11 +109,12 @@ export function CheckInModal({ open, onOpenChange, onVerified, mode = "check-in"
         if (!v) return false;
 
         const hasSize = () => (v.videoWidth || 0) > 0 && (v.videoHeight || 0) > 0;
-        if (hasSize()) return true;
+        const isRenderable = () => hasSize() && v.readyState >= 2;
+        if (isRenderable()) return true;
 
         // Retry for slow mobile/webcam initialization cases.
         // Some mobile browsers take longer than 1-2 seconds to update dimensions.
-        const hardTimeoutMs = 6500;
+        const hardTimeoutMs = 12000;
         const start = Date.now();
 
         while (Date.now() - start < hardTimeoutMs) {
@@ -116,31 +128,34 @@ export function CheckInModal({ open, onOpenChange, onVerified, mode = "check-in"
                 // Ignore autoplay/play race and keep retrying.
             }
 
-            if (hasSize()) return true;
+            if (isRenderable()) return true;
 
             // Wait for the browser to populate metadata/canplay.
             await new Promise<boolean>((resolve) => {
-                if (hasSize()) return resolve(true);
+                if (isRenderable()) return resolve(true);
 
                 const done = (ok: boolean) => {
                     v.removeEventListener("loadedmetadata", onMeta);
                     v.removeEventListener("canplay", onCanPlay);
+                    v.removeEventListener("loadeddata", onData);
                     resolve(ok);
                 };
 
-                const onMeta = () => done(hasSize());
-                const onCanPlay = () => done(hasSize());
+                const onMeta = () => done(isRenderable());
+                const onCanPlay = () => done(isRenderable());
+                const onData = () => done(isRenderable());
 
                 v.addEventListener("loadedmetadata", onMeta, { once: true });
                 v.addEventListener("canplay", onCanPlay, { once: true });
+                v.addEventListener("loadeddata", onData, { once: true });
 
-                window.setTimeout(() => done(hasSize()), 600);
+                window.setTimeout(() => done(isRenderable()), 900);
             });
 
-            if (hasSize()) return true;
+            if (isRenderable()) return true;
         }
 
-        return hasSize();
+        return isRenderable();
     };
 
     useEffect(() => {
@@ -173,6 +188,16 @@ export function CheckInModal({ open, onOpenChange, onVerified, mode = "check-in"
         };
         void startCamera();
     }, [open, onOpenChange]);
+
+    useEffect(() => {
+        // Auto-start verification once the modal opens and camera is ready.
+        if (!open) return;
+        if (step !== "face") return;
+        if (!cameraReady) return;
+        if (submitting) return;
+        if (startedRef.current) return;
+        void handleVerifyAndSubmit();
+    }, [open, step, cameraReady, submitting]);
 
     const getLocation = (): Promise<{ latitude: number; longitude: number }> =>
         new Promise((resolve, reject) => {
@@ -351,7 +376,13 @@ export function CheckInModal({ open, onOpenChange, onVerified, mode = "check-in"
                                 </p>
                             </div>
                             <div className="mx-auto h-44 w-44 rounded-full overflow-hidden border-2 border-primary/40 bg-muted/10 shadow-sm">
-                                <video ref={videoRef} autoPlay playsInline muted className="h-full w-full object-cover" />
+                                <video
+                                    ref={videoRef}
+                                    autoPlay
+                                    playsInline
+                                    muted
+                                    className="h-full w-full object-cover [transform:scaleX(1)]"
+                                />
                             </div>
                             <canvas ref={canvasRef} className="hidden" />
                         </motion.div>
@@ -441,11 +472,11 @@ export function CheckInModal({ open, onOpenChange, onVerified, mode = "check-in"
                             Cancel
                         </Button>
                         <Button
-                            onClick={() => void (startedRef.current ? handleRetry() : handleVerifyAndSubmit())}
+                            onClick={() => void handleRetry()}
                             disabled={submitting}
                             className="bg-sage-3d border-0 text-primary-foreground"
                         >
-                            {submitting ? "Scanning..." : (startedRef.current ? "Retry scan" : "Start scan")}
+                            {submitting ? "Scanning..." : "Retry scan"}
                         </Button>
                     </DialogFooter>
                 )}
