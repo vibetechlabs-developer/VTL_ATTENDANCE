@@ -29,6 +29,7 @@ export function CheckInModal({ open, onOpenChange, onVerified, mode = "check-in"
     const streamRef = useRef<MediaStream | null>(null);
 
     const accessToken = useAuthStore((s) => s.accessToken);
+    const logout = useAuthStore((s) => s.logout);
 
     const parseClientError = (err: unknown): string => {
         const msg = typeof (err as { message?: unknown })?.message === "string"
@@ -53,6 +54,9 @@ export function CheckInModal({ open, onOpenChange, onVerified, mode = "check-in"
         }
     ): string => {
         const base = body.error || body.detail || body.message;
+        if (base && /token not valid|given token not valid|token is invalid|token is expired/i.test(base)) {
+            return "Your session has expired. Please login again.";
+        }
         if (base) {
             if (body.face_distance != null && body.threshold != null) {
                 return `${base} (score: ${body.face_distance}, required <= ${body.threshold})`;
@@ -231,6 +235,12 @@ export function CheckInModal({ open, onOpenChange, onVerified, mode = "check-in"
                 const msg = parseApiError(res.status, body);
                 setErrorText(msg);
                 toast.error(msg);
+                if (res.status === 401 && /session has expired/i.test(msg)) {
+                    await logout();
+                    onOpenChange(false);
+                    window.location.href = "/login";
+                    return;
+                }
                 setStep("face");
                 return;
             }
