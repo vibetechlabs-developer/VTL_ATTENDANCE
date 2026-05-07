@@ -272,11 +272,8 @@ export default function UserManagement() {
       toast.error("Could not capture face frame");
       return;
     }
-    // Un-mirror capture so saved face image matches natural orientation.
-    ctx.save();
-    ctx.scale(-1, 1);
-    ctx.drawImage(video, -width, 0, width, height);
-    ctx.restore();
+    // Keep capture in natural orientation.
+    ctx.drawImage(video, 0, 0, width, height);
     // Prefer PNG for maximum compatibility with backend decoders
     const capturedBase64 = canvas.toDataURL("image/png");
     setFaceBase64(capturedBase64);
@@ -726,7 +723,14 @@ export default function UserManagement() {
           </DialogHeader>
           <div className="space-y-3 py-2">
             <div className="rounded-xl overflow-hidden border border-border bg-muted/20">
-              <video ref={videoRef} autoPlay playsInline muted className="w-full h-56 object-cover [transform:scaleX(-1)]" />
+              <video
+                ref={videoRef}
+                autoPlay
+                playsInline
+                muted
+                className="w-full h-56 object-cover"
+                style={{ transform: "none" }}
+              />
             </div>
             {faceBase64 && (
               <img src={faceBase64} alt="Captured face preview" className="h-36 w-full object-cover rounded-lg border border-border" />
