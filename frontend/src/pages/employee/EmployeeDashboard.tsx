@@ -45,11 +45,21 @@ export default function EmployeeDashboard() {
 
   const [showVerifyModal, setShowVerifyModal] = useState(false);
   const [showCheckoutVerifyModal, setShowCheckoutVerifyModal] = useState(false);
+  const [showHowToUse, setShowHowToUse] = useState(false);
 
   useEffect(() => {
     const t = setInterval(() => setNow(Date.now()), 1000);
     return () => clearInterval(t);
   }, []);
+
+  useEffect(() => {
+    // First-time hint per employee.
+    if (!user?.empId) return;
+    const key = `vtl_hint_employee_${user.empId}`;
+    if (localStorage.getItem(key) === "1") return;
+    setShowHowToUse(true);
+    localStorage.setItem(key, "1");
+  }, [user?.empId]);
 
   useEffect(() => {
     if (!accessToken) return;
@@ -99,6 +109,9 @@ export default function EmployeeDashboard() {
   const workMs = status === "checked-out" ? workedMsToday : liveWorkMs;
   const isEarly = workMs < FULL_DAY_MS;
   const remainingMs = Math.max(0, FULL_DAY_MS - workMs);
+  const breakTakenMs = totalBreakMs + currentBreak;
+  const remainingDisplayMs = status === "checked-out" ? 0 : status === "idle" ? FULL_DAY_MS : remainingMs;
+  const breakProgressPct = Math.min(100, Math.round((breakTakenMs / FULL_DAY_MS) * 100));
   const pendingApprovals = leaves.filter((l) => l.empId === user?.empId && l.status === "Pending").length;
 
   const handleCheckIn = () => {
@@ -181,10 +194,10 @@ export default function EmployeeDashboard() {
   };
 
   const quickActions = [
-    { label: "Apply Leave", icon: CalendarDays, to: "/employee/leaves", accent: "icon-3d-sage" },
-    { label: "Attendance", icon: Clock, to: "/employee/attendance", accent: "icon-3d-peach" },
-    { label: "Updates", icon: MessageSquare, to: "/employee/updates", accent: "icon-3d-powder" },
-    { label: "Profile", icon: User, to: "/profile", accent: "icon-3d-cream" },
+    { label: "Apply Leave", description: "Request casual/sick leave and track approval status.", icon: CalendarDays, to: "/employee/leaves", accent: "icon-3d-sage" },
+    { label: "Attendance", description: "See your check-in/out history and daily status.", icon: Clock, to: "/employee/attendance", accent: "icon-3d-peach" },
+    { label: "Updates", description: "View daily updates you shared today.", icon: MessageSquare, to: "/employee/updates", accent: "icon-3d-powder" },
+    { label: "Profile", description: "Manage your profile and face settings.", icon: User, to: "/profile", accent: "icon-3d-cream" },
   ];
 
   const completedPct = Math.min(100, Math.round((workMs / FULL_DAY_MS) * 100));
@@ -203,6 +216,25 @@ export default function EmployeeDashboard() {
           <span className="text-xs font-medium">{completedPct}% of your day</span>
         </div>
       </div>
+
+      {showHowToUse && (
+        <Card className="soft-3d border-0 hover-shine">
+          <CardContent className="p-4 sm:p-5 flex flex-col sm:flex-row sm:items-start gap-3">
+            <div className="h-10 w-10 rounded-2xl bg-primary/10 border border-primary/20 flex items-center justify-center">
+              <Sparkles className="h-5 w-5 text-primary" />
+            </div>
+            <div className="flex-1 min-w-0">
+              <p className="text-sm font-semibold">How to use</p>
+              <p className="text-xs text-muted-foreground mt-1">
+                1) Tap <b>Check In</b> (Face + GPS). 2) Break માટે <b>Break</b> અને પછી <b>Resume</b>. 3) Daily work complete হলে <b>Check Out</b>.
+              </p>
+            </div>
+            <Button size="sm" className="hover-shine" onClick={() => setShowHowToUse(false)} type="button">
+              Got it
+            </Button>
+          </CardContent>
+        </Card>
+      )}
 
       {/* Check-in hero card — 3D sage */}
       <Card className="relative overflow-hidden border-0 shadow-3d rounded-3xl min-h-[220px] flex flex-col justify-center">
@@ -231,6 +263,44 @@ export default function EmployeeDashboard() {
                 >
                   {status === "idle" ? formatDuration(0) : status === "checked-out" ? formatDuration(workMs) : formatDuration(remainingMs)}
                 </motion.p>
+
+                {/* Clear status stats (remaining + break time) */}
+                <div className="mt-4 grid grid-cols-1 sm:grid-cols-2 gap-3">
+                  <div className="rounded-2xl bg-white/10 border border-white/15 p-3">
+                    <p className="text-[11px] uppercase tracking-wider text-primary-foreground/75">Remaining</p>
+                    <p className="mt-1 text-2xl sm:text-3xl font-bold tabular-nums tracking-tight">
+                      {formatDuration(remainingDisplayMs)}
+                    </p>
+                  </div>
+                  <div className="rounded-2xl bg-white/10 border border-white/15 p-3">
+                    <p className="text-[11px] uppercase tracking-wider text-primary-foreground/75">Break taken</p>
+                    <p className="mt-1 text-2xl sm:text-3xl font-bold tabular-nums tracking-tight">
+                      {formatDuration(breakTakenMs)}
+                    </p>
+                  </div>
+                </div>
+
+                <div className="mt-3 space-y-2">
+                  <div>
+                    <div className="flex items-center justify-between text-xs text-primary-foreground/80">
+                      <span>Work progress</span>
+                      <span className="font-semibold">{completedPct}%</span>
+                    </div>
+                    <div className="h-2 mt-1 rounded-full bg-white/15 overflow-hidden">
+                      <div className="h-full bg-sage-3d" style={{ width: `${completedPct}%` }} />
+                    </div>
+                  </div>
+                  <div>
+                    <div className="flex items-center justify-between text-xs text-primary-foreground/80">
+                      <span>Break time</span>
+                      <span className="font-semibold">{breakProgressPct}%</span>
+                    </div>
+                    <div className="h-2 mt-1 rounded-full bg-white/15 overflow-hidden">
+                      <div className="h-full bg-peach-3d" style={{ width: `${breakProgressPct}%` }} />
+                    </div>
+                  </div>
+                </div>
+
                 {status !== "idle" && status !== "checked-out" && (
                   <p className="mt-2 text-sm text-primary-foreground/85">
                     Checked in at {format(new Date(checkInAt!), "h:mm a")} · {breaks.length} breaks taken
@@ -246,7 +316,7 @@ export default function EmployeeDashboard() {
               <div className="flex flex-wrap gap-3">
                 {status === "idle" ? (
                   <Button size="lg" onClick={handleCheckIn}
-                    className="h-14 px-8 bg-white text-primary hover:bg-white/90 font-semibold shadow-3d animate-pulse-ring rounded-2xl border-0">
+                    className="h-16 px-8 bg-white text-primary hover:bg-white/90 font-semibold shadow-3d animate-pulse-ring rounded-2xl border-0 hover-shine shadow-glow">
                     <Play className="h-5 w-5 mr-2 fill-primary" /> Check In
                   </Button>
                 ) : status === "checked-out" ? (
@@ -256,11 +326,11 @@ export default function EmployeeDashboard() {
                 ) : (
                   <>
                     <Button size="lg" onClick={handleBreak}
-                      className="h-14 px-6 bg-white/20 hover:bg-white/30 text-white border border-white/30 font-semibold backdrop-blur rounded-2xl">
+                      className="h-14 px-6 bg-white/20 hover:bg-white/30 text-white border border-white/30 font-semibold backdrop-blur rounded-2xl hover-shine hover:scale-[1.02]">
                       {status === "on-break" ? <><Play className="h-5 w-5 mr-2" /> Resume</> : <><Coffee className="h-5 w-5 mr-2" /> Break</>}
                     </Button>
                     <Button size="lg" onClick={openCheckout}
-                      className="h-14 px-6 bg-destructive hover:bg-destructive/90 font-semibold shadow-3d rounded-2xl">
+                      className="h-14 px-6 bg-destructive hover:bg-destructive/90 font-semibold shadow-3d rounded-2xl hover-shine hover:scale-[1.02]">
                       <Square className="h-5 w-5 mr-2 fill-current" /> Check Out
                     </Button>
                   </>
@@ -272,7 +342,7 @@ export default function EmployeeDashboard() {
       </Card>
 
       {/* Quick actions — peach + powder + sage 3D */}
-      <div className="grid grid-cols-2 sm:grid-cols-4 gap-3 sm:gap-4">
+      <div className="grid grid-cols-2 sm:grid-cols-4 gap-4 sm:gap-5">
         {pendingApprovals > 0 && (
           <Link to="/employee/leaves" className="col-span-2 lg:col-span-4">
             <Card className="border-0 shadow-lg text-white hover:-translate-y-1 transition-smooth cursor-pointer mb-1 border-glow-shine" style={{ background: "var(--gradient-success)" }}>
@@ -297,12 +367,12 @@ export default function EmployeeDashboard() {
               animate={{ opacity: 1, y: 0 }}
               transition={{ delay: i * 0.06 }}
             >
-              <Card className="soft-3d border-0 p-4 hover:-translate-y-1 transition-smooth cursor-pointer h-full">
+              <Card className="soft-3d border-0 p-5 hover:-translate-y-1 transition-smooth cursor-pointer h-full hover-shine">
                 <div className={cn("h-12 w-12 rounded-2xl flex items-center justify-center mb-3", qa.accent)}>
                   <qa.icon className={cn("h-5 w-5", qa.accent === "icon-3d-sage" ? "text-primary-foreground" : "text-foreground/80")} />
                 </div>
                 <p className="font-semibold text-sm">{qa.label}</p>
-                <p className="text-xs text-muted-foreground mt-0.5">Go to {qa.label.toLowerCase()}</p>
+                <p className="text-xs text-muted-foreground mt-1 leading-snug">{qa.description}</p>
               </Card>
             </motion.div>
           </Link>

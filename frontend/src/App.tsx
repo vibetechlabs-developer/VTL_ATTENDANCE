@@ -70,6 +70,12 @@ const App = () => {
               <Route element={<ProtectedRoute allow={["admin", "manager"]} />}>
                 <Route element={<DashboardLayout />}>
                   <Route path="/admin" element={<RoleBasedAdminDashboard />} />
+                </Route>
+              </Route>
+
+              {/* Admin only (HR excluded from these pages) */}
+              <Route element={<ProtectedRoute allow={["admin"]} />}>
+                <Route element={<DashboardLayout />}>
                   <Route path="/admin/leaves" element={<LeaveManagement />} />
                   <Route path="/admin/leave-usage" element={<LeaveUsageOverview />} />
                   <Route path="/admin/updates" element={<DailyUpdatesFeed />} />
@@ -85,8 +91,8 @@ const App = () => {
                 </Route>
               </Route>
 
-              {/* Employee pages (also accessible by manager/admin/hr for personal flow) */}
-              <Route element={<ProtectedRoute allow={["employee", "manager", "admin", "hr"]} />}>
+              {/* Employee pages (admin/hr for personal flow; manager intentionally excluded) */}
+              <Route element={<ProtectedRoute allow={["employee", "admin", "hr"]} />}>
                 <Route element={<DashboardLayout />}>
                   <Route path="/employee" element={<EmployeeDashboard />} />
                   <Route path="/employee/attendance" element={<EmployeeAttendance />} />

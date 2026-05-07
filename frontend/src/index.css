@@ -215,6 +215,21 @@
   .cursor-pointer {
     cursor: pointer;
   }
+
+  button:not([disabled]),
+  a[href],
+  [role="button"],
+  .cursor-pointer {
+    transition: var(--transition-smooth);
+  }
+
+  button:not([disabled]):hover,
+  a[href]:hover,
+  [role="button"]:hover,
+  .cursor-pointer:hover {
+    transform: translateY(-1px) scale(1.01);
+    box-shadow: var(--shadow-glass);
+  }
 }
 
 @layer components {

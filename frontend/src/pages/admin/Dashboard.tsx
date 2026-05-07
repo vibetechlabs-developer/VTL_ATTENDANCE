@@ -69,11 +69,25 @@ export default function AdminDashboard() {
         transition={{ delay: 0.1 }}
         className="grid gap-4 grid-cols-1 sm:grid-cols-2 lg:grid-cols-5"
       >
-        <StatCard label="Total Employees" value={total} icon={Users} trend={4.2} accent="primary" onClick={() => navigate("/admin/users")} />
+        <StatCard
+          label="Pending Approvals"
+          value={pendingApprovals}
+          icon={CheckCircle2}
+          trend={5.1}
+          accent="warning"
+          onClick={() => navigate("/admin/leaves")}
+        />
+        <StatCard
+          label="Late Arrivals"
+          value={late}
+          icon={AlertTriangle}
+          trend={-0.5}
+          accent="warning"
+          onClick={() => navigate("/admin/attendance")}
+        />
         <StatCard label="Present Today" value={present} icon={UserCheck} trend={2.1} accent="success" onClick={() => navigate("/admin/attendance")} />
-        <StatCard label="Absent" value={absent} icon={UserX} trend={-1.4} accent="warning" onClick={() => navigate("/admin/attendance")} />
-        <StatCard label="Late Arrivals" value={late} icon={AlertTriangle} trend={-0.5} accent="info" onClick={() => navigate("/admin/attendance")} />
-        <StatCard label="Pending Approvals" value={pendingApprovals} icon={CheckCircle2} accent="success" onClick={() => navigate("/admin/leaves")} />
+        <StatCard label="Absent" value={absent} icon={UserX} trend={-1.4} accent="info" onClick={() => navigate("/admin/attendance")} />
+        <StatCard label="Total Employees" value={total} icon={Users} trend={4.2} accent="primary" onClick={() => navigate("/admin/users")} />
       </motion.div>
 
       <motion.div
@@ -134,25 +148,52 @@ export default function AdminDashboard() {
               <Zap className="h-4 w-4 text-primary" /> Admin Actions
             </CardTitle>
           </CardHeader>
-          <CardContent className="space-y-2">
+          <CardContent className="grid grid-cols-1 sm:grid-cols-2 gap-3">
             {[
               { label: "Team Attendance", icon: CalendarCheck, url: "/admin/attendance", extra: `${present}/${total}` },
               { label: "Approvals", icon: CheckCircle2, url: "/admin/leaves" },
               { label: "Tasks", icon: ClipboardList, url: "/admin/updates" },
               { label: "Audit Logs", icon: ShieldCheck, url: "/admin/audit" }
             ].map((action, i) => (
-              <div key={i} onClick={() => navigate(action.url)} className="flex items-center justify-between p-4 bg-muted/15 hover:bg-muted/40 hover:-translate-y-[1px] transition-all duration-200 rounded-2xl cursor-pointer group border border-border/30">
-                <div className="flex items-center gap-3">
-                  <div className={`h-10 w-10 rounded-xl flex items-center justify-center ${action.label === "Approvals" ? "bg-success/10" : action.label === "Tasks" ? "bg-warning/10" : action.label === "Audit Logs" ? "bg-info/10" : "bg-primary/10"}`}>
-                    <action.icon className="h-5 w-5" style={{ color: action.label === "Approvals" ? 'hsl(var(--success))' : action.label === "Tasks" ? 'hsl(var(--warning))' : action.label === "Audit Logs" ? 'hsl(var(--info))' : 'hsl(var(--primary))' }} />
+              <button
+                key={i}
+                type="button"
+                onClick={() => navigate(action.url)}
+                className="flex items-center justify-between p-5 bg-muted/15 hover:bg-muted/40 hover:-translate-y-[1px] transition-all duration-200 rounded-2xl cursor-pointer group border border-border/30 hover:shadow-glass hover-shine focus-visible:outline-none focus-visible:ring-1 focus-visible:ring-primary/40"
+              >
+                <div className="flex items-center gap-3 min-w-0">
+                  <div
+                    className={`h-11 w-11 rounded-xl flex items-center justify-center ${
+                      action.label === "Approvals"
+                        ? "bg-success/10"
+                        : action.label === "Tasks"
+                          ? "bg-warning/10"
+                          : action.label === "Audit Logs"
+                            ? "bg-info/10"
+                            : "bg-primary/10"
+                    }`}
+                  >
+                    <action.icon
+                      className="h-5 w-5"
+                      style={{
+                        color:
+                          action.label === "Approvals"
+                            ? "hsl(var(--success))"
+                            : action.label === "Tasks"
+                              ? "hsl(var(--warning))"
+                              : action.label === "Audit Logs"
+                                ? "hsl(var(--info))"
+                                : "hsl(var(--primary))",
+                      }}
+                    />
                   </div>
-                  <span className="font-medium">{action.label}</span>
+                  <span className="font-medium truncate">{action.label}</span>
                 </div>
                 <div className="flex items-center gap-3">
-                  {action.extra && <span className="font-semibold text-sm text-muted-foreground">{action.extra}</span>}
+                  {action.extra && <span className="font-semibold text-sm text-muted-foreground whitespace-nowrap">{action.extra}</span>}
                   <ChevronRight className="h-4 w-4 text-muted-foreground group-hover:translate-x-1 transition-transform" />
                 </div>
-              </div>
+              </button>
             ))}
           </CardContent>
         </Card>
@@ -180,16 +221,22 @@ export default function AdminDashboard() {
                   {a.checkIn ? `In ${format(new Date(a.checkIn), "h:mm a")}` : "Not checked in"}
                 </span>
                 <span
-                  className={`inline-flex items-center rounded-full px-2.5 py-1 text-xs font-semibold ${
+                  className={`inline-flex items-center gap-1.5 rounded-full px-2.5 py-1 text-xs font-semibold border ${
                     a.status === "Present"
-                      ? "bg-success/15 text-success"
+                      ? "bg-success/15 text-success border-success/30"
                       : a.status === "Late"
-                        ? "bg-warning/15 text-warning"
+                        ? "bg-warning/15 text-warning border-warning/30"
                         : a.status === "On Leave"
-                          ? "bg-info/15 text-info"
-                          : "bg-destructive/15 text-destructive"
+                          ? "bg-info/15 text-info border-info/30"
+                          : "bg-destructive/15 text-destructive border-destructive/30"
                   }`}
                 >
+                  {a.status === "Present" && <UserCheck className="h-3.5 w-3.5" />}
+                  {a.status === "Late" && <AlertTriangle className="h-3.5 w-3.5" />}
+                  {a.status === "On Leave" && <CalendarCheck className="h-3.5 w-3.5" />}
+                  {a.status !== "Present" && a.status !== "Late" && a.status !== "On Leave" && (
+                    <UserX className="h-3.5 w-3.5" />
+                  )}
                   {a.status}
                 </span>
               </div>

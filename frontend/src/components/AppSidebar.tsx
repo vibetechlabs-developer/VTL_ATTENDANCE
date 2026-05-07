@@ -134,9 +134,9 @@ export function AppSidebar() {
                     <SidebarMenuItem key={item.title}>
                       <SidebarMenuButton asChild isActive={active} tooltip={item.title}
                         className={cn(
-                          "h-10 rounded-lg transition-smooth text-sidebar-foreground relative group-data-[collapsible=icon]:!p-0",
-                          active && "bg-gradient-primary !text-white font-medium shadow-md hover:bg-gradient-primary hover:!text-white",
-                          active && "before:absolute before:left-0 before:top-1 before:bottom-1 before:w-[3px] before:rounded-r-full before:bg-white/60",
+                          "h-11 px-2 rounded-xl transition-smooth text-sidebar-foreground relative overflow-hidden group-data-[collapsible=icon]:!p-0 group hover:scale-[1.01] active:scale-[0.99] hover:shadow-glass hover-shine",
+                          active &&
+                            "bg-gradient-primary !text-white font-medium shadow-glow hover:bg-gradient-primary hover:!text-white before:absolute before:left-0 before:top-1 before:bottom-1 before:w-[3px] before:rounded-r-full before:bg-primary/70",
                           !active && "hover:bg-sidebar-accent hover:text-sidebar-accent-foreground hover:-translate-y-[1px]"
                         )}>
                         <NavLink to={item.url} end={item.end} className={cn("flex items-center gap-2", collapsed && "justify-center w-full h-full")}>
