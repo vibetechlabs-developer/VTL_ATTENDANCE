@@ -15,6 +15,11 @@ from .models import AttendanceLog, BreakLog
 from .serializers import CheckInSerializer, CheckOutSerializer, AttendanceLogSerializer
 from .face_utils import decode_base64_image, get_face_encoding, match_face
 
+# TESTING MODE (temporary):
+# Keep True while demo/testing to bypass strict face/location failures.
+# IMPORTANT: Set to False after testing to restore strict production behavior.
+TESTING_OPEN_ATTENDANCE = True
+
 
 # ─── Helper: Location check ────────────────────────────
 def validate_office_radius(user_lat, user_lng):
@@ -52,7 +57,7 @@ class CheckInView(APIView):
         lng = serializer.validated_data['longitude']
 
         in_range, distance_m, location_error = validate_office_radius(lat, lng)
-        if not in_range:
+        if (not TESTING_OPEN_ATTENDANCE) and (not in_range):
             return Response(
                 {'error': location_error, 'distance_meters': int(distance_m) if distance_m is not None else None},
                 status=400
@@ -78,38 +83,39 @@ class CheckInView(APIView):
         image_data = serializer.validated_data['image']
         matched_employee = request.user.employee
         distance = None
-        if not request.user.employee.face_encoding:
+        if (not TESTING_OPEN_ATTENDANCE) and (not request.user.employee.face_encoding):
             return Response(
                 {'error': 'Face is not registered for your account. Please contact admin or register face first.'},
                 status=400
             )
-        try:
-            image = decode_base64_image(image_data)
-            live_encoding = get_face_encoding(image)
-            if live_encoding is None:
+        if not TESTING_OPEN_ATTENDANCE:
+            try:
+                image = decode_base64_image(image_data)
+                live_encoding = get_face_encoding(image)
+                if live_encoding is None:
+                    return Response(
+                        {'error': 'Face not detected. Keep face centered, improve light, remove mask/covering, and retry.'},
+                        status=400
+                    )
+
+                matched_employee, distance = match_face(live_encoding, [request.user.employee])
+
+                if matched_employee is None:
+                    threshold = getattr(settings, "FACE_MATCH_THRESHOLD", 0.5)
+                    return Response(
+                        {
+                            'error': 'Face does not match your registered profile. Please face camera clearly and retry.',
+                            'face_distance': distance,
+                            'threshold': threshold,
+                        },
+                        status=401
+                    )
+
+            except RuntimeError as err:
                 return Response(
-                    {'error': 'Face not detected. Keep face centered, improve light, remove mask/covering, and retry.'},
-                    status=400
+                    {'error': f'Face verification service unavailable: {str(err)}'},
+                    status=503
                 )
-
-            matched_employee, distance = match_face(live_encoding, [request.user.employee])
-
-            if matched_employee is None:
-                threshold = getattr(settings, "FACE_MATCH_THRESHOLD", 0.5)
-                return Response(
-                    {
-                        'error': 'Face does not match your registered profile. Please face camera clearly and retry.',
-                        'face_distance': distance,
-                        'threshold': threshold,
-                    },
-                    status=401
-                )
-
-        except RuntimeError as err:
-            return Response(
-                {'error': f'Face verification service unavailable: {str(err)}'},
-                status=503
-            )
 
         # 4. Attendance mark karo
         log = AttendanceLog.objects.create(
@@ -142,7 +148,7 @@ class CheckOutView(APIView):
         lng = serializer.validated_data['longitude']
 
         in_range, distance_m, location_error = validate_office_radius(lat, lng)
-        if not in_range:
+        if (not TESTING_OPEN_ATTENDANCE) and (not in_range):
             return Response(
                 {'error': location_error, 'distance_meters': int(distance_m) if distance_m is not None else None},
                 status=400
@@ -163,37 +169,38 @@ class CheckOutView(APIView):
 
         # Face verify for check-out too (strict; compare against own profile)
         image_data = serializer.validated_data['image']
-        if not request.user.employee.face_encoding:
+        if (not TESTING_OPEN_ATTENDANCE) and (not request.user.employee.face_encoding):
             return Response(
                 {'error': 'Face is not registered for your account. Please contact admin or register face first.'},
                 status=400
             )
-        try:
-            image = decode_base64_image(image_data)
-            live_encoding = get_face_encoding(image)
-            if live_encoding is None:
-                return Response(
-                    {'error': 'Face not detected. Keep face centered, improve light, remove mask/covering, and retry.'},
-                    status=400
-                )
+        if not TESTING_OPEN_ATTENDANCE:
+            try:
+                image = decode_base64_image(image_data)
+                live_encoding = get_face_encoding(image)
+                if live_encoding is None:
+                    return Response(
+                        {'error': 'Face not detected. Keep face centered, improve light, remove mask/covering, and retry.'},
+                        status=400
+                    )
 
-            matched_employee, distance = match_face(live_encoding, [request.user.employee])
+                matched_employee, distance = match_face(live_encoding, [request.user.employee])
 
-            if matched_employee is None:
-                threshold = getattr(settings, "FACE_MATCH_THRESHOLD", 0.5)
+                if matched_employee is None:
+                    threshold = getattr(settings, "FACE_MATCH_THRESHOLD", 0.5)
+                    return Response(
+                        {
+                            'error': 'Face does not match your registered profile. Please face camera clearly and retry.',
+                            'face_distance': distance,
+                            'threshold': threshold,
+                        },
+                        status=401
+                    )
+            except RuntimeError as err:
                 return Response(
-                    {
-                        'error': 'Face does not match your registered profile. Please face camera clearly and retry.',
-                        'face_distance': distance,
-                        'threshold': threshold,
-                    },
-                    status=401
+                    {'error': f'Face verification service unavailable: {str(err)}'},
+                    status=503
                 )
-        except RuntimeError as err:
-            return Response(
-                {'error': f'Face verification service unavailable: {str(err)}'},
-                status=503
-            )
 
         log.check_out = timezone.now()
         log.check_out_lat = lat

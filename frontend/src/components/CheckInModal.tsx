@@ -16,8 +16,8 @@ interface CheckInModalProps {
 }
 
 export function CheckInModal({ open, onOpenChange, onVerified, mode = "check-in" }: CheckInModalProps) {
-    // Some browsers mirror front-camera preview by default.
-    const NORMALIZE_FRONT_CAMERA = true;
+    // Keep camera in natural orientation for both check-in/check-out.
+    const NORMALIZE_FRONT_CAMERA = false;
     const [step, setStep] = useState<"face" | "location" | "done" | null>(null);
     const [faceProgress, setFaceProgress] = useState(0);
     const [locProgress, setLocProgress] = useState(0);
