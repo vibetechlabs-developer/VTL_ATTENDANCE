@@ -29,6 +29,8 @@ const emptyForm: Omit<Employee, "id"> = {
 };
 
 export default function UserManagement() {
+  // Some browsers auto-mirror front camera previews. Keep this true to normalize.
+  const NORMALIZE_FRONT_CAMERA = true;
   const { employees, deleteEmployee, setEmployeesFromApi } = useDataStore();
   const authUser = useAuthStore((s) => s.user);
   const accessToken = useAuthStore((s) => s.accessToken);
@@ -272,8 +274,15 @@ export default function UserManagement() {
       toast.error("Could not capture face frame");
       return;
     }
-    // Keep capture in natural orientation.
-    ctx.drawImage(video, 0, 0, width, height);
+    if (NORMALIZE_FRONT_CAMERA) {
+      // Un-mirror capture so stored face image matches natural orientation.
+      ctx.save();
+      ctx.scale(-1, 1);
+      ctx.drawImage(video, -width, 0, width, height);
+      ctx.restore();
+    } else {
+      ctx.drawImage(video, 0, 0, width, height);
+    }
     // Prefer PNG for maximum compatibility with backend decoders
     const capturedBase64 = canvas.toDataURL("image/png");
     setFaceBase64(capturedBase64);
@@ -729,7 +738,7 @@ export default function UserManagement() {
                 playsInline
                 muted
                 className="w-full h-56 object-cover"
-                style={{ transform: "none" }}
+                style={{ transform: NORMALIZE_FRONT_CAMERA ? "scaleX(-1)" : "none" }}
               />
             </div>
             {faceBase64 && (
