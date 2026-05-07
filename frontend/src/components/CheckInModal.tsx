@@ -42,6 +42,28 @@ export function CheckInModal({ open, onOpenChange, onVerified, mode = "check-in"
         return msg;
     };
 
+    const cameraInitErrorMessage = (err: unknown): string => {
+        const e = err as { name?: string; message?: string };
+        const name = (e?.name || "").toLowerCase();
+        const msg = (e?.message || "").toLowerCase();
+        if (name.includes("notallowed") || name.includes("security")) {
+            return "Camera permission denied. Please allow camera access in browser settings.";
+        }
+        if (name.includes("notreadable") || msg.includes("could not start video source")) {
+            return "Camera is busy in another app/tab. Close other camera apps and retry.";
+        }
+        if (name.includes("overconstrained")) {
+            return "Camera constraints not supported on this device. Please retry.";
+        }
+        if (name.includes("notfound")) {
+            return "No camera device found.";
+        }
+        if (name.includes("abort")) {
+            return "Camera initialization was interrupted. Please retry.";
+        }
+        return "Camera unavailable right now. Please retry.";
+    };
+
     const parseApiError = (
         status: number,
         body: {
@@ -98,8 +120,10 @@ export function CheckInModal({ open, onOpenChange, onVerified, mode = "check-in"
             const ready = await ensureVideoReady();
             setCameraReady(ready);
             return ready;
-        } catch {
+        } catch (err) {
             setCameraReady(false);
+            const msg = cameraInitErrorMessage(err);
+            setErrorText(msg);
             return false;
         }
     };
@@ -182,12 +206,12 @@ export function CheckInModal({ open, onOpenChange, onVerified, mode = "check-in"
         const startCamera = async () => {
             const ok = await restartCamera();
             if (!ok) {
-                toast.error("Camera permission denied or camera unavailable");
+                toast.error(errorText || "Camera unavailable right now. Please retry.");
                 onOpenChange(false);
             }
         };
         void startCamera();
-    }, [open, onOpenChange]);
+    }, [open, onOpenChange, errorText]);
 
     useEffect(() => {
         // Auto-start verification once the modal opens and camera is ready.
@@ -196,7 +220,9 @@ export function CheckInModal({ open, onOpenChange, onVerified, mode = "check-in"
         if (!cameraReady) return;
         if (submitting) return;
         if (startedRef.current) return;
-        void handleVerifyAndSubmit();
+        // Allow camera pipeline one frame to stabilize before auto-capture.
+        const t = window.setTimeout(() => void handleVerifyAndSubmit(), 220);
+        return () => window.clearTimeout(t);
     }, [open, step, cameraReady, submitting]);
 
     const getLocation = (): Promise<{ latitude: number; longitude: number }> =>
