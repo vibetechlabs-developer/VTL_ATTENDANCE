@@ -1,12 +1,14 @@
 import { useEffect, useMemo, useState } from "react";
 import { Download, Search, ChevronLeft, ChevronRight, Calendar as CalendarIcon, Users, UserCheck, UserX, Plane, Eye, Coffee, UserPlus, UserMinus } from "lucide-react";
-import { format, addDays, subDays } from "date-fns";
+import { format, addDays, subDays, startOfWeek, endOfWeek, startOfMonth, endOfMonth } from "date-fns";
 import { toast } from "sonner";
 import { exportCsv } from "@/utils/csv";
 import { Input } from "@/components/ui/input";
 import { Button } from "@/components/ui/button";
 import { useAuthStore } from "@/store/authStore";
-import { attendanceAdminRequest, attendanceForceCheckoutRequest } from "@/lib/api";
+import { attendanceAdminHistoryRequest, attendanceAdminRequest, attendanceForceCheckoutRequest } from "@/lib/api";
+import { Dialog, DialogContent, DialogDescription, DialogHeader, DialogTitle } from "@/components/ui/dialog";
+import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 
 export default function AttendanceManagement() {
   const accessToken = useAuthStore((s) => s.accessToken);
@@ -17,12 +19,48 @@ export default function AttendanceManagement() {
   const [activeTab, setActiveTab] = useState("All");
   const today = new Date();
   const canGoNext = format(date, "yyyy-MM-dd") < format(today, "yyyy-MM-dd");
+  const [historyOpen, setHistoryOpen] = useState(false);
+  const [historyMode, setHistoryMode] = useState<"week" | "month">("week");
+  const [selectedEmployee, setSelectedEmployee] = useState<any | null>(null);
+  const [historyRows, setHistoryRows] = useState<any[]>([]);
+  const [historyLoading, setHistoryLoading] = useState(false);
 
   const loadAttendance = async () => {
     if (!accessToken) return;
     const res = await attendanceAdminRequest(accessToken, format(date, "yyyy-MM-dd"));
     if (!res.ok) return;
     setAttendance(await res.json());
+  };
+
+  const loadHistory = async (mode: "week" | "month", row: any) => {
+    if (!accessToken) return;
+    setHistoryLoading(true);
+    try {
+      const from = mode === "week" ? startOfWeek(date, { weekStartsOn: 1 }) : startOfMonth(date);
+      const to = mode === "week" ? endOfWeek(date, { weekStartsOn: 1 }) : endOfMonth(date);
+      const res = await attendanceAdminHistoryRequest(accessToken, {
+        employee_id: row.employeePk,
+        from: format(from, "yyyy-MM-dd"),
+        to: format(to, "yyyy-MM-dd"),
+      });
+      const body = (await res.json().catch(() => [])) as any[];
+      if (!res.ok) {
+        toast.error((body as any)?.error || "Could not load attendance history");
+        setHistoryRows([]);
+        return;
+      }
+      setHistoryRows(Array.isArray(body) ? body : []);
+    } finally {
+      setHistoryLoading(false);
+    }
+  };
+
+  const openHistory = async (row: any) => {
+    setSelectedEmployee(row);
+    setHistoryMode("week");
+    setHistoryRows([]);
+    setHistoryOpen(true);
+    await loadHistory("week", row);
   };
 
   useEffect(() => {
@@ -57,6 +95,37 @@ export default function AttendanceManagement() {
 
   return (
     <div className="space-y-8 w-full max-w-none">
+      <Dialog open={historyOpen} onOpenChange={setHistoryOpen}>
+        <DialogContent className="sm:max-w-3xl rounded-3xl border-border/50 bg-card/95 backdrop-blur-2xl shadow-3d max-h-[85vh] overflow-y-auto">
+          <DialogHeader>
+            <DialogTitle>Attendance History</DialogTitle>
+            <DialogDescription>
+              {selectedEmployee?.name || "Employee"} · {historyMode === "week" ? "This week" : "This month"}
+            </DialogDescription>
+          </DialogHeader>
+
+          <Tabs
+            value={historyMode}
+            onValueChange={(v) => {
+              const mode = (v === "month" ? "month" : "week") as "week" | "month";
+              setHistoryMode(mode);
+              if (selectedEmployee) void loadHistory(mode, selectedEmployee);
+            }}
+          >
+            <TabsList className="w-full rounded-2xl">
+              <TabsTrigger value="week" className="flex-1 rounded-xl">Week</TabsTrigger>
+              <TabsTrigger value="month" className="flex-1 rounded-xl">Month</TabsTrigger>
+            </TabsList>
+
+            <TabsContent value="week" className="mt-4">
+              <HistoryTable loading={historyLoading} rows={historyRows} />
+            </TabsContent>
+            <TabsContent value="month" className="mt-4">
+              <HistoryTable loading={historyLoading} rows={historyRows} />
+            </TabsContent>
+          </Tabs>
+        </DialogContent>
+      </Dialog>
       <div>
         <div className="flex items-center gap-3">
           <Users className="h-6 w-6" />
@@ -239,7 +308,14 @@ export default function AttendanceManagement() {
                   <td className="py-3 px-6">
                     <div className="flex items-center gap-2 text-foreground">
                       <span className="font-semibold text-sm">{r.name}</span>
-                      <Eye className="h-3 w-3 text-muted-foreground/60 cursor-pointer hover:text-primary" />
+                      <button
+                        type="button"
+                        className="p-1 rounded-md hover:bg-muted/40 transition-smooth"
+                        onClick={() => void openHistory(r)}
+                        title="View week/month attendance"
+                      >
+                        <Eye className="h-3.5 w-3.5 text-muted-foreground/70 hover:text-primary" />
+                      </button>
                     </div>
                   </td>
                   <td className="py-3 px-6"><span className="text-muted-foreground text-xs font-mono">{String(r.empId).split('-')[1] || r.empId}</span></td>
@@ -292,6 +368,53 @@ export default function AttendanceManagement() {
           </tbody>
         </table>
       </div>
+    </div>
+  );
+}
+
+function HistoryTable({ loading, rows }: { loading: boolean; rows: any[] }) {
+  return (
+    <div className="w-full overflow-x-auto rounded-2xl border border-border/40">
+      <table className="w-full min-w-[760px] text-sm">
+        <thead>
+          <tr className="border-b border-border/40 bg-muted/20">
+            <th className="text-left py-3 px-4 text-[11px] font-semibold text-muted-foreground uppercase tracking-wider">Date</th>
+            <th className="text-left py-3 px-4 text-[11px] font-semibold text-muted-foreground uppercase tracking-wider">Check In</th>
+            <th className="text-left py-3 px-4 text-[11px] font-semibold text-muted-foreground uppercase tracking-wider">Check Out</th>
+            <th className="text-left py-3 px-4 text-[11px] font-semibold text-muted-foreground uppercase tracking-wider">Break</th>
+            <th className="text-left py-3 px-4 text-[11px] font-semibold text-muted-foreground uppercase tracking-wider">Hours</th>
+          </tr>
+        </thead>
+        <tbody>
+          {loading ? (
+            <tr>
+              <td colSpan={5} className="py-6 px-4 text-center text-muted-foreground">
+                Loading...
+              </td>
+            </tr>
+          ) : rows.length === 0 ? (
+            <tr>
+              <td colSpan={5} className="py-6 px-4 text-center text-muted-foreground">
+                No records found for this range.
+              </td>
+            </tr>
+          ) : (
+            rows.map((r) => (
+              <tr key={r.id} className="border-b border-border/20 last:border-0 hover:bg-muted/20 transition-smooth">
+                <td className="py-3 px-4 font-medium">{r.date ? format(new Date(r.date), "dd MMM yyyy") : "—"}</td>
+                <td className="py-3 px-4 tabular-nums">{r.checkIn ? format(new Date(r.checkIn), "h:mm a") : "—"}</td>
+                <td className="py-3 px-4 tabular-nums">{r.checkOut ? format(new Date(r.checkOut), "h:mm a") : "—"}</td>
+                <td className="py-3 px-4 tabular-nums">
+                  {typeof r.breakMinutes === "number"
+                    ? `${Math.floor(r.breakMinutes / 60)}h ${r.breakMinutes % 60}m`
+                    : "—"}
+                </td>
+                <td className="py-3 px-4 tabular-nums font-semibold">{r.hours > 0 ? Number(r.hours).toFixed(2) : "—"}</td>
+              </tr>
+            ))
+          )}
+        </tbody>
+      </table>
     </div>
   );
 }

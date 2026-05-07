@@ -7,6 +7,7 @@ from .views import (
     MyAttendanceSessionView,
     AdminAttendanceView,
     AdminForceCheckOutView,
+    AdminEmployeeAttendanceHistoryView,
 )
 
 urlpatterns = [
@@ -16,6 +17,7 @@ urlpatterns = [
     path('history/', MyAttendanceHistoryView.as_view(), name='attendance-history'),
     path('admin/', AdminAttendanceView.as_view(), name='attendance-admin'),
     path('admin/force-checkout/', AdminForceCheckOutView.as_view(), name='attendance-admin-force-checkout'),
+    path('admin/history/', AdminEmployeeAttendanceHistoryView.as_view(), name='attendance-admin-history'),
     path('break/start/', BreakStartView.as_view(), name='break-start'),
     path('break/end/', BreakEndView.as_view(), name='break-end'),
     path('register-face/', FaceRegisterView.as_view(), name='register-face'),

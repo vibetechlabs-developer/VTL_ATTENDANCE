@@ -226,7 +226,7 @@ export default function EmployeeDashboard() {
             <div className="flex-1 min-w-0">
               <p className="text-sm font-semibold">How to use</p>
               <p className="text-xs text-muted-foreground mt-1">
-                1) Tap <b>Check In</b> (Face + GPS). 2) Break માટે <b>Break</b> અને પછી <b>Resume</b>. 3) Daily work complete হলে <b>Check Out</b>.
+                1) Tap <b>Check In</b> (Face + GPS). 2) For breaks, tap <b>Break</b> and then <b>Resume</b>. 3) When your work is done, tap <b>Check Out</b>.
               </p>
             </div>
             <Button size="sm" className="hover-shine" onClick={() => setShowHowToUse(false)} type="button">

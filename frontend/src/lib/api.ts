@@ -186,6 +186,18 @@ export async function attendanceAdminRequest(accessToken: string, date: string):
   return fetchWithAutoRefresh(accessToken, `/api/attendance/admin/?date=${encodeURIComponent(date)}`);
 }
 
+export async function attendanceAdminHistoryRequest(
+  accessToken: string,
+  payload: { employee_id: string | number; from: string; to: string }
+): Promise<Response> {
+  const qs = new URLSearchParams({
+    employee_id: String(payload.employee_id),
+    from: payload.from,
+    to: payload.to,
+  });
+  return fetchWithAutoRefresh(accessToken, `/api/attendance/admin/history/?${qs.toString()}`);
+}
+
 export async function attendanceForceCheckoutRequest(
   accessToken: string,
   payload: { employee_id: string | number; date: string }

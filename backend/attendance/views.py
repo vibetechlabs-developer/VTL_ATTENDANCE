@@ -392,6 +392,61 @@ class AdminForceCheckOutView(APIView):
         })
 
 
+# ─── Admin: Employee Attendance History (range) ───────────────
+class AdminEmployeeAttendanceHistoryView(APIView):
+    permission_classes = [IsAuthenticated]
+
+    def get(self, request):
+        if request.user.role not in ['admin', 'hr', 'manager']:
+            return Response({'error': 'Permission denied.'}, status=403)
+
+        employee_id = request.query_params.get('employee_id')
+        from_str = request.query_params.get('from')
+        to_str = request.query_params.get('to')
+        if not employee_id or not from_str or not to_str:
+            return Response({'error': 'employee_id, from, and to are required.'}, status=400)
+
+        try:
+            start_date = timezone.datetime.fromisoformat(str(from_str)).date()
+            end_date = timezone.datetime.fromisoformat(str(to_str)).date()
+        except Exception:
+            return Response({'error': 'Invalid date format. Use YYYY-MM-DD.'}, status=400)
+
+        if start_date > end_date:
+            start_date, end_date = end_date, start_date
+
+        logs = (
+            AttendanceLog.objects
+            .filter(employee_id=employee_id, date__gte=start_date, date__lte=end_date)
+            .select_related('employee__user')
+            .order_by('-date')
+        )
+
+        rows = []
+        for log in logs:
+            rows.append({
+                'id': str(log.id),
+                'date': log.date.isoformat(),
+                'name': log.employee.name,
+                'empId': f"VTL-{str(log.employee_id).zfill(3)}",
+                'department': log.employee.department,
+                'status': 'Present' if (log.check_in and not log.check_out and (log.total_hours or 0) == 0) else (
+                    'Late' if (log.check_in and not log.check_out and (log.total_hours or 0) == 0) else (
+                        'Present' if (log.check_in and not log.check_out) else (
+                            'Present' if log.check_in else 'Absent'
+                        )
+                    )
+                ),
+                'checkIn': log.check_in.isoformat() if log.check_in else None,
+                'checkOut': log.check_out.isoformat() if log.check_out else None,
+                'breakMinutes': int(log.break_minutes or 0),
+                'hours': float(log.total_hours or 0),
+                'overtimeHours': float(log.overtime_hours or 0),
+            })
+
+        return Response(rows)
+
+
 # ─── Break Start ───────────────────────────────────────
 class BreakStartView(APIView):
     permission_classes = [IsAuthenticated]
