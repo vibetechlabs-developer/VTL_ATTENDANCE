@@ -65,11 +65,56 @@ def get_face_encoding(image):
     if image.size == 0:
         raise ValueError("Image is empty")
 
-    # Image thi 128 numbers kaadhe
-    encodings = face_recognition.face_encodings(image)
-    if len(encodings) == 0:
-        return None  # Face j na dikhe to
-    return encodings[0]
+    def try_encode(img):
+        # Try a few detector settings to reduce false "face not detected" failures.
+        for upsample in (1, 2):
+            for model in ("hog",):  # keep hog for CPU stability/perf
+                try:
+                    locs = face_recognition.face_locations(
+                        img,
+                        number_of_times_to_upsample=upsample,
+                        model=model,
+                    )
+                    if not locs:
+                        continue
+                    encs = face_recognition.face_encodings(img, known_face_locations=locs)
+                    if encs:
+                        return encs[0]
+                except Exception:
+                    continue
+        return None
+
+    # 1) Primary attempt
+    enc = try_encode(image)
+    if enc is not None:
+        return enc
+
+    # 2) Fallback: improve contrast/brightness for dim mobile camera frames
+    try:
+        ycrcb = cv2.cvtColor(image, cv2.COLOR_RGB2YCrCb)
+        y, cr, cb = cv2.split(ycrcb)
+        clahe = cv2.createCLAHE(clipLimit=2.0, tileGridSize=(8, 8))
+        y = clahe.apply(y)
+        enhanced = cv2.cvtColor(cv2.merge((y, cr, cb)), cv2.COLOR_YCrCb2RGB)
+        enhanced = np.ascontiguousarray(enhanced, dtype=np.uint8)
+        enc = try_encode(enhanced)
+        if enc is not None:
+            return enc
+    except Exception:
+        pass
+
+    # 3) Final fallback: slightly upscale frame to help tiny-face detection
+    try:
+        h, w = image.shape[:2]
+        upscaled = cv2.resize(image, (max(1, w * 2), max(1, h * 2)), interpolation=cv2.INTER_CUBIC)
+        upscaled = np.ascontiguousarray(upscaled, dtype=np.uint8)
+        enc = try_encode(upscaled)
+        if enc is not None:
+            return enc
+    except Exception:
+        pass
+
+    return None  # Face j na dikhe to
 
 
 def match_face(live_encoding, all_employees):

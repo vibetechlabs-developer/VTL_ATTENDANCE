@@ -65,7 +65,10 @@ class CheckInView(APIView):
             date=today
         ).first()
 
-        if existing and existing.check_in:
+        # TESTING MODE (temporary):
+        # allow multiple check-ins in same day only after user has checked out.
+        # Revert this block after testing to enforce single check-in/day.
+        if existing and existing.check_in and not existing.check_out:
             return Response(
                 {'error': 'You have already checked in today.'},
                 status=400
@@ -85,7 +88,7 @@ class CheckInView(APIView):
             live_encoding = get_face_encoding(image)
             if live_encoding is None:
                 return Response(
-                    {'error': 'Face not detected. Please look at the camera and try again.'},
+                    {'error': 'Face not detected. Keep face centered, improve light, remove mask/covering, and retry.'},
                     status=400
                 )
 
@@ -170,7 +173,7 @@ class CheckOutView(APIView):
             live_encoding = get_face_encoding(image)
             if live_encoding is None:
                 return Response(
-                    {'error': 'Face not detected. Please look at the camera and try again.'},
+                    {'error': 'Face not detected. Keep face centered, improve light, remove mask/covering, and retry.'},
                     status=400
                 )
 

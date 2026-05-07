@@ -16,6 +16,8 @@ interface CheckInModalProps {
 }
 
 export function CheckInModal({ open, onOpenChange, onVerified, mode = "check-in" }: CheckInModalProps) {
+    // Some browsers mirror front-camera preview by default.
+    const NORMALIZE_FRONT_CAMERA = true;
     const [step, setStep] = useState<"face" | "location" | "done" | null>(null);
     const [faceProgress, setFaceProgress] = useState(0);
     const [locProgress, setLocProgress] = useState(0);
@@ -262,7 +264,15 @@ export function CheckInModal({ open, onOpenChange, onVerified, mode = "check-in"
         canvas.height = h;
         const ctx = canvas.getContext("2d");
         if (!ctx) throw new Error("Could not capture frame");
-        ctx.drawImage(video, 0, 0, w, h);
+        if (NORMALIZE_FRONT_CAMERA) {
+            // Keep captured frame in natural orientation.
+            ctx.save();
+            ctx.scale(-1, 1);
+            ctx.drawImage(video, -w, 0, w, h);
+            ctx.restore();
+        } else {
+            ctx.drawImage(video, 0, 0, w, h);
+        }
         return canvas.toDataURL("image/png");
     };
 
@@ -423,7 +433,8 @@ export function CheckInModal({ open, onOpenChange, onVerified, mode = "check-in"
                                     autoPlay
                                     playsInline
                                     muted
-                                    className="h-full w-full object-cover [transform:scaleX(1)]"
+                                    className="h-full w-full object-cover"
+                                    style={{ transform: NORMALIZE_FRONT_CAMERA ? "scaleX(-1)" : "none" }}
                                 />
                             </div>
                             <canvas ref={canvasRef} className="hidden" />
