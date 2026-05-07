@@ -3,6 +3,7 @@ from rest_framework.response import Response
 from rest_framework import status
 from rest_framework.permissions import IsAuthenticated
 from rest_framework_simplejwt.tokens import RefreshToken
+from rest_framework_simplejwt.serializers import TokenRefreshSerializer
 from django.contrib.auth import authenticate
 from django.conf import settings
 from django.utils import timezone
@@ -57,6 +58,16 @@ class LoginView(APIView):
             'email': user.email,
             'name': name,
         })
+
+
+class TokenRefreshView(APIView):
+    permission_classes = []
+
+    def post(self, request):
+        serializer = TokenRefreshSerializer(data=request.data)
+        if not serializer.is_valid():
+            return Response({'error': 'Invalid or expired refresh token'}, status=status.HTTP_401_UNAUTHORIZED)
+        return Response(serializer.validated_data)
 
 
 class LogoutView(APIView):

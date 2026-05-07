@@ -92,6 +92,31 @@ export function CheckInModal({ open, onOpenChange, onVerified, mode = "check-in"
     };
 
     const restartCamera = async (): Promise<boolean> => {
+        const tryGetStream = async (): Promise<MediaStream> => {
+            const attempts: MediaStreamConstraints[] = [
+                {
+                    video: {
+                        facingMode: { ideal: "user" },
+                        width: { ideal: 640, min: 240 },
+                        height: { ideal: 480, min: 180 },
+                        frameRate: { ideal: 24, max: 30 },
+                    },
+                    audio: false,
+                },
+                { video: { facingMode: "user" }, audio: false },
+                { video: true, audio: false },
+            ];
+            let lastErr: unknown = null;
+            for (const c of attempts) {
+                try {
+                    return await navigator.mediaDevices.getUserMedia(c);
+                } catch (e) {
+                    lastErr = e;
+                }
+            }
+            throw lastErr ?? new Error("camera init failed");
+        };
+
         try {
             if (streamRef.current) {
                 streamRef.current.getTracks().forEach((t) => t.stop());
@@ -104,15 +129,7 @@ export function CheckInModal({ open, onOpenChange, onVerified, mode = "check-in"
             }
             // Small cooldown helps some mobile devices release prior camera handle.
             await new Promise((r) => window.setTimeout(r, 180));
-            const stream = await navigator.mediaDevices.getUserMedia({
-                video: {
-                    facingMode: "user",
-                    width: { ideal: 640, min: 240 },
-                    height: { ideal: 480, min: 180 },
-                    frameRate: { ideal: 24, max: 30 },
-                },
-                audio: false,
-            });
+            const stream = await tryGetStream();
             streamRef.current = stream;
             if (!v) return false;
             v.srcObject = stream;
@@ -206,12 +223,11 @@ export function CheckInModal({ open, onOpenChange, onVerified, mode = "check-in"
         const startCamera = async () => {
             const ok = await restartCamera();
             if (!ok) {
-                toast.error(errorText || "Camera unavailable right now. Please retry.");
-                onOpenChange(false);
+                toast.error(errorText || "Camera unavailable right now. Please tap Retry scan.");
             }
         };
         void startCamera();
-    }, [open, onOpenChange, errorText]);
+    }, [open]);
 
     useEffect(() => {
         // Auto-start verification once the modal opens and camera is ready.

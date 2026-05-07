@@ -722,7 +722,7 @@ export default function UserManagement() {
           </DialogHeader>
           <div className="space-y-3 py-2">
             <div className="rounded-xl overflow-hidden border border-border bg-muted/20">
-              <video ref={videoRef} autoPlay playsInline muted className="w-full h-56 object-cover" />
+              <video ref={videoRef} autoPlay playsInline muted className="w-full h-56 object-cover [transform:scaleX(1)]" />
             </div>
             {faceBase64 && (
               <img src={faceBase64} alt="Captured face preview" className="h-36 w-full object-cover rounded-lg border border-border" />

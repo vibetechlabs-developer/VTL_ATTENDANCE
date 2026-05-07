@@ -1,6 +1,5 @@
 import { create } from "zustand";
 import { persist } from "zustand/middleware";
-import { logoutRequest } from "@/lib/api";
 
 export type Role = "admin" | "manager" | "employee" | "hr";
 
@@ -76,9 +75,17 @@ interface AuthState {
   refreshToken: string | null;
   preferences: UserPreferences;
   setSession: (user: AuthUser, access: string, refresh: string) => void;
+  setAccessToken: (access: string | null) => void;
+  clearSession: () => void;
   logout: () => Promise<void>;
   updateProfile: (patch: Partial<AuthUser>) => void;
   updatePreferences: (patch: Partial<UserPreferences>) => void;
+}
+
+const API_BASE = import.meta.env.VITE_API_BASE ?? "";
+function apiUrl(path: string): string {
+  if (path.startsWith("http")) return path;
+  return `${API_BASE}${path}`;
 }
 
 export const useAuthStore = create<AuthState>()(
@@ -90,11 +97,20 @@ export const useAuthStore = create<AuthState>()(
       preferences: defaultPrefs,
       setSession: (user, access, refresh) =>
         set({ user, accessToken: access, refreshToken: refresh }),
+      setAccessToken: (access) => set({ accessToken: access }),
+      clearSession: () => set({ user: null, accessToken: null, refreshToken: null }),
       logout: async () => {
         const { accessToken, refreshToken } = get();
         if (accessToken && refreshToken) {
           try {
-            await logoutRequest(accessToken, refreshToken);
+            await fetch(apiUrl("/api/users/logout/"), {
+              method: "POST",
+              headers: {
+                "Content-Type": "application/json",
+                Authorization: `Bearer ${accessToken}`,
+              },
+              body: JSON.stringify({ refresh: refreshToken }),
+            });
           } catch {
             /* still clear local session */
           }
