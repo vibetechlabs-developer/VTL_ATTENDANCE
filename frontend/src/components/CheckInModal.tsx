@@ -75,22 +75,39 @@ export function CheckInModal({ open, onOpenChange, onVerified, mode = "check-in"
             distance_meters?: number | null;
             face_distance?: number | null;
             threshold?: number | null;
-        }
+        },
+        rawText?: string
     ): string => {
         const base = body.error || body.detail || body.message;
         if (base && /token not valid|given token not valid|token is invalid|token is expired/i.test(base)) {
             return "Your session has expired. Please login again.";
         }
         if (base) {
+            if (/already checked in/i.test(base)) return "You are already checked in for today.";
+            if (/outside office radius|distance/i.test(base)) {
+                const d = body.distance_meters != null ? ` Your distance is ${body.distance_meters}m.` : "";
+                return `Location error: you are outside allowed office radius.${d}`;
+            }
+            if (/face does not match/i.test(base)) {
+                if (body.face_distance != null && body.threshold != null) {
+                    return `Face mismatch. Score ${body.face_distance}, required <= ${body.threshold}.`;
+                }
+                return "Face mismatch. Please align your face clearly and retry.";
+            }
+            if (/face not detected/i.test(base)) return "Face not detected. Improve lighting and keep your face centered.";
             if (body.face_distance != null && body.threshold != null) {
                 return `${base} (score: ${body.face_distance}, required <= ${body.threshold})`;
             }
             return base;
         }
+        if (rawText && /outside office radius|face does not match|face not detected|already checked in/i.test(rawText)) {
+            const m = rawText.match(/(outside office radius[^"]*|face does not match[^"]*|face not detected[^"]*|already checked in[^"]*)/i);
+            if (m?.[1]) return m[1];
+        }
         if (status === 401) return "Face verification failed. Please align face clearly and retry.";
         if (status === 403) return "You are not allowed to perform this action.";
         if (status === 503) return "Face verification service is unavailable right now. Please retry in a moment.";
-        return mode === "check-in" ? "Check-in failed." : "Check-out failed.";
+        return `${mode === "check-in" ? "Check-in" : "Check-out"} failed (HTTP ${status}).`;
     };
 
     const restartCamera = async (): Promise<boolean> => {
@@ -354,15 +371,26 @@ export function CheckInModal({ open, onOpenChange, onVerified, mode = "check-in"
             const res = mode === "check-in"
                 ? await attendanceCheckInRequest(accessToken, { image, latitude, longitude })
                 : await attendanceCheckOutRequest(accessToken, { image, latitude, longitude });
-            const body = (await res.json().catch(() => ({}))) as {
+            const rawText = await res.clone().text().catch(() => "");
+            const body = (await res.json().catch(() => {
+                try {
+                    return rawText ? JSON.parse(rawText) : {};
+                } catch {
+                    return {};
+                }
+            })) as {
                 error?: string;
                 message?: string;
                 check_in?: string;
                 check_out?: string;
                 total_hours?: number;
+                detail?: string;
+                distance_meters?: number | null;
+                face_distance?: number | null;
+                threshold?: number | null;
             };
             if (!res.ok) {
-                const msg = parseApiError(res.status, body);
+                const msg = parseApiError(res.status, body, rawText);
                 setErrorText(msg);
                 toast.error(msg);
                 if (res.status === 401 && /session has expired/i.test(msg)) {

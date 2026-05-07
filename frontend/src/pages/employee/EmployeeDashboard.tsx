@@ -435,11 +435,11 @@ export default function EmployeeDashboard() {
             )}
 
             <div className="space-y-1.5">
-              <Label>What did you work on today? <span className="text-destructive">*</span></Label>
+              <Label>Daily update <span className="text-destructive">*</span></Label>
               <Textarea
                 value={workNote}
                 onChange={(e) => setWorkNote(e.target.value)}
-                placeholder="Shipped X, paired with Y on Z, reviewed 3 PRs..."
+                placeholder="Write your daily update (tasks completed, blockers, next steps)..."
                 className="min-h-[90px] rounded-2xl"
               />
               <p className="text-[11px] text-muted-foreground">This will also post to the Daily Updates feed.</p>

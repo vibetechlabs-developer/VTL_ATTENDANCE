@@ -43,7 +43,7 @@ export default function EmployeeUpdates() {
     <div className="space-y-5">
       <div>
         <h1 className="text-2xl sm:text-3xl font-bold tracking-tight">Daily Updates</h1>
-        <p className="text-muted-foreground mt-1">Share what you're working on today.</p>
+        <p className="text-muted-foreground mt-1">Share your daily update and progress.</p>
       </div>
 
       <div className="max-w-3xl space-y-4">
@@ -56,7 +56,7 @@ export default function EmployeeUpdates() {
             </Avatar>
             <div className="flex-1 space-y-3">
               <Textarea
-                placeholder="What did you ship today?"
+                placeholder="Write your daily update..."
                 value={text}
                 onChange={(e) => setText(e.target.value)}
                 className="min-h-[90px] resize-none"
