@@ -253,27 +253,60 @@ export function CheckInModal({ open, onOpenChange, onVerified, mode = "check-in"
             );
         });
 
-    const captureImage = (): string => {
+    const captureImage = async (): Promise<string> => {
         const video = videoRef.current;
         const canvas = canvasRef.current;
         if (!video || !canvas) throw new Error("Camera not ready");
-        const w = video.videoWidth;
-        const h = video.videoHeight;
-        if (!w || !h) throw new Error("Camera stream not ready");
-        canvas.width = w;
-        canvas.height = h;
-        const ctx = canvas.getContext("2d");
-        if (!ctx) throw new Error("Could not capture frame");
-        if (NORMALIZE_FRONT_CAMERA) {
-            // Keep captured frame in natural orientation.
-            ctx.save();
-            ctx.scale(-1, 1);
-            ctx.drawImage(video, -w, 0, w, h);
-            ctx.restore();
-        } else {
-            ctx.drawImage(video, 0, 0, w, h);
+        const drawFromVideo = (): string | null => {
+            const w = video.videoWidth || 0;
+            const h = video.videoHeight || 0;
+            if (!w || !h) return null;
+            canvas.width = w;
+            canvas.height = h;
+            const ctx = canvas.getContext("2d");
+            if (!ctx) throw new Error("Could not capture frame");
+            if (NORMALIZE_FRONT_CAMERA) {
+                // Keep captured frame in natural orientation.
+                ctx.save();
+                ctx.scale(-1, 1);
+                ctx.drawImage(video, -w, 0, w, h);
+                ctx.restore();
+            } else {
+                ctx.drawImage(video, 0, 0, w, h);
+            }
+            return canvas.toDataURL("image/png");
+        };
+
+        // Attempt 1: standard video-frame capture
+        const fromVideo = drawFromVideo();
+        if (fromVideo) return fromVideo;
+
+        // Attempt 2: fallback via ImageCapture API when video dims are transiently zero
+        try {
+            const track = streamRef.current?.getVideoTracks?.()[0];
+            const IC = (window as unknown as { ImageCapture?: new (track: MediaStreamTrack) => { grabFrame: () => Promise<ImageBitmap> } }).ImageCapture;
+            if (track && IC) {
+                const imageCapture = new IC(track);
+                const bitmap = await imageCapture.grabFrame();
+                canvas.width = bitmap.width;
+                canvas.height = bitmap.height;
+                const ctx = canvas.getContext("2d");
+                if (!ctx) throw new Error("Could not capture frame");
+                if (NORMALIZE_FRONT_CAMERA) {
+                    ctx.save();
+                    ctx.scale(-1, 1);
+                    ctx.drawImage(bitmap, -bitmap.width, 0, bitmap.width, bitmap.height);
+                    ctx.restore();
+                } else {
+                    ctx.drawImage(bitmap, 0, 0);
+                }
+                return canvas.toDataURL("image/png");
+            }
+        } catch {
+            // fall through to final error
         }
-        return canvas.toDataURL("image/png");
+
+        throw new Error("Camera stream not ready");
     };
 
     const handleVerifyAndSubmit = async () => {
@@ -293,7 +326,27 @@ export function CheckInModal({ open, onOpenChange, onVerified, mode = "check-in"
         setSubmitting(true);
         setFaceProgress(10);
         try {
-            const image = captureImage();
+            let image = "";
+            let lastErr: unknown = null;
+            for (let attempt = 0; attempt < 3; attempt += 1) {
+                try {
+                    image = await captureImage();
+                    break;
+                } catch (err) {
+                    lastErr = err;
+                    const msg = typeof (err as { message?: unknown })?.message === "string" ? (err as { message: string }).message : "";
+                    if (/camera stream not ready/i.test(msg)) {
+                        // progressive recovery: short wait, then restart camera
+                        await new Promise((r) => window.setTimeout(r, 220 + attempt * 180));
+                        const ready = await restartCamera();
+                        if (!ready) continue;
+                        await new Promise((r) => window.setTimeout(r, 180));
+                        continue;
+                    }
+                    throw err;
+                }
+            }
+            if (!image) throw (lastErr || new Error("Camera stream not ready"));
             setFaceProgress(55);
             setStep("location");
             const { latitude, longitude } = await getLocation();
