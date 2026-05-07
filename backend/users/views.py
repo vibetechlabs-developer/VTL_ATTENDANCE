@@ -142,7 +142,11 @@ class EmployeesListView(APIView):
                 'empId': f'VTL-{str(employee.id if employee else user.id).zfill(3)}',
                 'role': user.role,
                 'department': employee.department if employee else ('Administration' if user.role == 'admin' else 'General'),
-                'reportsTo': '—',
+                'reportsTo': (
+                    employee.manager.employee.name
+                    if employee and employee.manager and hasattr(employee.manager, 'employee')
+                    else (employee.manager.email if employee and employee.manager else '—')
+                ),
                 'joiningDate': (
                     employee.created_at.strftime('%Y-%m-%d')
                     if employee and employee.created_at

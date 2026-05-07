@@ -303,6 +303,9 @@ class AdminAttendanceView(APIView):
         log_map = {l.employee_id: l for l in logs}
         leave_emp_ids = {l.employee_id for l in leaves_today}
         employees = Employee.objects.select_related('user').all()
+        if request.user.role == 'manager':
+            # Manager can only see assigned employees
+            employees = employees.filter(manager=request.user)
 
         rows = []
         late_cutoff = timezone.datetime.combine(
@@ -414,6 +417,12 @@ class AdminEmployeeAttendanceHistoryView(APIView):
 
         if start_date > end_date:
             start_date, end_date = end_date, start_date
+
+        if request.user.role == 'manager':
+            # Manager can only query history of employees assigned to them.
+            emp_obj = Employee.objects.filter(id=employee_id).select_related('manager').first()
+            if not emp_obj or emp_obj.manager_id != request.user.id:
+                return Response({'error': 'Permission denied.'}, status=403)
 
         logs = (
             AttendanceLog.objects

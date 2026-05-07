@@ -30,6 +30,8 @@ class User(AbstractUser):
 
 class Employee(models.Model):
     user = models.OneToOneField(User, on_delete=models.CASCADE)
+    # For manager scoping: which manager this employee reports to.
+    manager = models.ForeignKey(User, null=True, blank=True, on_delete=models.SET_NULL, related_name='managed_employees')
     name = models.CharField(max_length=100)
     department = models.CharField(max_length=100)
     phone = models.CharField(max_length=15, blank=True)

@@ -36,22 +36,17 @@ const adminNav = [
 
 const managerNav = [
   {
-    group: "Overview", items: [
-      { title: "Dashboard", url: "/admin", icon: LayoutDashboard, end: true },
+    group: "Personal", items: [
+      { title: "My Dashboard", url: "/employee", icon: LayoutDashboard, end: true },
+      { title: "My Attendance", url: "/employee/attendance", icon: Clock },
+      { title: "Daily Updates", url: "/employee/updates", icon: MessageSquare },
+      { title: "My Leaves", url: "/employee/leaves", icon: CalendarDays },
+      { title: "Approvals", url: "/employee/approvals", icon: CheckCircle2 },
     ]
   },
   {
     group: "Team", items: [
-      { title: "Attendance", url: "/admin/attendance", icon: Clock },
-      { title: "Leaves", url: "/admin/leaves", icon: CalendarDays },
-      { title: "Daily Updates", url: "/admin/updates", icon: MessageSquare },
-    ]
-  },
-  {
-    group: "Personal", items: [
-      { title: "My Dashboard", url: "/employee", icon: LayoutDashboard, end: true },
-      { title: "My Attendance", url: "/employee/attendance", icon: Clock },
-      { title: "My Leaves", url: "/employee/leaves", icon: CalendarDays },
+      { title: "Team Attendance", url: "/admin/attendance", icon: Users },
     ]
   },
 ];

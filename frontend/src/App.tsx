@@ -91,8 +91,8 @@ const App = () => {
                 </Route>
               </Route>
 
-              {/* Employee pages (admin/hr for personal flow; manager intentionally excluded) */}
-              <Route element={<ProtectedRoute allow={["employee", "admin", "hr"]} />}>
+              {/* Employee pages (personal flow) */}
+              <Route element={<ProtectedRoute allow={["employee", "manager", "admin", "hr"]} />}>
                 <Route element={<DashboardLayout />}>
                   <Route path="/employee" element={<EmployeeDashboard />} />
                   <Route path="/employee/attendance" element={<EmployeeAttendance />} />

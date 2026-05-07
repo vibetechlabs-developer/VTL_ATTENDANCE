@@ -62,6 +62,10 @@ class EmployeeListSerializer(serializers.ModelSerializer):
         return 'active'
 
     def get_reportsTo(self, obj):
+        if getattr(obj, 'manager', None) and getattr(obj.manager, 'employee', None):
+            return obj.manager.employee.name
+        if getattr(obj, 'manager', None):
+            return obj.manager.email
         return '—'
 
 
@@ -72,6 +76,7 @@ class EmployeeCreateSerializer(serializers.Serializer):
     department = serializers.CharField(max_length=100)
     phone = serializers.CharField(max_length=15, required=False, allow_blank=True, default='')
     password = serializers.CharField(required=False, allow_blank=True, write_only=True)
+    manager_id = serializers.IntegerField(required=False, allow_null=True)
 
     @transaction.atomic
     def create(self, validated_data):
@@ -96,6 +101,7 @@ class EmployeeCreateSerializer(serializers.Serializer):
             name=validated_data['name'].strip(),
             department=validated_data['department'].strip(),
             phone=validated_data.get('phone', '').strip(),
+            manager=User.objects.filter(id=validated_data.get('manager_id')).first() if validated_data.get('manager_id') else None,
         )
         return employee, temp_password
 
@@ -107,6 +113,7 @@ class EmployeeUpdateSerializer(serializers.Serializer):
     department = serializers.CharField(max_length=100, required=False)
     phone = serializers.CharField(max_length=15, required=False, allow_blank=True)
     password = serializers.CharField(required=False, allow_blank=True, write_only=True)
+    manager_id = serializers.IntegerField(required=False, allow_null=True)
 
     def update(self, instance, validated_data):
         user = instance.user
@@ -126,5 +133,8 @@ class EmployeeUpdateSerializer(serializers.Serializer):
             instance.department = validated_data['department'].strip()
         if 'phone' in validated_data:
             instance.phone = validated_data['phone'].strip()
+        if 'manager_id' in validated_data:
+            mid = validated_data.get('manager_id')
+            instance.manager = User.objects.filter(id=mid).first() if mid else None
         instance.save()
         return instance

@@ -4,5 +4,5 @@ import { useAuthStore } from "@/store/authStore";
 export default function Index() {
   const user = useAuthStore((s) => s.user);
   if (!user) return <Navigate to="/login" replace />;
-  return <Navigate to={user.role === "employee" || user.role === "hr" ? "/employee" : "/admin"} replace />;
+  return <Navigate to={user.role === "employee" || user.role === "hr" || user.role === "manager" ? "/employee" : "/admin"} replace />;
 }
