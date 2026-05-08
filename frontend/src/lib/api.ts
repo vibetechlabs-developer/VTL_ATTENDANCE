@@ -73,11 +73,13 @@ export async function logoutRequest(accessToken: string, refreshToken: string): 
 
 export interface ApiEmployee {
   id: number | string;
+  userId?: number | string;
   name: string;
   email: string;
   empId: string;
   role: "admin" | "manager" | "employee" | "hr";
   department: string;
+  managerUserId?: number | string | null;
   reportsTo?: string;
   joiningDate?: string;
   faceStatus?: "registered" | "pending";
@@ -95,6 +97,7 @@ export interface CreateEmployeePayload {
   email: string;
   role: "admin" | "manager" | "employee" | "hr";
   department: string;
+  manager_id?: number | null;
   phone?: string;
   password?: string;
 }
@@ -112,6 +115,7 @@ export interface UpdateEmployeePayload {
   email?: string;
   role?: "admin" | "manager" | "employee" | "hr";
   department?: string;
+  manager_id?: number | null;
   phone?: string;
   password?: string;
 }

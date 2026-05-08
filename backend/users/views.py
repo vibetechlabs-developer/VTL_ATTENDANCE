@@ -137,11 +137,13 @@ class EmployeesListView(APIView):
                 avatar = None
             rows.append({
                 'id': str(employee.id) if employee else f'user-{user.id}',
+                'userId': str(user.id),
                 'name': fallback_name,
                 'email': user.email,
                 'empId': f'VTL-{str(employee.id if employee else user.id).zfill(3)}',
                 'role': user.role,
                 'department': employee.department if employee else ('Administration' if user.role == 'admin' else 'General'),
+                'managerUserId': str(employee.manager_id) if employee and employee.manager_id else None,
                 'reportsTo': (
                     employee.manager.employee.name
                     if employee and employee.manager and hasattr(employee.manager, 'employee')

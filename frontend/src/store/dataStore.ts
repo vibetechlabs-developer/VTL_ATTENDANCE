@@ -3,11 +3,13 @@ import type { ApiEmployee } from "@/lib/api";
 
 export interface Employee {
   id: string;
+  userId?: string;
   name: string;
   email: string;
   empId: string;
   role: "admin" | "manager" | "employee" | "hr";
   department: string;
+  managerUserId?: string;
   reportsTo: string;
   joiningDate: string;
   faceStatus: "registered" | "pending";
@@ -233,6 +235,7 @@ export const useDataStore = create<DataState>((set) => ({
     set(() => ({
       employees: items.map((item) => ({
         id: String(item.id),
+        userId: item.userId ? String(item.userId) : undefined,
         name: item.name,
         email: item.email,
         empId: item.empId,
@@ -245,6 +248,7 @@ export const useDataStore = create<DataState>((set) => ({
                 ? "hr"
                 : "admin",
         department: item.department || "General",
+        managerUserId: item.managerUserId ? String(item.managerUserId) : undefined,
         reportsTo: item.reportsTo || "—",
         joiningDate: item.joiningDate || iso(new Date()),
         faceStatus: item.faceStatus || "pending",

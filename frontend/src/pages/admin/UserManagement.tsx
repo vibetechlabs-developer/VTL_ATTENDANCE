@@ -32,7 +32,6 @@ export default function UserManagement() {
   // Some browsers auto-mirror front camera previews. Keep this true to normalize.
   const NORMALIZE_FRONT_CAMERA = true;
   const { employees, deleteEmployee, setEmployeesFromApi } = useDataStore();
-  const authUser = useAuthStore((s) => s.user);
   const accessToken = useAuthStore((s) => s.accessToken);
   const [q, setQ] = useState("");
   const [dept, setDept] = useState("all");
@@ -131,24 +130,14 @@ export default function UserManagement() {
 
   const reportToOptions = useMemo(() => {
     const options = employees
-      .filter((e) => e.role === "admin" || e.role === "manager")
+      .filter((e) => (e.role === "admin" || e.role === "manager") && !!e.userId)
       .map((e) => ({
-        value: e.name,
+        value: String(e.userId),
         label: `${e.name} (${e.role === "admin" ? "Super Admin" : "Manager"})`,
       }));
 
-    if (authUser && authUser.role === "admin") {
-      const exists = options.some((opt) => opt.value === authUser.name);
-      if (!exists) {
-        options.unshift({
-          value: authUser.name,
-          label: `${authUser.name} (Super Admin)`,
-        });
-      }
-    }
-
     return options;
-  }, [employees, authUser]);
+  }, [employees]);
 
   const filtered = employees.filter((e) =>
     (dept === "all" || e.department === dept) &&
@@ -170,6 +159,7 @@ export default function UserManagement() {
         email: form.email,
         role: form.role,
         department: form.department,
+        manager_id: form.reportsTo && form.reportsTo !== "—" ? Number(form.reportsTo) : null,
         password: createPassword.trim() || undefined,
       });
       const body = (await res.json().catch(() => ({}))) as {
@@ -220,6 +210,7 @@ export default function UserManagement() {
         email: selectedEmployee.email,
         role: selectedEmployee.role,
         department: selectedEmployee.department,
+        manager_id: selectedEmployee.managerUserId ? Number(selectedEmployee.managerUserId) : null,
         password: editPassword.trim() || undefined,
       });
       const body = (await res.json().catch(() => ({}))) as { error?: string };
@@ -688,8 +679,14 @@ export default function UserManagement() {
               <div className="space-y-1.5">
                 <Label>Reports to</Label>
                 <Select
-                  value={selectedEmployee.reportsTo || "—"}
-                  onValueChange={(v) => setSelectedEmployee({ ...selectedEmployee, reportsTo: v })}
+                  value={selectedEmployee.managerUserId || "—"}
+                  onValueChange={(v) =>
+                    setSelectedEmployee({
+                      ...selectedEmployee,
+                      managerUserId: v === "—" ? undefined : v,
+                      reportsTo: v === "—" ? "—" : (reportToOptions.find((opt) => opt.value === v)?.label.split(" (")[0] || selectedEmployee.reportsTo),
+                    })
+                  }
                 >
                   <SelectTrigger><SelectValue placeholder="Select reporting manager" /></SelectTrigger>
                   <SelectContent>
