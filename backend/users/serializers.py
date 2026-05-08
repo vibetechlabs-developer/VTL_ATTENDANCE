@@ -77,6 +77,7 @@ class EmployeeCreateSerializer(serializers.Serializer):
     phone = serializers.CharField(max_length=15, required=False, allow_blank=True, default='')
     password = serializers.CharField(required=False, allow_blank=True, write_only=True)
     manager_id = serializers.IntegerField(required=False, allow_null=True)
+    manager_employee_id = serializers.IntegerField(required=False, allow_null=True)
 
     @transaction.atomic
     def create(self, validated_data):
@@ -96,12 +97,19 @@ class EmployeeCreateSerializer(serializers.Serializer):
             password=temp_password,
             role=validated_data['role'],
         )
+        manager_user = None
+        if validated_data.get('manager_id'):
+            manager_user = User.objects.filter(id=validated_data.get('manager_id')).first()
+        elif validated_data.get('manager_employee_id'):
+            mgr_emp = Employee.objects.select_related('user').filter(id=validated_data.get('manager_employee_id')).first()
+            manager_user = mgr_emp.user if mgr_emp else None
+
         employee = Employee.objects.create(
             user=user,
             name=validated_data['name'].strip(),
             department=validated_data['department'].strip(),
             phone=validated_data.get('phone', '').strip(),
-            manager=User.objects.filter(id=validated_data.get('manager_id')).first() if validated_data.get('manager_id') else None,
+            manager=manager_user,
         )
         return employee, temp_password
 
@@ -114,6 +122,7 @@ class EmployeeUpdateSerializer(serializers.Serializer):
     phone = serializers.CharField(max_length=15, required=False, allow_blank=True)
     password = serializers.CharField(required=False, allow_blank=True, write_only=True)
     manager_id = serializers.IntegerField(required=False, allow_null=True)
+    manager_employee_id = serializers.IntegerField(required=False, allow_null=True)
 
     def update(self, instance, validated_data):
         user = instance.user
@@ -136,5 +145,12 @@ class EmployeeUpdateSerializer(serializers.Serializer):
         if 'manager_id' in validated_data:
             mid = validated_data.get('manager_id')
             instance.manager = User.objects.filter(id=mid).first() if mid else None
+        elif 'manager_employee_id' in validated_data:
+            meid = validated_data.get('manager_employee_id')
+            if meid:
+                mgr_emp = Employee.objects.select_related('user').filter(id=meid).first()
+                instance.manager = mgr_emp.user if mgr_emp else None
+            else:
+                instance.manager = None
         instance.save()
         return instance

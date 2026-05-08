@@ -4,6 +4,7 @@ import type { ApiEmployee } from "@/lib/api";
 export interface Employee {
   id: string;
   userId?: string;
+  managerEmployeeId?: string;
   name: string;
   email: string;
   empId: string;
@@ -249,6 +250,7 @@ export const useDataStore = create<DataState>((set) => ({
                 : "admin",
         department: item.department || "General",
         managerUserId: item.managerUserId ? String(item.managerUserId) : undefined,
+        managerEmployeeId: item.managerEmployeeId ? String(item.managerEmployeeId) : undefined,
         reportsTo: item.reportsTo || "—",
         joiningDate: item.joiningDate || iso(new Date()),
         faceStatus: item.faceStatus || "pending",

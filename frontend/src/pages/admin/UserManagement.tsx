@@ -130,21 +130,21 @@ export default function UserManagement() {
 
   const reportToOptions = useMemo(() => {
     const options = employees
-      .filter((e) => (e.role === "admin" || e.role === "manager") && !!e.userId)
+      .filter((e) => e.role === "admin" || e.role === "manager")
       .map((e) => ({
-        value: String(e.userId),
+        value: String(e.id),
         label: `${e.name} (${e.role === "admin" ? "Super Admin" : "Manager"})`,
       }));
 
     return options;
   }, [employees]);
 
-  const resolveManagerId = (value?: string, fallbackName?: string): number | null => {
+  const resolveManagerEmployeeId = (value?: string, fallbackName?: string): number | null => {
     if (value && value !== "—" && /^\d+$/.test(value)) return Number(value);
     const name = (fallbackName || value || "").trim();
     if (!name || name === "—") return null;
-    const match = reportToOptions.find((opt) => opt.label.startsWith(`${name} (`));
-    return match ? Number(match.value) : null;
+    const matched = employees.find((e) => e.name === name && (e.role === "admin" || e.role === "manager"));
+    return matched ? Number(matched.id) : null;
   };
 
   const filtered = employees.filter((e) =>
@@ -167,7 +167,7 @@ export default function UserManagement() {
         email: form.email,
         role: form.role,
         department: form.department,
-        manager_id: resolveManagerId(form.reportsTo),
+        manager_employee_id: resolveManagerEmployeeId(form.reportsTo),
         password: createPassword.trim() || undefined,
       });
       const body = (await res.json().catch(() => ({}))) as {
@@ -218,7 +218,7 @@ export default function UserManagement() {
         email: selectedEmployee.email,
         role: selectedEmployee.role,
         department: selectedEmployee.department,
-        manager_id: resolveManagerId(selectedEmployee.managerUserId, selectedEmployee.reportsTo),
+        manager_employee_id: resolveManagerEmployeeId(selectedEmployee.managerEmployeeId, selectedEmployee.reportsTo),
         password: editPassword.trim() || undefined,
       });
       const body = (await res.json().catch(() => ({}))) as { error?: string };
@@ -687,11 +687,11 @@ export default function UserManagement() {
               <div className="space-y-1.5">
                 <Label>Reports to</Label>
                 <Select
-                  value={selectedEmployee.managerUserId || "—"}
+                  value={selectedEmployee.managerEmployeeId || "—"}
                   onValueChange={(v) =>
                     setSelectedEmployee({
                       ...selectedEmployee,
-                      managerUserId: v === "—" ? undefined : v,
+                      managerEmployeeId: v === "—" ? undefined : v,
                       reportsTo: v === "—" ? "—" : (reportToOptions.find((opt) => opt.value === v)?.label.split(" (")[0] || selectedEmployee.reportsTo),
                     })
                   }
