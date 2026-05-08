@@ -15,7 +15,7 @@ export function Logo({ className, collapsed = false }: { className?: string; col
           src="/vtl-logo.svg"
           alt="Vibe Tech Labs"
           className={cn(
-            "h-full w-full rounded-md select-none mix-blend-multiply",
+            "h-full w-full rounded-md select-none bg-white",
             collapsed ? "object-cover object-left" : "object-contain"
           )}
           draggable={false}
