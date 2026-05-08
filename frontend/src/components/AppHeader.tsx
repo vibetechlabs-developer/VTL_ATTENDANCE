@@ -53,18 +53,20 @@ export function AppHeader() {
 
   useEffect(() => {
     if (!user) return;
-    let dayTimer: number | null = null;
-    let followTimer: number | null = null;
+    const localDateKey = (d: Date) => {
+      const y = d.getFullYear();
+      const m = String(d.getMonth() + 1).padStart(2, "0");
+      const day = String(d.getDate()).padStart(2, "0");
+      return `${y}-${m}-${day}`;
+    };
 
-    const runSchedule = () => {
+    const checkSchedule = () => {
       const now = new Date();
-      const day = now.getDay(); // 0 Sun, 6 Sat
-      if (day === 0 || day === 6) return; // working days only
+      const todayKey = localDateKey(now); // local timezone date (not UTC)
 
-      const todayKey = now.toISOString().slice(0, 10);
       const lunchAt = new Date(now);
-      lunchAt.setHours(13, 0, 0, 0);
-      const lunchDoneAt = new Date(lunchAt.getTime() + 30 * 60 * 1000);
+      lunchAt.setHours(13, 0, 0, 0); // 1:00 PM local time
+      const lunchDoneAt = new Date(lunchAt.getTime() + 30 * 60 * 1000); // 1:30 PM
 
       const lunchKey = `vtl_lunch_notified_${todayKey}`;
       const followKey = `vtl_lunch_follow_notified_${todayKey}`;
@@ -88,38 +90,11 @@ export function AppHeader() {
         toast.warning("You have completed a 30-minute break.");
         localStorage.setItem(followKey, "1");
       }
-
-      if (now < lunchAt && localStorage.getItem(lunchKey) !== "1") {
-        dayTimer = window.setTimeout(() => {
-          addNotification({
-            title: "Lunch Break Reminder",
-            body: "It's 1:00 PM. Please take your lunch break.",
-            type: "info",
-          });
-          toast.info("It's 1:00 PM. Please take your lunch break.");
-          localStorage.setItem(lunchKey, "1");
-        }, lunchAt.getTime() - now.getTime());
-      }
-
-      const nowAfterLunch = new Date();
-      if (nowAfterLunch < lunchDoneAt && localStorage.getItem(followKey) !== "1") {
-        followTimer = window.setTimeout(() => {
-          addNotification({
-            title: "Break Duration Alert",
-            body: "You have completed a 30-minute break.",
-            type: "warning",
-          });
-          toast.warning("You have completed a 30-minute break.");
-          localStorage.setItem(followKey, "1");
-        }, lunchDoneAt.getTime() - nowAfterLunch.getTime());
-      }
     };
 
-    runSchedule();
-    return () => {
-      if (dayTimer) window.clearTimeout(dayTimer);
-      if (followTimer) window.clearTimeout(followTimer);
-    };
+    checkSchedule();
+    const t = window.setInterval(checkSchedule, 60 * 1000); // check every minute
+    return () => window.clearInterval(t);
   }, [user, addNotification]);
 
   const handleLogout = async () => {

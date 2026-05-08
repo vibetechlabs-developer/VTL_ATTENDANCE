@@ -13,6 +13,7 @@ import { loginRequest, meRequest } from "@/lib/api";
 import { toast } from "sonner";
 import { cn } from "@/lib/utils";
 import { ThemeToggle } from "@/components/ThemeToggle";
+import { VIBE_TECH_LABS_LOGO_PNG_DATA_URL } from "@/components/Logo";
 
 type Step = "creds" | "face" | "location" | "done";
 
@@ -269,7 +270,11 @@ export default function Login() {
             className="flex items-center gap-3"
           >
             <div className="login-logo-3d">
-              <img src="/vtl-logo.svg" alt="VTL" className="h-6 w-6 relative z-10" />
+              <img
+                src={VIBE_TECH_LABS_LOGO_PNG_DATA_URL}
+                alt="Vibe Tech Labs"
+                className="h-6 w-6 relative z-10 object-cover object-left-center"
+              />
             </div>
             <div>
               <span className="font-bold text-[16px] block leading-tight login-brand-name">Vibe Tech Labs</span>
@@ -350,7 +355,11 @@ export default function Login() {
                 >
                   {/* Mobile logo */}
                   <div className="flex items-center justify-center gap-2.5 lg:hidden mb-1">
-                    <img src="/vtl-logo.svg" alt="VTL" className="h-9 w-9 rounded-xl" />
+                    <img
+                      src={VIBE_TECH_LABS_LOGO_PNG_DATA_URL}
+                      alt="Vibe Tech Labs"
+                      className="h-9 w-9 rounded-xl object-cover object-left-center"
+                    />
                     <span className="font-bold text-base login-brand-name">Vibe Tech Labs</span>
                   </div>
 
