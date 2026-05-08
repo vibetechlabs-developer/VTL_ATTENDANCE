@@ -12,10 +12,10 @@ export function Logo({ className, collapsed = false }: { className?: string; col
         )}
       >
         <img
-          src="/vtl-logo.svg"
+          src="/vtl-logo-transparent.png"
           alt="Vibe Tech Labs"
           className={cn(
-            "h-full w-full rounded-md select-none bg-white",
+            "h-full w-full rounded-md select-none",
             collapsed ? "object-cover object-left" : "object-contain"
           )}
           draggable={false}
