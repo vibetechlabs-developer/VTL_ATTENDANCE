@@ -270,7 +270,7 @@ export default function Login() {
           >
             <div className="login-logo-3d">
               <img
-                src="/vtl-logo.svg"
+                src="/download%20(2).png"
                 alt="Vibe Tech Labs"
                 className="h-6 w-6 relative z-10 object-cover object-left-center"
               />
@@ -355,7 +355,7 @@ export default function Login() {
                   {/* Mobile logo */}
                   <div className="flex items-center justify-center gap-2.5 lg:hidden mb-1">
                     <img
-                      src="/vtl-logo.svg"
+                      src="/download%20(2).png"
                       alt="Vibe Tech Labs"
                       className="h-9 w-9 rounded-xl object-contain p-0.5"
                     />

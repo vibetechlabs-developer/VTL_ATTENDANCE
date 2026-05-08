@@ -12,7 +12,7 @@ export function Logo({ className, collapsed = false }: { className?: string; col
         )}
       >
         <img
-          src="/vtl-logo.svg"
+          src="/download%20(2).png"
           alt="Vibe Tech Labs"
           className={cn(
             "h-full w-full select-none object-contain",
