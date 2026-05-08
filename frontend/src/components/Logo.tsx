@@ -5,9 +5,9 @@ export function Logo({ className, collapsed = false }: { className?: string; col
     <div className={cn("flex items-center", className)}>
       <div
         className={cn(
-          "relative overflow-hidden rounded-xl border shadow-3d",
-          "bg-gradient-to-br from-emerald-950/85 via-slate-950/85 to-slate-900/90",
-          "border-emerald-400/30 ring-1 ring-emerald-300/15",
+          "relative overflow-hidden rounded-xl border shadow-glass backdrop-blur-xl",
+          "bg-sidebar/30 border-border/45",
+          "dark:bg-sidebar/20 dark:border-primary/20",
           collapsed ? "h-11 w-11 p-1" : "h-12 w-[188px] p-1.5"
         )}
       >
