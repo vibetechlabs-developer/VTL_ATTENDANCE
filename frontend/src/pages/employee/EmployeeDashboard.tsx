@@ -36,7 +36,7 @@ type VerifyStep = "face" | "location" | "done" | null;
 
 export default function EmployeeDashboard() {
   const { user, accessToken } = useAuthStore();
-  const { leaves } = useDataStore();
+  useDataStore(); // keep store hydrated for other parts of app (employees etc.), but don't use seed leaves for pending banner.
   const { status, checkInAt, checkOutAt, workedMsToday, totalBreakMs, breakStartAt, breaks, setCheckInAt, hydrateSession, startBreak, endBreak, checkOut, reset } = useAttendanceStore();
   const [now, setNow] = useState(Date.now());
   const [coDialog, setCoDialog] = useState(false);
@@ -45,6 +45,7 @@ export default function EmployeeDashboard() {
 
   const [showVerifyModal, setShowVerifyModal] = useState(false);
   const [showCheckoutVerifyModal, setShowCheckoutVerifyModal] = useState(false);
+  const [pendingApprovals, setPendingApprovals] = useState(0);
   const [showHowToUse, setShowHowToUse] = useState(false);
 
   useEffect(() => {
@@ -104,6 +105,23 @@ export default function EmployeeDashboard() {
     void restore();
   }, [accessToken, hydrateSession, reset]);
 
+  // Real pending approvals from backend (per employee), instead of demo seedLeaves.
+  useEffect(() => {
+    if (!accessToken || !user?.empId) return;
+    const run = async () => {
+      try {
+        const res = await leaveHistoryRequest(accessToken);
+        if (!res.ok) return;
+        const list = (await res.json().catch(() => [])) as any[];
+        const count = list.filter((l) => String(l.status).toLowerCase() === "pending").length;
+        setPendingApprovals(count);
+      } catch {
+        // silently ignore; banner simply won't show
+      }
+    };
+    void run();
+  }, [accessToken, user?.empId]);
+
   const currentBreak = status === "on-break" && breakStartAt ? now - breakStartAt : 0;
   const liveWorkMs = checkInAt ? now - checkInAt - totalBreakMs - currentBreak : 0;
   const workMs = status === "checked-out" ? workedMsToday : liveWorkMs;
@@ -112,7 +130,6 @@ export default function EmployeeDashboard() {
   const breakTakenMs = totalBreakMs + currentBreak;
   const remainingDisplayMs = status === "checked-out" ? 0 : status === "idle" ? FULL_DAY_MS : remainingMs;
   const breakProgressPct = Math.min(100, Math.round((breakTakenMs / FULL_DAY_MS) * 100));
-  const pendingApprovals = leaves.filter((l) => l.empId === user?.empId && l.status === "Pending").length;
 
   const handleCheckIn = () => {
     setShowVerifyModal(true);

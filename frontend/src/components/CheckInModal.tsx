@@ -265,9 +265,9 @@ export function CheckInModal({ open, onOpenChange, onVerified, mode = "check-in"
                 await new Promise((r) => window.setTimeout(r, 220 + attempt * 180));
             }
             if (!ok) {
+                // On initial open, silently show inline message instead of global error toast.
                 const msg = errorText || "Camera unavailable right now. Please tap Retry scan.";
                 setErrorText(msg);
-                toast.error(msg);
             }
         };
         void startCamera();
