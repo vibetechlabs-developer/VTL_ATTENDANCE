@@ -12,12 +12,18 @@ export function Logo({ className, collapsed = false }: { className?: string; col
         )}
       >
         <img
-          src="/vtl-logo-transparent.png"
+          src="/vtl-logo.svg"
           alt="Vibe Tech Labs"
           className={cn(
-            "h-full w-full rounded-md select-none",
+            "h-full w-full select-none object-contain",
             collapsed ? "object-cover object-left" : "object-contain"
           )}
+          onError={(e) => {
+            const img = e.currentTarget;
+            if (!img.src.endsWith("/vtl-logo-transparent.png")) {
+              img.src = "/vtl-logo-transparent.png";
+            }
+          }}
           draggable={false}
         />
       </div>

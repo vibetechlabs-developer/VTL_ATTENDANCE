@@ -357,7 +357,7 @@ export default function Login() {
                     <img
                       src="/vtl-logo.svg"
                       alt="Vibe Tech Labs"
-                      className="h-9 w-9 rounded-xl object-cover object-left-center"
+                      className="h-9 w-9 rounded-xl object-contain p-0.5"
                     />
                     <span className="font-bold text-base login-brand-name">Vibe Tech Labs</span>
                   </div>
