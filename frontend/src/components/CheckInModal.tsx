@@ -111,6 +111,16 @@ export function CheckInModal({ open, onOpenChange, onVerified, mode = "check-in"
     };
 
     const restartCamera = async (): Promise<boolean> => {
+        const waitForVideoElement = async (): Promise<HTMLVideoElement | null> => {
+            // On some mobile browsers dialog animation completes before <video> mounts.
+            for (let i = 0; i < 20; i += 1) {
+                const v = videoRef.current;
+                if (v) return v;
+                await new Promise((r) => window.setTimeout(r, 80));
+            }
+            return videoRef.current;
+        };
+
         const tryGetStream = async (): Promise<MediaStream> => {
             const attempts: MediaStreamConstraints[] = [
                 {
@@ -141,7 +151,7 @@ export function CheckInModal({ open, onOpenChange, onVerified, mode = "check-in"
                 streamRef.current.getTracks().forEach((t) => t.stop());
                 streamRef.current = null;
             }
-            const v = videoRef.current;
+            let v = videoRef.current;
             if (v) {
                 try { v.pause(); } catch { /* ignore */ }
                 v.srcObject = null;
@@ -150,7 +160,14 @@ export function CheckInModal({ open, onOpenChange, onVerified, mode = "check-in"
             await new Promise((r) => window.setTimeout(r, 180));
             const stream = await tryGetStream();
             streamRef.current = stream;
-            if (!v) return false;
+            if (!v) {
+                v = await waitForVideoElement();
+            }
+            if (!v) {
+                setCameraReady(false);
+                setErrorText("Camera view not ready yet. Please wait a moment and retry.");
+                return false;
+            }
             v.srcObject = stream;
             try { await v.play(); } catch { /* ignore */ }
             const ready = await ensureVideoReady();
@@ -240,9 +257,17 @@ export function CheckInModal({ open, onOpenChange, onVerified, mode = "check-in"
     useEffect(() => {
         if (!open) return;
         const startCamera = async () => {
-            const ok = await restartCamera();
+            // Auto-retry startup a few times to avoid manual "Retry scan" on first open.
+            let ok = false;
+            for (let attempt = 0; attempt < 3; attempt += 1) {
+                ok = await restartCamera();
+                if (ok) break;
+                await new Promise((r) => window.setTimeout(r, 220 + attempt * 180));
+            }
             if (!ok) {
-                toast.error(errorText || "Camera unavailable right now. Please tap Retry scan.");
+                const msg = errorText || "Camera unavailable right now. Please tap Retry scan.";
+                setErrorText(msg);
+                toast.error(msg);
             }
         };
         void startCamera();
