@@ -139,6 +139,14 @@ export default function UserManagement() {
     return options;
   }, [employees]);
 
+  const resolveManagerId = (value?: string, fallbackName?: string): number | null => {
+    if (value && value !== "—" && /^\d+$/.test(value)) return Number(value);
+    const name = (fallbackName || value || "").trim();
+    if (!name || name === "—") return null;
+    const match = reportToOptions.find((opt) => opt.label.startsWith(`${name} (`));
+    return match ? Number(match.value) : null;
+  };
+
   const filtered = employees.filter((e) =>
     (dept === "all" || e.department === dept) &&
     (q === "" || [e.name, e.email, e.empId].some((v) => v.toLowerCase().includes(q.toLowerCase())))
@@ -159,7 +167,7 @@ export default function UserManagement() {
         email: form.email,
         role: form.role,
         department: form.department,
-        manager_id: form.reportsTo && form.reportsTo !== "—" ? Number(form.reportsTo) : null,
+        manager_id: resolveManagerId(form.reportsTo),
         password: createPassword.trim() || undefined,
       });
       const body = (await res.json().catch(() => ({}))) as {
@@ -210,7 +218,7 @@ export default function UserManagement() {
         email: selectedEmployee.email,
         role: selectedEmployee.role,
         department: selectedEmployee.department,
-        manager_id: selectedEmployee.managerUserId ? Number(selectedEmployee.managerUserId) : null,
+        manager_id: resolveManagerId(selectedEmployee.managerUserId, selectedEmployee.reportsTo),
         password: editPassword.trim() || undefined,
       });
       const body = (await res.json().catch(() => ({}))) as { error?: string };
