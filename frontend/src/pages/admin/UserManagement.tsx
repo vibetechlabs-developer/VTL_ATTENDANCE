@@ -1,4 +1,5 @@
 import { useEffect, useMemo, useRef, useState } from "react";
+import { useSearchParams } from "react-router-dom";
 import { Plus, Search, Download, Trash2, Camera, Pencil, Copy, Eye, EyeOff } from "lucide-react";
 import { Card } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
@@ -33,6 +34,7 @@ export default function UserManagement() {
   const NORMALIZE_FRONT_CAMERA = true;
   const { employees, deleteEmployee, setEmployeesFromApi } = useDataStore();
   const accessToken = useAuthStore((s) => s.accessToken);
+  const [searchParams] = useSearchParams();
   const [q, setQ] = useState("");
   const [dept, setDept] = useState("all");
   const [open, setOpen] = useState(false);
@@ -82,6 +84,11 @@ export default function UserManagement() {
       cancelled = true;
     };
   }, [accessToken, setEmployeesFromApi]);
+
+  useEffect(() => {
+    const fromQuery = (searchParams.get("q") || "").trim();
+    if (fromQuery) setQ(fromQuery);
+  }, [searchParams]);
 
   useEffect(() => {
     if (!faceOpen) {

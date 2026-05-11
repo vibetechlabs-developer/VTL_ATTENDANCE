@@ -266,7 +266,7 @@ export default function EmployeeDashboard() {
               initial={{ opacity: 0, scale: 0.95 }}
               animate={{ opacity: 1, scale: 1 }}
               exit={{ opacity: 0, scale: 1.05 }}
-              className="flex flex-col lg:flex-row lg:items-center lg:justify-between gap-6"
+              className="flex flex-col xl:flex-row xl:items-center xl:justify-between gap-6"
             >
               <div>
                 <p className="text-sm font-medium uppercase tracking-wider text-primary-foreground/80">
@@ -359,7 +359,7 @@ export default function EmployeeDashboard() {
       </Card>
 
       {/* Quick actions — peach + powder + sage 3D */}
-      <div className="grid grid-cols-2 sm:grid-cols-4 gap-4 sm:gap-5">
+      <div className="grid grid-cols-1 sm:grid-cols-2 xl:grid-cols-4 gap-4 sm:gap-5">
         {pendingApprovals > 0 && (
           <Link to="/employee/leaves" className="col-span-2 lg:col-span-4">
             <Card className="border-0 shadow-lg text-white hover:-translate-y-1 transition-smooth cursor-pointer mb-1 border-glow-shine" style={{ background: "var(--gradient-success)" }}>

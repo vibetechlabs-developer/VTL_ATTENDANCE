@@ -1,6 +1,6 @@
 import { Bell, Search, UserCircle, Settings, LogOut } from "lucide-react";
-import { useEffect, useRef } from "react";
-import { Link, useNavigate } from "react-router-dom";
+import { useEffect, useRef, useState } from "react";
+import { Link, useLocation, useNavigate } from "react-router-dom";
 import { SidebarTrigger } from "@/components/ui/sidebar";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
@@ -24,8 +24,10 @@ import { markNotificationsReadRequest, myNotificationsRequest } from "@/lib/api"
 export function AppHeader() {
   const { user, logout, accessToken } = useAuthStore();
   const { notifications, markNotificationsRead, addNotification } = useDataStore();
+  const location = useLocation();
   const navigate = useNavigate();
   const reminderInitRef = useRef(false);
+  const [headerSearch, setHeaderSearch] = useState("");
   const unread = notifications.filter((n) => !n.read).length;
 
   useEffect(() => {
@@ -187,6 +189,51 @@ export function AppHeader() {
     }
   };
 
+  const runGlobalSearch = () => {
+    const term = headerSearch.trim();
+    if (!term) {
+      toast.warning("Please enter something to search.");
+      return;
+    }
+    const q = encodeURIComponent(term);
+    const role = user?.role;
+    if (role === "admin") {
+      navigate(`/admin/users?q=${q}`);
+      return;
+    }
+
+    const lower = term.toLowerCase();
+    if (lower.includes("attendance") || lower.includes("check")) {
+      navigate("/employee/attendance");
+      return;
+    }
+    if (lower.includes("leave")) {
+      navigate("/employee/leaves");
+      return;
+    }
+    if (lower.includes("approval")) {
+      navigate("/employee/approvals");
+      return;
+    }
+    if (lower.includes("update")) {
+      navigate("/employee/updates");
+      return;
+    }
+    if (lower.includes("profile") || lower.includes("account")) {
+      navigate("/profile");
+      return;
+    }
+    if (lower.includes("dashboard") || lower.includes("home")) {
+      navigate("/employee");
+      return;
+    }
+    toast.info("Try keywords: attendance, leaves, updates, approvals, profile");
+  };
+
+  useEffect(() => {
+    setHeaderSearch("");
+  }, [location.pathname]);
+
   return (
     <header className="sticky top-0 z-40 h-16 border-b border-border/40 bg-background/50 backdrop-blur-2xl">
       {/* Animated gradient accent line */}
@@ -195,13 +242,21 @@ export function AppHeader() {
       <div className="flex h-full items-center gap-2 sm:gap-4 px-3 sm:px-6">
         <SidebarTrigger className="shrink-0" />
 
-        <div className="relative flex-1 max-w-md hidden md:block">
+        <form
+          className="relative flex-1 max-w-xs lg:max-w-md hidden md:block"
+          onSubmit={(e) => {
+            e.preventDefault();
+            runGlobalSearch();
+          }}
+        >
           <Search className="pointer-events-none absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-muted-foreground" />
           <Input
-            placeholder="Search employees, requests, updates..."
+            value={headerSearch}
+            onChange={(e) => setHeaderSearch(e.target.value)}
+            placeholder="Search and press Enter..."
             className="pl-9 h-10 bg-muted/30 backdrop-blur-sm border-border/40 focus-visible:ring-1 rounded-xl"
           />
-        </div>
+        </form>
 
         <div className="flex-1 md:hidden" />
 
@@ -249,7 +304,7 @@ export function AppHeader() {
                     {initials}
                   </AvatarFallback>
                 </Avatar>
-                <div className="hidden sm:flex flex-col items-start leading-tight">
+                <div className="hidden lg:flex flex-col items-start leading-tight">
                   <span className="text-sm font-medium">{user?.name}</span>
                   <span className="text-[11px] text-muted-foreground capitalize">{user?.role}</span>
                 </div>
