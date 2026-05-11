@@ -1,5 +1,5 @@
 import { Bell, Search, UserCircle, Settings, LogOut } from "lucide-react";
-import { useEffect } from "react";
+import { useEffect, useRef } from "react";
 import { Link, useNavigate } from "react-router-dom";
 import { SidebarTrigger } from "@/components/ui/sidebar";
 import { Button } from "@/components/ui/button";
@@ -25,6 +25,7 @@ export function AppHeader() {
   const { user, logout, accessToken } = useAuthStore();
   const { notifications, markNotificationsRead, addNotification } = useDataStore();
   const navigate = useNavigate();
+  const reminderInitRef = useRef(false);
   const unread = notifications.filter((n) => !n.read).length;
 
   useEffect(() => {
@@ -70,6 +71,17 @@ export function AppHeader() {
 
       const lunchKey = `vtl_lunch_notified_${todayKey}`;
       const followKey = `vtl_lunch_follow_notified_${todayKey}`;
+      const isInitialRun = !reminderInitRef.current;
+
+      // On first run in a new browser/profile, do not fire stale reminders immediately.
+      // If scheduled time has already passed, mark them handled for today.
+      if (isInitialRun && now >= lunchAt && localStorage.getItem(lunchKey) !== "1") {
+        localStorage.setItem(lunchKey, "1");
+      }
+      if (isInitialRun && now >= lunchDoneAt && localStorage.getItem(followKey) !== "1") {
+        localStorage.setItem(followKey, "1");
+      }
+      reminderInitRef.current = true;
 
       if (now >= lunchAt && localStorage.getItem(lunchKey) !== "1") {
         addNotification({
