@@ -2,7 +2,13 @@ import { cn } from "@/lib/utils";
 
 export function Logo({ className, collapsed = false }: { className?: string; collapsed?: boolean }) {
   return (
-    <div className={cn("flex items-center", className)}>
+    <div
+      className={cn(
+        "flex items-center",
+        !collapsed && "dark:bg-white/90 dark:rounded-lg dark:px-2 dark:py-1",
+        className
+      )}
+    >
       <img
         src="/vtl-logo-transparent.png"
         alt="Vibe Tech Labs"
