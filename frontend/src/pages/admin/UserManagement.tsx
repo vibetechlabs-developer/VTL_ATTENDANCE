@@ -23,7 +23,7 @@ import { exportCsv } from "@/utils/csv";
 import { usersCreateRequest, usersDeleteRequest, usersFaceDataRequest, usersListRequest, usersRegisterFaceRequest, usersUpdateRequest, type ApiEmployee } from "@/lib/api";
 
 const emptyForm: Omit<Employee, "id"> = {
-  name: "", email: "", empId: "", role: "employee", department: "Engineering",
+  name: "", email: "", empId: "", role: "employee", department: "Tech",
   reportsTo: "—", joiningDate: new Date().toISOString().slice(0, 10),
   faceStatus: "pending", status: "active",
 };
@@ -56,6 +56,13 @@ export default function UserManagement() {
   const videoRef = useRef<HTMLVideoElement | null>(null);
   const canvasRef = useRef<HTMLCanvasElement | null>(null);
   const streamRef = useRef<MediaStream | null>(null);
+
+  useEffect(() => {
+    if (!open) return;
+    setForm(emptyForm);
+    setCreatePassword("");
+    setShowCreatePassword(false);
+  }, [open]);
 
   useEffect(() => {
     if (!accessToken) return;
@@ -133,6 +140,7 @@ export default function UserManagement() {
     },
     [employees]
   );
+  const createDepartmentOptions = ["Sales", "HR", "Tech"];
 
   const reportToOptions = useMemo(() => {
     const options = employees
@@ -177,12 +185,34 @@ export default function UserManagement() {
   );
 
   const handleAdd = async () => {
-    if (!form.name || !form.email) {
-      toast.error("Please fill in name and email");
+    const name = form.name.trim();
+    const email = form.email.trim().toLowerCase();
+    const department = form.department.trim();
+    const allowedDepartments = new Set(createDepartmentOptions);
+    const password = createPassword.trim();
+
+    if (!name) {
+      toast.error("Full name is required.");
       return;
     }
-    if (!/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(form.email.trim())) {
+    if (name.length < 2) {
+      toast.error("Full name must be at least 2 characters.");
+      return;
+    }
+    if (!email) {
+      toast.error("Email is required.");
+      return;
+    }
+    if (!/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(email)) {
       toast.error("Please enter a valid email address.");
+      return;
+    }
+    if (!allowedDepartments.has(department)) {
+      toast.error("Please select a valid department.");
+      return;
+    }
+    if (password && password.length < 8) {
+      toast.error("Password must be at least 8 characters.");
       return;
     }
     if (!accessToken) {
@@ -192,13 +222,13 @@ export default function UserManagement() {
     const managerSelection = resolveManagerSelection(form.reportsTo);
     try {
       const res = await usersCreateRequest(accessToken, {
-        name: form.name,
-        email: form.email,
+        name,
+        email,
         role: form.role,
-        department: form.department,
+        department,
         manager_employee_id: managerSelection.managerEmployeeId,
         manager_id: managerSelection.managerUserId,
-        password: createPassword.trim() || undefined,
+        password: password || undefined,
       });
       const body = (await res.json().catch(() => ({}))) as {
         error?: string;
@@ -442,10 +472,9 @@ export default function UserManagement() {
                     <Select value={form.department} onValueChange={(v) => setForm({ ...form, department: v })}>
                       <SelectTrigger><SelectValue placeholder="Select department" /></SelectTrigger>
                       <SelectContent>
-                        {departments.filter((d) => d !== "all").map((d) => (
+                        {createDepartmentOptions.map((d) => (
                           <SelectItem key={d} value={d}>{d}</SelectItem>
                         ))}
-                        <SelectItem value="General">General</SelectItem>
                       </SelectContent>
                     </Select>
                   </div>

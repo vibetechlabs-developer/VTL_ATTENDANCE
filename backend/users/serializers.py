@@ -79,9 +79,36 @@ class EmployeeCreateSerializer(serializers.Serializer):
     manager_id = serializers.IntegerField(required=False, allow_null=True)
     manager_employee_id = serializers.IntegerField(required=False, allow_null=True)
 
+    def validate_name(self, value):
+        name = (value or "").strip()
+        if not name:
+            raise serializers.ValidationError("Full name is required.")
+        if len(name) < 2:
+            raise serializers.ValidationError("Full name must be at least 2 characters.")
+        return name
+
+    def validate_email(self, value):
+        email = (value or "").strip().lower()
+        if User.objects.filter(email=email).exists():
+            raise serializers.ValidationError("This email is already in use.")
+        return email
+
+    def validate_department(self, value):
+        dept = (value or "").strip()
+        allowed = {"Sales", "HR", "Tech"}
+        if dept not in allowed:
+            raise serializers.ValidationError("Department must be Sales, HR, or Tech.")
+        return dept
+
+    def validate_password(self, value):
+        pwd = (value or "").strip()
+        if pwd and len(pwd) < 8:
+            raise serializers.ValidationError("Password must be at least 8 characters.")
+        return pwd
+
     @transaction.atomic
     def create(self, validated_data):
-        email = validated_data['email'].strip().lower()
+        email = validated_data['email']
         local = email.split('@')[0]
         username = local
         suffix = 1
@@ -108,8 +135,8 @@ class EmployeeCreateSerializer(serializers.Serializer):
 
         employee = Employee.objects.create(
             user=user,
-            name=validated_data['name'].strip(),
-            department=validated_data['department'].strip(),
+            name=validated_data['name'],
+            department=validated_data['department'],
             phone=validated_data.get('phone', '').strip(),
             manager=manager_user,
         )
