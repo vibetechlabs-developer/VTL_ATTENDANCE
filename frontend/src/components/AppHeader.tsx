@@ -254,7 +254,7 @@ export function AppHeader() {
             value={headerSearch}
             onChange={(e) => setHeaderSearch(e.target.value)}
             placeholder="Search and press Enter..."
-            className="pl-9 h-10 bg-muted/30 backdrop-blur-sm border-border/40 focus-visible:ring-1 rounded-xl"
+            className="pl-9 h-10 bg-background/90 dark:bg-card/90 backdrop-blur-md border-border/70 shadow-sm focus-visible:ring-1 rounded-xl"
           />
         </form>
 
