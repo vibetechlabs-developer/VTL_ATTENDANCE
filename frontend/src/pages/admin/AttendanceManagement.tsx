@@ -62,9 +62,12 @@ export default function AttendanceManagement() {
           return {
             id: `no-log-${key}`,
             date: key,
+            status: "Absent",
             checkIn: null,
             checkOut: null,
+            breakMinutes: 0,
             hours: 0,
+            overtimeHours: 0,
           };
         })
       );
@@ -426,10 +429,11 @@ export default function AttendanceManagement() {
 
 function HistoryTable({ loading, rows }: { loading: boolean; rows: any[] }) {
   return (
-    <div className="w-full overflow-x-auto rounded-2xl border border-border/40">
-      <table className="w-full min-w-[920px] text-sm">
+    <div className="w-full rounded-2xl border border-border/40 overflow-hidden">
+      <div className="max-h-[52vh] overflow-y-auto">
+      <table className="w-full text-sm">
         <thead>
-          <tr className="border-b border-border/40 bg-muted/20">
+          <tr className="border-b border-border/40 bg-muted/20 sticky top-0 z-10">
             <th className="text-left py-3 px-4 text-[11px] font-semibold text-muted-foreground uppercase tracking-wider">Date</th>
             <th className="text-left py-3 px-4 text-[11px] font-semibold text-muted-foreground uppercase tracking-wider">Status</th>
             <th className="text-left py-3 px-4 text-[11px] font-semibold text-muted-foreground uppercase tracking-wider">Check In</th>
@@ -461,6 +465,8 @@ function HistoryTable({ loading, rows }: { loading: boolean; rows: any[] }) {
                     <span className="inline-flex items-center rounded px-2 py-0.5 text-[11px] font-semibold bg-warning/15 text-warning">Late</span>
                   ) : r.status === "Present" ? (
                     <span className="inline-flex items-center rounded px-2 py-0.5 text-[11px] font-semibold bg-success/15 text-success">Present</span>
+                  ) : r.status === "Absent" ? (
+                    <span className="inline-flex items-center rounded px-2 py-0.5 text-[11px] font-semibold bg-destructive/10 text-destructive">Absent</span>
                   ) : (
                     <span className="inline-flex items-center rounded px-2 py-0.5 text-[11px] font-semibold bg-muted text-muted-foreground">—</span>
                   )}
@@ -479,6 +485,7 @@ function HistoryTable({ loading, rows }: { loading: boolean; rows: any[] }) {
           )}
         </tbody>
       </table>
+      </div>
     </div>
   );
 }

@@ -118,7 +118,7 @@ export default function UserManagement() {
 
   const departments = useMemo(
     () => {
-      const defaults = ["Engineering", "Design", "Marketing", "Sales", "HR", "Operations", "Finance"];
+      const defaults = ["HUMAN RESOURCES", "Tech", "Sales", "Engineering", "Design", "Marketing", "HR", "Operations", "Finance"];
       return [
       "all",
       ...defaults,
@@ -177,8 +177,8 @@ export default function UserManagement() {
   );
 
   const handleAdd = async () => {
-    if (!form.name || !form.email || !form.empId) {
-      toast.error("Please fill in name, email and employee ID");
+    if (!form.name || !form.email) {
+      toast.error("Please fill in name and email");
       return;
     }
     if (!/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(form.email.trim())) {
@@ -418,10 +418,6 @@ export default function UserManagement() {
                   <div className="space-y-1.5">
                     <Label>Full name</Label>
                     <Input value={form.name} onChange={(e) => setForm({ ...form, name: e.target.value })} />
-                  </div>
-                  <div className="space-y-1.5">
-                    <Label>Employee ID</Label>
-                    <Input value={form.empId} onChange={(e) => setForm({ ...form, empId: e.target.value })} placeholder="VTL-021" />
                   </div>
                 </div>
                 <div className="space-y-1.5">
