@@ -108,7 +108,7 @@ export function AppSidebar() {
     end ? pathname === url : pathname.startsWith(url);
 
   return (
-    <Sidebar collapsible="icon" className="border-r border-border/40 bg-sidebar/60 backdrop-blur-xl border-glow-shine-right">
+    <Sidebar collapsible="icon" className="border-r border-border/30 bg-sidebar/60 backdrop-blur-xl">
       <SidebarHeader className="border-b border-border/40 h-14 flex items-center justify-center px-3 shrink-0">
         <Logo collapsed={collapsed} />
       </SidebarHeader>
