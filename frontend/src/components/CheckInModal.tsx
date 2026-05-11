@@ -635,7 +635,7 @@ export function CheckInModal({ open, onOpenChange, onVerified, mode = "check-in"
                             disabled={submitting}
                             className="bg-sage-3d border-0 text-primary-foreground"
                         >
-                            {submitting ? "Scanning..." : "Retry scan"}
+                            {submitting ? "Scanning..." : (errorText ? "Retry scan" : "Start scan")}
                         </Button>
                     </DialogFooter>
                 )}

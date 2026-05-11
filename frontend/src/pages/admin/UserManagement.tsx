@@ -1,5 +1,5 @@
 import { useEffect, useMemo, useRef, useState } from "react";
-import { Plus, Search, Download, Trash2, Camera, Pencil, Copy, Eye } from "lucide-react";
+import { Plus, Search, Download, Trash2, Camera, Pencil, Copy, Eye, EyeOff } from "lucide-react";
 import { Card } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
@@ -20,7 +20,7 @@ import { useDataStore, Employee } from "@/store/dataStore";
 import { useAuthStore, type Role } from "@/store/authStore";
 import { toast } from "sonner";
 import { exportCsv } from "@/utils/csv";
-import { usersCreateRequest, usersFaceDataRequest, usersListRequest, usersRegisterFaceRequest, usersUpdateRequest, type ApiEmployee } from "@/lib/api";
+import { usersCreateRequest, usersDeleteRequest, usersFaceDataRequest, usersListRequest, usersRegisterFaceRequest, usersUpdateRequest, type ApiEmployee } from "@/lib/api";
 
 const emptyForm: Omit<Employee, "id"> = {
   name: "", email: "", empId: "", role: "employee", department: "Engineering",
@@ -43,6 +43,8 @@ export default function UserManagement() {
   const [faceOpen, setFaceOpen] = useState(false);
   const [selectedEmployee, setSelectedEmployee] = useState<Employee | null>(null);
   const [editPassword, setEditPassword] = useState("");
+  const [showCreatePassword, setShowCreatePassword] = useState(false);
+  const [showEditPassword, setShowEditPassword] = useState(false);
   const [faceBase64, setFaceBase64] = useState("");
   const [savingEdit, setSavingEdit] = useState(false);
   const [savingFace, setSavingFace] = useState(false);
@@ -115,8 +117,11 @@ export default function UserManagement() {
   }, [faceOpen]);
 
   const departments = useMemo(
-    () => [
+    () => {
+      const defaults = ["Engineering", "Design", "Marketing", "Sales", "HR", "Operations", "Finance"];
+      return [
       "all",
+      ...defaults,
       ...Array.from(
         new Set(
           employees
@@ -124,7 +129,8 @@ export default function UserManagement() {
             .filter((department) => department.length > 0)
         )
       ),
-    ],
+    ];
+    },
     [employees]
   );
 
@@ -175,6 +181,10 @@ export default function UserManagement() {
       toast.error("Please fill in name, email and employee ID");
       return;
     }
+    if (!/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(form.email.trim())) {
+      toast.error("Please enter a valid email address.");
+      return;
+    }
     if (!accessToken) {
       toast.error("Session expired. Please login again.");
       return;
@@ -220,6 +230,7 @@ export default function UserManagement() {
   const openEdit = (employee: Employee) => {
     setSelectedEmployee(employee);
     setEditPassword("");
+    setShowEditPassword(false);
     setEditOpen(true);
   };
 
@@ -227,6 +238,31 @@ export default function UserManagement() {
     setSelectedEmployee(employee);
     setFaceBase64("");
     setFaceOpen(true);
+  };
+
+  const handleDeleteEmployee = async (employee: Employee) => {
+    if (!accessToken) {
+      toast.error("Session expired. Please login again.");
+      return;
+    }
+    try {
+      const res = await usersDeleteRequest(accessToken, employee.id);
+      const body = (await res.json().catch(() => ({}))) as { error?: string; message?: string };
+      if (!res.ok) {
+        toast.error(body.error || "Could not delete employee");
+        return;
+      }
+      const listRes = await usersListRequest(accessToken);
+      if (listRes.ok) {
+        const rows = (await listRes.json()) as ApiEmployee[];
+        setEmployeesFromApi(rows);
+      } else {
+        deleteEmployee(employee.id);
+      }
+      toast.success(body.message || `${employee.name} removed`);
+    } catch {
+      toast.error("Could not delete employee");
+    }
   };
 
   const handleEditSave = async () => {
@@ -407,7 +443,15 @@ export default function UserManagement() {
                   </div>
                   <div className="space-y-1.5">
                     <Label>Department</Label>
-                    <Input value={form.department} onChange={(e) => setForm({ ...form, department: e.target.value })} />
+                    <Select value={form.department} onValueChange={(v) => setForm({ ...form, department: v })}>
+                      <SelectTrigger><SelectValue placeholder="Select department" /></SelectTrigger>
+                      <SelectContent>
+                        {departments.filter((d) => d !== "all").map((d) => (
+                          <SelectItem key={d} value={d}>{d}</SelectItem>
+                        ))}
+                        <SelectItem value="General">General</SelectItem>
+                      </SelectContent>
+                    </Select>
                   </div>
                 </div>
                 <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
@@ -433,11 +477,14 @@ export default function UserManagement() {
                   <Label>Password (optional)</Label>
                   <div className="flex flex-col sm:flex-row gap-2">
                     <Input
-                      type="text"
+                      type={showCreatePassword ? "text" : "password"}
                       value={createPassword}
                       onChange={(e) => setCreatePassword(e.target.value)}
                       placeholder="Leave blank to auto-generate"
                     />
+                    <Button type="button" variant="outline" size="icon" onClick={() => setShowCreatePassword((v) => !v)}>
+                      {showCreatePassword ? <EyeOff className="h-4 w-4" /> : <Eye className="h-4 w-4" />}
+                    </Button>
                     <Button
                       type="button"
                       variant="outline"
@@ -569,7 +616,7 @@ export default function UserManagement() {
                       variant="outline"
                       className="w-full text-destructive border-destructive/30 hover:bg-destructive/10"
                       disabled={!e.hasEmployeeProfile}
-                      onClick={() => { deleteEmployee(e.id); toast.success(`${e.name} removed`); }}
+                      onClick={() => void handleDeleteEmployee(e)}
                     >
                       <Trash2 className="h-4 w-4 mr-2" /> Delete
                     </Button>
@@ -656,7 +703,7 @@ export default function UserManagement() {
                           variant="ghost"
                           className="h-8 w-8 text-destructive hover:text-destructive"
                           disabled={!e.hasEmployeeProfile}
-                          onClick={() => { deleteEmployee(e.id); toast.success(`${e.name} removed`); }}
+                          onClick={() => void handleDeleteEmployee(e)}
                         >
                           <Trash2 className="h-4 w-4" />
                         </Button>
@@ -731,11 +778,14 @@ export default function UserManagement() {
               <div className="space-y-1.5">
                 <Label>Change password (optional)</Label>
                 <Input
-                  type="text"
+                  type={showEditPassword ? "text" : "password"}
                   value={editPassword}
                   onChange={(e) => setEditPassword(e.target.value)}
                   placeholder="Enter new password to reset"
                 />
+                <Button type="button" variant="outline" size="sm" onClick={() => setShowEditPassword((v) => !v)}>
+                  {showEditPassword ? "Hide" : "Show"} password
+                </Button>
                 <p className="text-[11px] text-muted-foreground">If empty, password will remain unchanged.</p>
               </div>
             </div>
@@ -755,7 +805,7 @@ export default function UserManagement() {
         <DialogContent className="sm:max-w-[480px]">
           <DialogHeader>
             <DialogTitle>Register employee face</DialogTitle>
-            <DialogDescription>Live camera scan કરીને employee face register કરો.</DialogDescription>
+            <DialogDescription>Use live camera scan to register employee face.</DialogDescription>
           </DialogHeader>
           <div className="space-y-3 py-2">
             <div className="rounded-xl overflow-hidden border border-border bg-muted/20">

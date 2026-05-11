@@ -131,6 +131,12 @@ export async function usersUpdateRequest(accessToken: string, employeeId: string
   });
 }
 
+export async function usersDeleteRequest(accessToken: string, employeeId: string): Promise<Response> {
+  return fetchWithAutoRefresh(accessToken, `/api/users/employees/${employeeId}/delete/`, {
+    method: "DELETE",
+  });
+}
+
 export async function usersRegisterFaceRequest(accessToken: string, employeeId: string, imageBase64: string): Promise<Response> {
   return fetchWithAutoRefresh(accessToken, `/api/users/employees/${employeeId}/register-face/`, {
     method: "POST",
@@ -216,7 +222,7 @@ export async function attendanceForceCheckoutRequest(
   });
 }
 
-export type LeaveTypeApi = "casual" | "sick" | "earned";
+export type LeaveTypeApi = "casual" | "sick" | "earned" | "exam" | "college" | "other";
 
 export async function leaveBalanceRequest(accessToken: string): Promise<Response> {
   return fetchWithAutoRefresh(accessToken, "/api/leaves/balance/");
@@ -238,6 +244,23 @@ export async function leaveApplyRequest(
 ): Promise<Response> {
   return fetchWithAutoRefresh(accessToken, "/api/leaves/apply/", {
     method: "POST",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify(payload),
+  });
+}
+
+export async function meUpdateRequest(
+  accessToken: string,
+  payload: {
+    name?: string;
+    email?: string;
+    phone?: string;
+    department?: string;
+    password?: string;
+  }
+): Promise<Response> {
+  return fetchWithAutoRefresh(accessToken, "/api/users/me/update/", {
+    method: "PATCH",
     headers: { "Content-Type": "application/json" },
     body: JSON.stringify(payload),
   });

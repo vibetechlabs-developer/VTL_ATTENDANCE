@@ -3,7 +3,7 @@ import { useNavigate, Navigate } from "react-router-dom";
 import { motion, AnimatePresence } from "framer-motion";
 import {
   Sparkles, ScanFace,
-  MapPin, CheckCircle2, Loader2, ArrowLeft,
+  MapPin, CheckCircle2, Loader2, ArrowLeft, Eye, EyeOff,
 } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
@@ -140,6 +140,7 @@ export default function Login() {
   const [step, setStep] = useState<Step>("creds");
   const [email, setEmail] = useState("");
   const [password, setPassword] = useState("");
+  const [showPassword, setShowPassword] = useState(false);
   const [loading, setLoading] = useState(false);
 
   const [faceProgress, setFaceProgress] = useState(0);
@@ -157,7 +158,7 @@ export default function Login() {
     setLoading(true);
     try {
       const res = await loginRequest(email, password);
-      const data = (await res.json().catch(() => ({}))) as { error?: string; access?: string; refresh?: string };
+      const data = (await res.json().catch(() => ({}))) as { error?: string; access?: string; refresh?: string; notice?: string | null };
       if (!res.ok) {
         toast.error(typeof data.error === "string" ? data.error : "Login failed");
         return;
@@ -176,6 +177,9 @@ export default function Login() {
       }
       const authUser = profileToAuthUser(meBody as MeProfilePayload);
       setSession(authUser, access, refresh);
+      if (data.notice) {
+        toast.warning(data.notice);
+      }
       setRedirectTo(authUser.role === "employee" || authUser.role === "hr" || authUser.role === "manager" ? "/employee" : "/admin");
       setStep("face");
       runFaceScan();
@@ -270,9 +274,9 @@ export default function Login() {
           >
             <div className="login-logo-3d">
               <img
-                src="/download%20(2).png"
+                src="/vtl-logo-transparent.png"
                 alt="Vibe Tech Labs"
-                className="h-6 w-6 relative z-10 object-cover object-left-center"
+                className="h-6 w-6 relative z-10 object-contain"
               />
             </div>
             <div>
@@ -355,7 +359,7 @@ export default function Login() {
                   {/* Mobile logo */}
                   <div className="flex items-center justify-center gap-2.5 lg:hidden mb-1">
                     <img
-                      src="/download%20(2).png"
+                      src="/vtl-logo-transparent.png"
                       alt="Vibe Tech Labs"
                       className="h-9 w-9 rounded-xl object-contain p-0.5"
                     />
@@ -374,7 +378,24 @@ export default function Login() {
                     </div>
                     <div className="space-y-1">
                       <Label htmlFor="password" className="login-label">Password</Label>
-                      <Input id="password" type="password" value={password} onChange={(e) => setPassword(e.target.value)} required className="login-input" />
+                      <div className="relative">
+                        <Input
+                          id="password"
+                          type={showPassword ? "text" : "password"}
+                          value={password}
+                          onChange={(e) => setPassword(e.target.value)}
+                          required
+                          className="login-input pr-10"
+                        />
+                        <button
+                          type="button"
+                          onClick={() => setShowPassword((v) => !v)}
+                          className="absolute right-2 top-1/2 -translate-y-1/2 text-muted-foreground hover:text-foreground"
+                          aria-label={showPassword ? "Hide password" : "Show password"}
+                        >
+                          {showPassword ? <EyeOff className="h-4 w-4" /> : <Eye className="h-4 w-4" />}
+                        </button>
+                      </div>
                     </div>
 
                     <Button type="submit" disabled={loading} className="login-btn w-full">

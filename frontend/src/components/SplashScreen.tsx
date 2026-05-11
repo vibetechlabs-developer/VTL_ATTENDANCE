@@ -65,9 +65,9 @@ export function SplashScreen({ children }: { children: React.ReactNode }) {
                                     transition={{ duration: 2, repeat: Infinity, ease: "easeInOut" }}
                                 />
                                 <img
-                                    src="/download%20(2).png"
+                                    src="/vtl-logo-transparent.png"
                                     alt="Vibe Tech Labs"
-                                    className="h-24 w-24 rounded-3xl shadow-3d relative z-10 object-cover object-left"
+                                    className="h-24 w-24 rounded-3xl shadow-3d relative z-10 object-contain"
                                 />
                             </motion.div>
 

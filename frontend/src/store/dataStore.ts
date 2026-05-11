@@ -185,11 +185,11 @@ const seedNotifications: AppNotification[] = [
 ];
 
 export const useDataStore = create<DataState>((set) => ({
-  employees: seedEmployees,
-  attendance: seedAttendance,
-  leaves: seedLeaves,
-  updates: seedUpdates,
-  audit: seedAudit,
+  employees: [],
+  attendance: [],
+  leaves: [],
+  updates: [],
+  audit: [],
   notifications: [],
   addEmployee: (e) =>
     set((s) => ({ employees: [{ ...e, id: `emp-${Date.now()}` }, ...s.employees] })),

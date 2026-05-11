@@ -1,6 +1,6 @@
 import { useEffect, useRef, useState } from "react";
 import { motion } from "framer-motion";
-import { Save, Mail, Phone, MapPin, Briefcase, IdCard, Camera, ScanFace } from "lucide-react";
+import { Save, Mail, Phone, MapPin, Briefcase, IdCard, Camera, ScanFace, Eye, EyeOff } from "lucide-react";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
@@ -9,7 +9,8 @@ import { Textarea } from "@/components/ui/textarea";
 import { Avatar, AvatarFallback } from "@/components/ui/avatar";
 import { Dialog, DialogContent, DialogDescription, DialogFooter, DialogHeader, DialogTitle } from "@/components/ui/dialog";
 import { useAuthStore } from "@/store/authStore";
-import { registerFaceRequest } from "@/lib/api";
+import { meRequest, meUpdateRequest, registerFaceRequest } from "@/lib/api";
+import { profileToAuthUser } from "@/store/authStore";
 import { toast } from "sonner";
 
 export default function Profile() {
@@ -17,6 +18,10 @@ export default function Profile() {
   const [faceOpen, setFaceOpen] = useState(false);
   const [cameraReady, setCameraReady] = useState(false);
   const [registeringFace, setRegisteringFace] = useState(false);
+  const [newPassword, setNewPassword] = useState("");
+  const [confirmPassword, setConfirmPassword] = useState("");
+  const [showNewPassword, setShowNewPassword] = useState(false);
+  const [showConfirmPassword, setShowConfirmPassword] = useState(false);
   const videoRef = useRef<HTMLVideoElement | null>(null);
   const canvasRef = useRef<HTMLCanvasElement | null>(null);
   const [form, setForm] = useState({
@@ -33,9 +38,41 @@ export default function Profile() {
   const set = (k: keyof typeof form) => (e: React.ChangeEvent<HTMLInputElement | HTMLTextAreaElement>) =>
     setForm((f) => ({ ...f, [k]: e.target.value }));
 
-  const handleSave = (e: React.FormEvent) => {
+  const handleSave = async (e: React.FormEvent) => {
     e.preventDefault();
-    updateProfile(form);
+    if (!accessToken) {
+      toast.error("Session expired. Please login again.");
+      return;
+    }
+    if (newPassword && newPassword.length < 8) {
+      toast.error("Password must be at least 8 characters.");
+      return;
+    }
+    if (newPassword && newPassword !== confirmPassword) {
+      toast.error("Password and confirm password must match.");
+      return;
+    }
+    const res = await meUpdateRequest(accessToken, {
+      name: form.name,
+      email: form.email,
+      phone: form.phone,
+      department: form.department,
+      password: newPassword || undefined,
+    });
+    const body = (await res.json().catch(() => ({}))) as { error?: string };
+    if (!res.ok) {
+      toast.error(body.error || "Could not update profile");
+      return;
+    }
+    const meRes = await meRequest(accessToken);
+    if (meRes.ok) {
+      const meBody = await meRes.json();
+      updateProfile(profileToAuthUser(meBody));
+    } else {
+      updateProfile(form);
+    }
+    setNewPassword("");
+    setConfirmPassword("");
     toast.success("Profile updated");
   };
 
@@ -170,6 +207,44 @@ export default function Profile() {
               <div className="space-y-1.5 sm:col-span-2">
                 <Label>Bio</Label>
                 <Textarea value={form.bio} onChange={set("bio")} className="min-h-[100px]" />
+              </div>
+              <div className="space-y-1.5">
+                <Label>New password</Label>
+                <div className="relative">
+                  <Input
+                    type={showNewPassword ? "text" : "password"}
+                    value={newPassword}
+                    onChange={(e) => setNewPassword(e.target.value)}
+                    placeholder="Leave blank to keep unchanged"
+                    className="pr-10"
+                  />
+                  <button
+                    type="button"
+                    onClick={() => setShowNewPassword((v) => !v)}
+                    className="absolute right-2 top-1/2 -translate-y-1/2 text-muted-foreground"
+                  >
+                    {showNewPassword ? <EyeOff className="h-4 w-4" /> : <Eye className="h-4 w-4" />}
+                  </button>
+                </div>
+              </div>
+              <div className="space-y-1.5">
+                <Label>Confirm new password</Label>
+                <div className="relative">
+                  <Input
+                    type={showConfirmPassword ? "text" : "password"}
+                    value={confirmPassword}
+                    onChange={(e) => setConfirmPassword(e.target.value)}
+                    placeholder="Re-enter new password"
+                    className="pr-10"
+                  />
+                  <button
+                    type="button"
+                    onClick={() => setShowConfirmPassword((v) => !v)}
+                    className="absolute right-2 top-1/2 -translate-y-1/2 text-muted-foreground"
+                  >
+                    {showConfirmPassword ? <EyeOff className="h-4 w-4" /> : <Eye className="h-4 w-4" />}
+                  </button>
+                </div>
               </div>
               <div className="sm:col-span-2 flex justify-end">
                 <Button type="submit" className="bg-sage-3d shadow-3d border-0 text-primary-foreground">

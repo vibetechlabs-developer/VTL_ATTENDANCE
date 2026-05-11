@@ -53,6 +53,7 @@ type AttendanceAdminRow = {
   checkIn: string | null;
   checkOut: string | null;
   hours: number;
+  overtimeHours?: number;
 };
 
 export default function ManagerDashboard() {
@@ -425,7 +426,14 @@ export default function ManagerDashboard() {
                       <td className="py-3 px-2 text-muted-foreground">{a.department}</td>
                       <td className="py-3 px-2 tabular-nums">{formatTime(a.checkIn)}</td>
                       <td className="py-3 px-2 tabular-nums">{formatTime(a.checkOut)}</td>
-                      <td className="py-3 px-2 tabular-nums font-medium">{a.hours > 0 ? a.hours.toFixed(1) : "—"}</td>
+                      <td className="py-3 px-2 tabular-nums font-medium">
+                        {a.hours > 0 ? a.hours.toFixed(1) : "—"}
+                        {Number(a.overtimeHours || 0) > 0 && (
+                          <span className="ml-2 inline-flex rounded px-1.5 py-0.5 text-[10px] font-bold bg-warning/15 text-warning">
+                            OT {Number(a.overtimeHours).toFixed(1)}h
+                          </span>
+                        )}
+                      </td>
                       <td className="py-3 px-2">
                         <StatusPill
                           label={a.status}

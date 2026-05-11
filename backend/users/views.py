@@ -20,6 +20,19 @@ from .push_utils import send_push_message
 from .serializers_notifications import AppNotificationSerializer
 import mimetypes
 
+
+def _first_serializer_error(errors):
+    if isinstance(errors, dict):
+        for _, value in errors.items():
+            msg = _first_serializer_error(value)
+            if msg:
+                return msg
+    elif isinstance(errors, list) and errors:
+        return _first_serializer_error(errors[0])
+    elif isinstance(errors, str):
+        return errors
+    return None
+
 class LoginView(APIView):
     permission_classes = []  
 
@@ -51,12 +64,22 @@ class LoginView(APIView):
         if hasattr(user, 'employee'):
             name = user.employee.name
 
+        previous_login = user.last_login
+        login_notice = None
+        if previous_login:
+            diff_minutes = (timezone.now() - previous_login).total_seconds() / 60
+            if diff_minutes <= 30:
+                login_notice = "Another login was detected in the last 30 minutes."
+        user.last_login = timezone.now()
+        user.save(update_fields=['last_login'])
+
         return Response({
             'access': str(refresh.access_token),
             'refresh': str(refresh),
             'role': user.role,
             'email': user.email,
             'name': name,
+            'notice': login_notice,
         })
 
 
@@ -175,7 +198,11 @@ class EmployeesCreateView(APIView):
             return Response({'error': 'Permission denied'}, status=status.HTTP_403_FORBIDDEN)
 
         serializer = EmployeeCreateSerializer(data=request.data)
-        serializer.is_valid(raise_exception=True)
+        if not serializer.is_valid():
+            return Response(
+                {'error': _first_serializer_error(serializer.errors) or 'Invalid employee details.'},
+                status=status.HTTP_400_BAD_REQUEST
+            )
         employee, temp_password = serializer.save()
 
         row = EmployeeListSerializer(employee, context={'request': request}).data
@@ -200,10 +227,76 @@ class EmployeesUpdateView(APIView):
             return Response({'error': 'Employee not found'}, status=status.HTTP_404_NOT_FOUND)
 
         serializer = EmployeeUpdateSerializer(data=request.data, partial=True)
-        serializer.is_valid(raise_exception=True)
+        if not serializer.is_valid():
+            return Response(
+                {'error': _first_serializer_error(serializer.errors) or 'Invalid employee details.'},
+                status=status.HTTP_400_BAD_REQUEST
+            )
         serializer.update(employee, serializer.validated_data)
         row = EmployeeListSerializer(employee, context={'request': request}).data
         return Response({'employee': row})
+
+
+class EmployeesDeleteView(APIView):
+    permission_classes = [IsAuthenticated]
+
+    def delete(self, request, pk):
+        if request.user.role not in ['admin', 'manager']:
+            return Response({'error': 'Permission denied'}, status=status.HTTP_403_FORBIDDEN)
+
+        employee = Employee.objects.select_related('user').filter(pk=pk).first()
+        if not employee:
+            return Response({'error': 'Employee not found'}, status=status.HTTP_404_NOT_FOUND)
+
+        if employee.user_id == request.user.id:
+            return Response({'error': 'You cannot delete your own account.'}, status=status.HTTP_400_BAD_REQUEST)
+
+        user = employee.user
+        employee.delete()
+        user.delete()
+        return Response({'message': 'Employee deleted successfully.'})
+
+
+class MeUpdateView(APIView):
+    permission_classes = [IsAuthenticated]
+
+    def patch(self, request):
+        user = request.user
+        emp = getattr(user, 'employee', None)
+
+        name = request.data.get('name')
+        email = request.data.get('email')
+        phone = request.data.get('phone')
+        department = request.data.get('department')
+        password = request.data.get('password')
+
+        if email is not None:
+            email = str(email).strip().lower()
+            if not email:
+                return Response({'error': 'Email is required.'}, status=status.HTTP_400_BAD_REQUEST)
+            if User.objects.exclude(pk=user.pk).filter(email=email).exists():
+                return Response({'error': 'This email is already in use.'}, status=status.HTTP_400_BAD_REQUEST)
+            user.email = email
+
+        if password is not None:
+            password = str(password).strip()
+            if password:
+                if len(password) < 8:
+                    return Response({'error': 'Password must be at least 8 characters.'}, status=status.HTTP_400_BAD_REQUEST)
+                user.set_password(password)
+
+        user.save()
+
+        if emp:
+            if name is not None:
+                emp.name = str(name).strip() or emp.name
+            if phone is not None:
+                emp.phone = str(phone).strip()
+            if department is not None:
+                emp.department = str(department).strip() or emp.department
+            emp.save()
+
+        return MeView().get(request)
 
 
 class EmployeeFaceRegisterByAdminView(APIView):

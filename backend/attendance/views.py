@@ -15,10 +15,8 @@ from .models import AttendanceLog, BreakLog
 from .serializers import CheckInSerializer, CheckOutSerializer, AttendanceLogSerializer
 from .face_utils import decode_base64_image, get_face_encoding, match_face
 
-# TESTING MODE (temporary):
-# Keep True while demo/testing to bypass strict face/location failures.
-# IMPORTANT: Set to False after testing to restore strict production behavior.
-TESTING_OPEN_ATTENDANCE = True
+# Keep strict verification enabled for production.
+TESTING_OPEN_ATTENDANCE = False
 
 
 # ─── Helper: Location check ────────────────────────────
@@ -339,6 +337,7 @@ class AdminAttendanceView(APIView):
                 'checkIn': log.check_in.isoformat() if log and log.check_in else None,
                 'checkOut': log.check_out.isoformat() if log and log.check_out else None,
                 'hours': float(log.total_hours) if log else 0,
+                'overtimeHours': float(log.overtime_hours) if log else 0,
                 'breakCount': breaks.count() if log else 0,
                 'breakMinutes': break_minutes,
             })
@@ -431,21 +430,24 @@ class AdminEmployeeAttendanceHistoryView(APIView):
             .order_by('-date')
         )
 
+        current_tz = timezone.get_current_timezone()
         rows = []
         for log in logs:
+            late_cutoff = timezone.make_aware(
+                timezone.datetime.combine(log.date, timezone.datetime.min.time().replace(hour=10, minute=15)),
+                current_tz
+            )
+            day_status = 'Absent'
+            if log.check_in:
+                day_status = 'Late' if log.check_in > late_cutoff else 'Present'
+
             rows.append({
                 'id': str(log.id),
                 'date': log.date.isoformat(),
                 'name': log.employee.name,
                 'empId': f"VTL-{str(log.employee_id).zfill(3)}",
                 'department': log.employee.department,
-                'status': 'Present' if (log.check_in and not log.check_out and (log.total_hours or 0) == 0) else (
-                    'Late' if (log.check_in and not log.check_out and (log.total_hours or 0) == 0) else (
-                        'Present' if (log.check_in and not log.check_out) else (
-                            'Present' if log.check_in else 'Absent'
-                        )
-                    )
-                ),
+                'status': day_status,
                 'checkIn': log.check_in.isoformat() if log.check_in else None,
                 'checkOut': log.check_out.isoformat() if log.check_out else None,
                 'breakMinutes': int(log.break_minutes or 0),

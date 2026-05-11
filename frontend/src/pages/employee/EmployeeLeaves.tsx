@@ -27,6 +27,7 @@ export default function EmployeeLeaves() {
   const [to, setTo] = useState("");
   const [half, setHalf] = useState(false);
   const [reason, setReason] = useState("");
+  const [customLeaveType, setCustomLeaveType] = useState("");
   const [balance, setBalance] = useState<any | null>(null);
   const [history, setHistory] = useState<any[]>([]);
 
@@ -56,12 +57,18 @@ export default function EmployeeLeaves() {
   const handleApply = async () => {
     if (!accessToken) { toast.error("Session expired. Please login again."); return; }
     if (!from || !to || !reason.trim()) { toast.error("Please fill all fields"); return; }
+    if (type === "other" && !customLeaveType.trim()) { toast.error("Please enter custom leave type."); return; }
     if (half && from !== to) { toast.error("For half-day, From and To date must be same."); return; }
+    const normalizedReason = reason.trim();
+    const finalReason =
+      type === "other" && customLeaveType.trim()
+        ? `[Other leave type: ${customLeaveType.trim()}] ${normalizedReason}`
+        : normalizedReason;
     const res = await leaveApplyRequest(accessToken, {
       leave_type: type,
       start_date: from,
       end_date: to,
-      reason: reason.trim(),
+      reason: finalReason,
       is_half_day: half,
     });
     const body = (await res.json().catch(() => ({}))) as { error?: string; message?: string };
@@ -71,7 +78,7 @@ export default function EmployeeLeaves() {
     }
     toast.success(body.message || "Leave request submitted");
     setOpen(false);
-    setFrom(""); setTo(""); setReason(""); setHalf(false);
+    setFrom(""); setTo(""); setReason(""); setCustomLeaveType(""); setHalf(false);
     await load();
   };
 
@@ -102,9 +109,22 @@ export default function EmployeeLeaves() {
                     <SelectItem value="casual">Casual</SelectItem>
                     <SelectItem value="sick">Sick</SelectItem>
                     <SelectItem value="earned">Earned</SelectItem>
+                    <SelectItem value="exam">Exam</SelectItem>
+                    <SelectItem value="college">College</SelectItem>
+                    <SelectItem value="other">Other</SelectItem>
                   </SelectContent>
                 </Select>
               </div>
+              {type === "other" && (
+                <div className="space-y-1.5">
+                  <Label>Other leave type</Label>
+                  <Input
+                    value={customLeaveType}
+                    onChange={(e) => setCustomLeaveType(e.target.value)}
+                    placeholder="Enter your leave type"
+                  />
+                </div>
+              )}
               <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
                 <div className="space-y-1.5"><Label>From</Label><Input type="date" value={from} onChange={(e) => setFrom(e.target.value)} /></div>
                 <div className="space-y-1.5"><Label>To</Label><Input type="date" value={to} onChange={(e) => setTo(e.target.value)} /></div>

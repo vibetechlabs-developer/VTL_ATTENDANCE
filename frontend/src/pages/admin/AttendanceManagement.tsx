@@ -217,13 +217,13 @@ export default function AttendanceManagement() {
       </div>
 
       <div className="flex flex-col lg:flex-row lg:items-center justify-between gap-4">
-        <div className="flex flex-col sm:flex-row sm:items-center gap-4 w-full lg:w-auto">
-          <div className="relative w-full sm:w-72">
+        <div className="flex flex-col sm:flex-row sm:items-center gap-3 w-full lg:w-auto min-w-0">
+          <div className="relative w-full sm:w-72 min-w-0">
             <Search className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-muted-foreground" />
             <Input placeholder="Search by name, ID, or role..." className="pl-9 h-10 bg-transparent border-0 border-b border-border/50 rounded-none focus-visible:ring-0 focus-visible:border-primary shadow-none w-full" value={q} onChange={(e) => setQ(e.target.value)} />
           </div>
 
-          <div className="flex bg-muted/40 p-1 rounded-xl w-full sm:w-auto overflow-x-auto scrollbar-hide shrink-0">
+          <div className="flex bg-muted/40 p-1 rounded-xl w-full sm:w-auto overflow-x-auto scrollbar-hide min-w-0">
             {["All", "Present", "Absent", "On Leave"].map(tab => {
               const count = tab === "All" ? total : tab === "Present" ? presentCount : tab === "Absent" ? absentCount : leaveCount;
               return (
@@ -254,15 +254,23 @@ export default function AttendanceManagement() {
           rows.map((r) => {
             const role = r.role || "employee";
             const isPresent = r.status === "Present" || r.status === "Late";
+            const statusClass =
+              r.status === "Late"
+                ? "bg-warning/15 text-warning"
+                : isPresent
+                  ? "bg-success/15 text-success"
+                  : r.status === "On Leave"
+                    ? "bg-warning/15 text-warning"
+                    : "bg-destructive/15 text-destructive";
             return (
               <div key={r.id} className="rounded-2xl bg-card shadow-sm border-glow-shine p-4">
                 <div className="flex items-start justify-between gap-3">
                   <div className="min-w-0">
                     <p className="font-semibold truncate">{r.name}</p>
-                    <p className="text-xs text-muted-foreground font-mono">{String(r.empId).split("-")[1] || r.empId} · {r.department}</p>
+                    <p className="text-xs text-muted-foreground font-mono">{r.empId} · {r.department}</p>
                     <p className="text-xs text-muted-foreground capitalize mt-0.5">{role}</p>
                   </div>
-                  <div className={`inline-flex items-center gap-1.5 px-2 py-0.5 rounded text-xs font-semibold shrink-0 ${isPresent ? "bg-success/15 text-success" : r.status === "On Leave" ? "bg-warning/15 text-warning" : "bg-destructive/15 text-destructive"}`}>
+                  <div className={`inline-flex items-center gap-1.5 px-2 py-0.5 rounded text-xs font-semibold shrink-0 ${statusClass}`}>
                     {isPresent ? <UserCheck className="h-3 w-3" /> : r.status === "On Leave" ? <Plane className="h-3 w-3" /> : <UserX className="h-3 w-3" />}
                     {r.status}
                   </div>
@@ -288,6 +296,11 @@ export default function AttendanceManagement() {
                   <div className="rounded-lg bg-muted/30 px-3 py-2">
                     <p className="text-muted-foreground">Hours</p>
                     <p className="font-medium text-sm">{r.hours > 0 ? `${Math.floor(r.hours)}h ${Math.round((r.hours * 60) % 60)}m` : "—"}</p>
+                    {Number(r.overtimeHours || 0) > 0 && (
+                      <p className="text-[11px] font-semibold text-warning mt-0.5">
+                        OT {Number(r.overtimeHours).toFixed(2)}h
+                      </p>
+                    )}
                   </div>
                 </div>
 
@@ -329,6 +342,14 @@ export default function AttendanceManagement() {
           <tbody>
             {rows.map((r) => {
               const role = r.role || "employee";
+              const statusClass =
+                r.status === "Late"
+                  ? "bg-warning/15 text-warning"
+                  : r.status === "Present"
+                    ? "bg-success/15 text-success"
+                    : r.status === "On Leave"
+                      ? "bg-warning/15 text-warning"
+                      : "bg-destructive/15 text-destructive";
               return (
                 <tr key={r.id} className="border-b border-border/20 last:border-0 hover:bg-muted/10 transition-colors">
                   <td className="py-3 px-6">
@@ -344,15 +365,13 @@ export default function AttendanceManagement() {
                       </button>
                     </div>
                   </td>
-                  <td className="py-3 px-6"><span className="text-muted-foreground text-xs font-mono">{String(r.empId).split('-')[1] || r.empId}</span></td>
+                  <td className="py-3 px-6"><span className="text-muted-foreground text-xs font-mono">{r.empId}</span></td>
                   <td className="py-3 px-6">
                     <p className="font-medium text-sm capitalize">{role}</p>
                     <p className="text-xs text-muted-foreground">{r.department}</p>
                   </td>
                   <td className="py-3 px-6">
-                    <div className={`inline-flex items-center gap-1.5 px-2 py-0.5 rounded text-xs font-semibold ${r.status === "Present" || r.status === "Late" ? "bg-success/15 text-success" :
-                      "bg-destructive/15 text-destructive"
-                      }`}>
+                    <div className={`inline-flex items-center gap-1.5 px-2 py-0.5 rounded text-xs font-semibold ${statusClass}`}>
                       {r.status === "Present" || r.status === "Late" ? <UserCheck className="h-3 w-3" /> : <UserX className="h-3 w-3" />}
                       {r.status}
                     </div>
@@ -371,7 +390,14 @@ export default function AttendanceManagement() {
                   <td className="py-3 px-6">
                     <span className="text-sm font-medium">{r.checkOut ? format(new Date(r.checkOut), "h:mm a") : "—"}</span>
                   </td>
-                  <td className="py-3 px-6 text-sm font-medium">{r.hours > 0 ? `${Math.floor(r.hours)}h ${Math.round((r.hours * 60) % 60)}m` : "—"}</td>
+                  <td className="py-3 px-6 text-sm font-medium">
+                    {r.hours > 0 ? `${Math.floor(r.hours)}h ${Math.round((r.hours * 60) % 60)}m` : "—"}
+                    {Number(r.overtimeHours || 0) > 0 && (
+                      <span className="ml-2 inline-flex rounded px-1.5 py-0.5 text-[10px] font-bold bg-warning/15 text-warning">
+                        OT {Number(r.overtimeHours).toFixed(2)}h
+                      </span>
+                    )}
+                  </td>
                   {canForceCheckout && (
                     <td className="py-3 px-6">
                       {!r.checkIn || r.checkOut || r.status === "Absent" || r.status === "On Leave" ? (
@@ -401,26 +427,28 @@ export default function AttendanceManagement() {
 function HistoryTable({ loading, rows }: { loading: boolean; rows: any[] }) {
   return (
     <div className="w-full overflow-x-auto rounded-2xl border border-border/40">
-      <table className="w-full min-w-[760px] text-sm">
+      <table className="w-full min-w-[920px] text-sm">
         <thead>
           <tr className="border-b border-border/40 bg-muted/20">
             <th className="text-left py-3 px-4 text-[11px] font-semibold text-muted-foreground uppercase tracking-wider">Date</th>
+            <th className="text-left py-3 px-4 text-[11px] font-semibold text-muted-foreground uppercase tracking-wider">Status</th>
             <th className="text-left py-3 px-4 text-[11px] font-semibold text-muted-foreground uppercase tracking-wider">Check In</th>
             <th className="text-left py-3 px-4 text-[11px] font-semibold text-muted-foreground uppercase tracking-wider">Check Out</th>
             <th className="text-left py-3 px-4 text-[11px] font-semibold text-muted-foreground uppercase tracking-wider">Break</th>
             <th className="text-left py-3 px-4 text-[11px] font-semibold text-muted-foreground uppercase tracking-wider">Hours</th>
+            <th className="text-left py-3 px-4 text-[11px] font-semibold text-muted-foreground uppercase tracking-wider">Overtime</th>
           </tr>
         </thead>
         <tbody>
           {loading ? (
             <tr>
-              <td colSpan={5} className="py-6 px-4 text-center text-muted-foreground">
+              <td colSpan={7} className="py-6 px-4 text-center text-muted-foreground">
                 Loading...
               </td>
             </tr>
           ) : rows.length === 0 ? (
             <tr>
-              <td colSpan={5} className="py-6 px-4 text-center text-muted-foreground">
+              <td colSpan={7} className="py-6 px-4 text-center text-muted-foreground">
                 No records found for this range.
               </td>
             </tr>
@@ -428,6 +456,15 @@ function HistoryTable({ loading, rows }: { loading: boolean; rows: any[] }) {
             rows.map((r) => (
               <tr key={r.id} className="border-b border-border/20 last:border-0 hover:bg-muted/20 transition-smooth">
                 <td className="py-3 px-4 font-medium">{r.date ? format(new Date(r.date), "dd MMM yyyy") : "—"}</td>
+                <td className="py-3 px-4">
+                  {r.status === "Late" ? (
+                    <span className="inline-flex items-center rounded px-2 py-0.5 text-[11px] font-semibold bg-warning/15 text-warning">Late</span>
+                  ) : r.status === "Present" ? (
+                    <span className="inline-flex items-center rounded px-2 py-0.5 text-[11px] font-semibold bg-success/15 text-success">Present</span>
+                  ) : (
+                    <span className="inline-flex items-center rounded px-2 py-0.5 text-[11px] font-semibold bg-muted text-muted-foreground">—</span>
+                  )}
+                </td>
                 <td className="py-3 px-4 tabular-nums">{r.checkIn ? format(new Date(r.checkIn), "h:mm a") : "—"}</td>
                 <td className="py-3 px-4 tabular-nums">{r.checkOut ? format(new Date(r.checkOut), "h:mm a") : "—"}</td>
                 <td className="py-3 px-4 tabular-nums">
@@ -436,6 +473,7 @@ function HistoryTable({ loading, rows }: { loading: boolean; rows: any[] }) {
                     : "—"}
                 </td>
                 <td className="py-3 px-4 tabular-nums font-semibold">{r.hours > 0 ? Number(r.hours).toFixed(2) : "—"}</td>
+                <td className="py-3 px-4 tabular-nums font-semibold text-warning">{Number(r.overtimeHours || 0) > 0 ? Number(r.overtimeHours).toFixed(2) : "—"}</td>
               </tr>
             ))
           )}

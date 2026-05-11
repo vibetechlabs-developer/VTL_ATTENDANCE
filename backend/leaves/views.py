@@ -36,18 +36,19 @@ class LeaveApplyView(APIView):
         balance = LeaveBalance.objects.get(employee=employee)
         leave_type = data['leave_type']
 
-        if leave_type == 'casual':
-            remaining = balance.casual_total - balance.casual_used
-        elif leave_type == 'sick':
-            remaining = balance.sick_total - balance.sick_used
-        else:
-            remaining = balance.earned_total - balance.earned_used
+        if leave_type in ['casual', 'sick', 'earned']:
+            if leave_type == 'casual':
+                remaining = balance.casual_total - balance.casual_used
+            elif leave_type == 'sick':
+                remaining = balance.sick_total - balance.sick_used
+            else:
+                remaining = balance.earned_total - balance.earned_used
 
-        if days > remaining:
-            return Response(
-                {'error': f'Only {remaining} day(s) remaining for this leave type.'},
-                status=400
-            )
+            if days > remaining:
+                return Response(
+                    {'error': f'Only {remaining} day(s) remaining for this leave type.'},
+                    status=400
+                )
 
         # Leave create karo
         leave = LeaveRequest.objects.create(
@@ -108,7 +109,7 @@ class LeaveApproveView(APIView):
             balance.casual_used += days
         elif leave.leave_type == 'sick':
             balance.sick_used += days
-        else:
+        elif leave.leave_type == 'earned':
             balance.earned_used += days
 
         balance.save()

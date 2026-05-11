@@ -3,7 +3,7 @@ from .models import LeaveRequest, LeaveBalance
 
 class LeaveApplySerializer(serializers.Serializer):
     leave_type = serializers.ChoiceField(
-        choices=['casual', 'sick', 'earned']
+        choices=['casual', 'sick', 'earned', 'exam', 'college', 'other']
     )
     start_date = serializers.DateField()
     end_date = serializers.DateField()
