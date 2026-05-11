@@ -133,18 +133,36 @@ export default function UserManagement() {
       .filter((e) => e.role === "admin" || e.role === "manager")
       .map((e) => ({
         value: String(e.id),
+        employeeId: Number(e.id),
+        userId: e.userId ? Number(e.userId) : null,
+        name: e.name,
         label: `${e.name} (${e.role === "admin" ? "Super Admin" : "Manager"})`,
       }));
 
     return options;
   }, [employees]);
 
-  const resolveManagerEmployeeId = (value?: string, fallbackName?: string): number | null => {
-    if (value && value !== "—" && /^\d+$/.test(value)) return Number(value);
-    const name = (fallbackName || value || "").trim();
-    if (!name || name === "—") return null;
+  const resolveManagerSelection = (value?: string | number, fallbackName?: string) => {
+    const strVal = value != null && value !== "—" ? String(value).trim() : "";
+    if (strVal && /^\d+$/.test(strVal)) {
+      const opt = reportToOptions.find((o) => o.value === strVal);
+      return {
+        managerEmployeeId: Number(strVal),
+        managerUserId: opt?.userId ?? null,
+        managerName: opt?.name ?? fallbackName ?? null,
+      };
+    }
+
+    const name = (fallbackName || strVal || "").trim();
+    if (!name || name === "—") {
+      return { managerEmployeeId: null, managerUserId: null, managerName: null };
+    }
     const matched = employees.find((e) => e.name === name && (e.role === "admin" || e.role === "manager"));
-    return matched ? Number(matched.id) : null;
+    return {
+      managerEmployeeId: matched ? Number(matched.id) : null,
+      managerUserId: matched?.userId ? Number(matched.userId) : null,
+      managerName: matched?.name ?? name,
+    };
   };
 
   const filtered = employees.filter((e) =>
@@ -161,13 +179,15 @@ export default function UserManagement() {
       toast.error("Session expired. Please login again.");
       return;
     }
+    const managerSelection = resolveManagerSelection(form.reportsTo);
     try {
       const res = await usersCreateRequest(accessToken, {
         name: form.name,
         email: form.email,
         role: form.role,
         department: form.department,
-        manager_employee_id: resolveManagerEmployeeId(form.reportsTo),
+        manager_employee_id: managerSelection.managerEmployeeId,
+        manager_id: managerSelection.managerUserId,
         password: createPassword.trim() || undefined,
       });
       const body = (await res.json().catch(() => ({}))) as {
@@ -212,13 +232,15 @@ export default function UserManagement() {
   const handleEditSave = async () => {
     if (!selectedEmployee || !accessToken) return;
     setSavingEdit(true);
+    const managerSelection = resolveManagerSelection(selectedEmployee.managerEmployeeId, selectedEmployee.reportsTo);
     try {
       const res = await usersUpdateRequest(accessToken, selectedEmployee.id, {
         name: selectedEmployee.name,
         email: selectedEmployee.email,
         role: selectedEmployee.role,
         department: selectedEmployee.department,
-        manager_employee_id: resolveManagerEmployeeId(selectedEmployee.managerEmployeeId, selectedEmployee.reportsTo),
+        manager_employee_id: managerSelection.managerEmployeeId,
+        manager_id: managerSelection.managerUserId,
         password: editPassword.trim() || undefined,
       });
       const body = (await res.json().catch(() => ({}))) as { error?: string };

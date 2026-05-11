@@ -1,6 +1,6 @@
 import { useEffect, useMemo, useState } from "react";
 import { Download, Search, ChevronLeft, ChevronRight, Calendar as CalendarIcon, Users, UserCheck, UserX, Plane, Eye, Coffee, UserPlus, UserMinus } from "lucide-react";
-import { format, addDays, subDays, startOfWeek, endOfWeek, startOfMonth, endOfMonth } from "date-fns";
+import { format, addDays, subDays, startOfWeek, endOfWeek, startOfMonth, endOfMonth, eachDayOfInterval, startOfDay, isAfter } from "date-fns";
 import { toast } from "sonner";
 import { exportCsv } from "@/utils/csv";
 import { Input } from "@/components/ui/input";
@@ -36,12 +36,14 @@ export default function AttendanceManagement() {
     if (!accessToken) return;
     setHistoryLoading(true);
     try {
-      const from = mode === "week" ? startOfWeek(date, { weekStartsOn: 1 }) : startOfMonth(date);
-      const to = mode === "week" ? endOfWeek(date, { weekStartsOn: 1 }) : endOfMonth(date);
+      const rawFrom = mode === "week" ? startOfWeek(date, { weekStartsOn: 1 }) : startOfMonth(date);
+      const rawTo = mode === "week" ? endOfWeek(date, { weekStartsOn: 1 }) : endOfMonth(date);
+      const todayStart = startOfDay(new Date());
+      const rangeEnd = isAfter(rawTo, todayStart) ? todayStart : rawTo;
       const res = await attendanceAdminHistoryRequest(accessToken, {
         employee_id: row.employeePk,
-        from: format(from, "yyyy-MM-dd"),
-        to: format(to, "yyyy-MM-dd"),
+        from: format(rawFrom, "yyyy-MM-dd"),
+        to: format(rawTo, "yyyy-MM-dd"),
       });
       const body = (await res.json().catch(() => [])) as any[];
       if (!res.ok) {
@@ -49,7 +51,23 @@ export default function AttendanceManagement() {
         setHistoryRows([]);
         return;
       }
-      setHistoryRows(Array.isArray(body) ? body : []);
+      const logs = Array.isArray(body) ? body : [];
+      const byDate = new Map(logs.map((r) => [String(r.date).slice(0, 10), r]));
+      const days = eachDayOfInterval({ start: rawFrom, end: rangeEnd }).sort((a, b) => b.getTime() - a.getTime());
+      setHistoryRows(
+        days.map((d) => {
+          const key = format(d, "yyyy-MM-dd");
+          const existing = byDate.get(key);
+          if (existing) return existing;
+          return {
+            id: `no-log-${key}`,
+            date: key,
+            checkIn: null,
+            checkOut: null,
+            hours: 0,
+          };
+        })
+      );
     } finally {
       setHistoryLoading(false);
     }
@@ -100,7 +118,15 @@ export default function AttendanceManagement() {
           <DialogHeader>
             <DialogTitle>Attendance History</DialogTitle>
             <DialogDescription>
-              {selectedEmployee?.name || "Employee"} · {historyMode === "week" ? "This week" : "This month"}
+              {selectedEmployee?.name || "Employee"} ·{" "}
+              {historyMode === "week"
+                ? `Week of ${format(startOfWeek(date, { weekStartsOn: 1 }), "d MMM")} – ${format(
+                    isAfter(endOfWeek(date, { weekStartsOn: 1 }), startOfDay(new Date()))
+                      ? startOfDay(new Date())
+                      : endOfWeek(date, { weekStartsOn: 1 }),
+                    "d MMM yyyy"
+                  )}`
+                : format(startOfMonth(date), "MMMM yyyy")}
             </DialogDescription>
           </DialogHeader>
 

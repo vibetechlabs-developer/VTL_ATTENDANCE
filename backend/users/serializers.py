@@ -98,11 +98,13 @@ class EmployeeCreateSerializer(serializers.Serializer):
             role=validated_data['role'],
         )
         manager_user = None
-        if validated_data.get('manager_id'):
-            manager_user = User.objects.filter(id=validated_data.get('manager_id')).first()
-        elif validated_data.get('manager_employee_id'):
-            mgr_emp = Employee.objects.select_related('user').filter(id=validated_data.get('manager_employee_id')).first()
+        if validated_data.get('manager_employee_id'):
+            mgr_emp = Employee.objects.select_related('user').filter(
+                id=validated_data.get('manager_employee_id')
+            ).first()
             manager_user = mgr_emp.user if mgr_emp else None
+        elif validated_data.get('manager_id'):
+            manager_user = User.objects.filter(id=validated_data.get('manager_id')).first()
 
         employee = Employee.objects.create(
             user=user,
@@ -142,15 +144,21 @@ class EmployeeUpdateSerializer(serializers.Serializer):
             instance.department = validated_data['department'].strip()
         if 'phone' in validated_data:
             instance.phone = validated_data['phone'].strip()
-        if 'manager_id' in validated_data:
-            mid = validated_data.get('manager_id')
-            instance.manager = User.objects.filter(id=mid).first() if mid else None
-        elif 'manager_employee_id' in validated_data:
-            meid = validated_data.get('manager_employee_id')
+
+        # Manager: frontend often sends both keys with manager_id: null and manager_employee_id set.
+        # Checking manager_id first would clear the manager and skip employee resolution.
+        has_me = 'manager_employee_id' in validated_data
+        has_mid = 'manager_id' in validated_data
+        if has_me or has_mid:
+            meid = validated_data.get('manager_employee_id') if has_me else None
+            mid = validated_data.get('manager_id') if has_mid else None
             if meid:
                 mgr_emp = Employee.objects.select_related('user').filter(id=meid).first()
                 instance.manager = mgr_emp.user if mgr_emp else None
+            elif mid:
+                instance.manager = User.objects.filter(id=mid).first()
             else:
                 instance.manager = None
+
         instance.save()
         return instance
