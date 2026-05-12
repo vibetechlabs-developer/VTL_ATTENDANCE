@@ -1,20 +1,21 @@
-cat >> /var/www/VTL_ATTENDANCE/.gitignore << 'EOF'
-
 # Python
 __pycache__/
+*.py[cod]
+*$py.class
 *.pyc
 *.pyo
 *.pyd
+.Python
 venv/
 backend/venv/
+
+# Env
 .env
 backend/.env
 frontend/.env*
 
 # Node
 frontend/node_modules/
-frontend/package-lock.json
 
-# Static files
+# Django
 backend/staticfiles/
-EOF
