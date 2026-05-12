@@ -922,27 +922,19 @@
   width: 42px;
   height: 42px;
   border-radius: 10px;
-  background: linear-gradient(145deg, #fdba74 0%, #f97316 42%, #ea580c 100%);
+  background: transparent;
   display: flex;
   align-items: center;
   justify-content: center;
   flex-shrink: 0;
-  box-shadow:
-    0 4px 18px rgba(234, 88, 12, 0.42),
-    0 0 28px rgba(249, 115, 22, 0.2),
-    inset 0 1px 0 rgba(255, 255, 255, 0.35),
-    inset 0 -2px 0 rgba(0, 0, 0, 0.12);
-  animation: login-logopulse 3s ease-in-out infinite;
+  box-shadow: none;
+  animation: none;
 }
 
 .dark .login-logo-3d {
-  background: linear-gradient(145deg, #fb923c 0%, #ea580c 48%, #c2410c 100%);
-  box-shadow:
-    0 4px 22px rgba(234, 88, 12, 0.55),
-    0 0 44px rgba(249, 115, 22, 0.22),
-    inset 0 1px 0 rgba(255, 255, 255, 0.28),
-    inset 0 -2px 0 rgba(0, 0, 0, 0.35);
-  animation: login-logopulse-dark 3s ease-in-out infinite;
+  background: transparent;
+  box-shadow: none;
+  animation: none;
 }
 
 .login-logo-3d img {
