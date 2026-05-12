@@ -12,7 +12,7 @@ import { Logo } from "@/components/Logo";
 import { useAuthStore } from "@/store/authStore";
 import { cn } from "@/lib/utils";
 
-/** External Enterprise CRM (same-tab navigation). */
+/** External Enterprise CRM. */
 export const EXTERNAL_VTL_CRM_URL = "https://vibetechlabs.com/crm/" as const;
 
 type SidebarNavItem = {
@@ -25,12 +25,12 @@ type SidebarNavItem = {
 
 type SidebarNavSection = { group: string; items: SidebarNavItem[] };
 
-function prependCrmNav(sections: SidebarNavSection[]): SidebarNavSection[] {
+function appendCrmNav(sections: SidebarNavSection[]): SidebarNavSection[] {
   const crm: SidebarNavSection = {
     group: "Sales",
     items: [{ title: "CRM", url: EXTERNAL_VTL_CRM_URL, icon: BarChart3, external: true }],
   };
-  return [crm, ...sections];
+  return [...sections, crm];
 }
 
 const adminNav: SidebarNavSection[] = [
@@ -126,13 +126,13 @@ export function AppSidebar() {
   if (role === "employee") {
     nav = employeeNav;
   } else if (role === "sales") {
-    nav = prependCrmNav(employeeNav);
+    nav = appendCrmNav(employeeNav);
   } else if (role === "manager") {
     nav = managerNav;
   } else if (role === "hr") {
-    nav = prependCrmNav(hrNav);
+    nav = appendCrmNav(hrNav);
   } else {
-    nav = prependCrmNav(adminNav);
+    nav = appendCrmNav(adminNav);
   }
 
   const isActive = (url: string, end?: boolean) =>
@@ -140,7 +140,7 @@ export function AppSidebar() {
 
   return (
     <Sidebar collapsible="icon" className="border-r border-border/30 bg-sidebar/60 backdrop-blur-xl">
-      <SidebarHeader className="border-b border-border/40 h-14 flex items-center justify-center px-3 shrink-0">
+      <SidebarHeader className="border-b border-border/40 h-16 flex items-center justify-center px-3 shrink-0">
         <Logo collapsed={collapsed} />
       </SidebarHeader>
 
@@ -180,7 +180,7 @@ export function AppSidebar() {
                     <SidebarMenuItem key={`${section.group}-${item.title}-${item.url}`}>
                       <SidebarMenuButton asChild isActive={active} tooltip={item.title} className={btnClass}>
                         {item.external ? (
-                          <a href={item.url} className={rowClass}>
+                          <a href={item.url} target="_blank" rel="noopener noreferrer" className={rowClass}>
                             {inner}
                           </a>
                         ) : (
