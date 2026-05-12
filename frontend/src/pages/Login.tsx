@@ -239,7 +239,7 @@ export default function Login() {
   return (
     <div
       ref={sceneRef}
-      className="login-scene min-h-screen w-full overflow-y-auto flex items-center justify-center p-4 sm:p-8 relative"
+      className="login-scene relative flex min-h-dvh w-full flex-col items-center justify-center overflow-y-auto p-4 sm:p-6 lg:p-8"
     >
       {/* Canvas particles */}
       <canvas
@@ -262,15 +262,16 @@ export default function Login() {
         <ThemeToggle />
       </div>
 
-      <div className="login-container relative z-10 w-full max-w-5xl mx-auto flex flex-col lg:flex-row min-h-[auto] lg:h-full lg:max-h-[640px] rounded-2xl lg:rounded-3xl shadow-none lg:shadow-2xl overflow-hidden bg-card border-glow-shine">
+      <div className="relative z-10 flex w-full max-w-5xl shrink-0 justify-center self-center px-0 sm:px-1">
+        <div className="login-container relative flex w-full max-w-5xl flex-col overflow-hidden rounded-3xl border-glow-shine bg-card shadow-2xl lg:h-full lg:max-h-[min(640px,90dvh)] lg:flex-row">
         {/* ─── Left Brand Panel ─── */}
-        <div className="login-left-panel hidden lg:flex flex-1 flex-col justify-between relative z-[3] px-10 py-8 lg:px-12 lg:py-10">
+        <div className="login-left-panel relative z-[3] hidden flex-1 flex-col items-center justify-between px-8 py-8 text-center sm:px-10 lg:flex lg:px-12 lg:py-10">
           {/* Brand */}
           <motion.div
             initial={{ opacity: 0, y: 12 }}
             animate={{ opacity: 1, y: 0 }}
             transition={{ duration: 0.5 }}
-            className="flex items-center gap-3"
+            className="flex items-center justify-center gap-3"
           >
             <div className="login-logo-3d overflow-hidden flex items-center justify-center p-1.5">
               <img
@@ -286,12 +287,12 @@ export default function Login() {
           </motion.div>
 
           {/* Hero */}
-          <div className="flex-1 flex flex-col justify-center py-4 max-w-md">
+          <div className="flex w-full max-w-lg flex-1 flex-col items-center justify-center py-6">
             <motion.div
               initial={{ opacity: 0, y: 12 }}
               animate={{ opacity: 1, y: 0 }}
               transition={{ delay: 0.1, duration: 0.5 }}
-              className="login-badge"
+              className="login-badge mx-auto"
             >
               <span className="login-badge-dot" />
               <Sparkles className="h-3 w-3" />
@@ -302,7 +303,7 @@ export default function Login() {
               initial={{ opacity: 0, y: 12 }}
               animate={{ opacity: 1, y: 0 }}
               transition={{ delay: 0.2, duration: 0.5 }}
-              className="login-headline"
+              className="login-headline text-balance"
             >
               Calm attendance.<br />
               <em>Happier workforce.</em>
@@ -312,7 +313,7 @@ export default function Login() {
               initial={{ opacity: 0, y: 12 }}
               animate={{ opacity: 1, y: 0 }}
               transition={{ delay: 0.3, duration: 0.5 }}
-              className="login-subtext"
+              className="login-subtext mx-auto text-balance"
             >
               Face check-in, geo-verified at the VTL office, zero friction. A serene CRM for HR, managers and teams.
             </motion.p>
@@ -321,7 +322,7 @@ export default function Login() {
               initial={{ opacity: 0, y: 12 }}
               animate={{ opacity: 1, y: 0 }}
               transition={{ delay: 0.4, duration: 0.5 }}
-              className="flex flex-wrap gap-2"
+              className="flex flex-wrap justify-center gap-2"
             >
               {["Face check-in", "Geo verified", "Smart leaves", "Live analytics"].map((f) => (
                 <span key={f} className="login-tag">{f}</span>
@@ -334,19 +335,19 @@ export default function Login() {
             initial={{ opacity: 0 }}
             animate={{ opacity: 1 }}
             transition={{ delay: 0.5 }}
-            className="login-footer-text"
+            className="login-footer-text w-full pt-2 text-center"
           >
             © 2026 Vibe Tech Labs. All rights reserved.
           </motion.p>
         </div>
 
         {/* ─── Right Panel — Login card ─── */}
-        <div className="login-right-panel relative z-[3] flex flex-col justify-center px-8 py-6 lg:px-9 lg:py-7">
+        <div className="login-right-panel relative z-[3] flex w-full flex-col items-center justify-center px-6 py-8 sm:px-8 lg:px-9 lg:py-7">
           {/* Glass panel background (dark) */}
           <div className="login-glass-panel" />
           <div className="login-glass-shine" />
 
-          <div className="relative z-[1]">
+          <div className="relative z-[1] mx-auto w-full max-w-[400px] px-1 sm:px-0">
             <AnimatePresence mode="wait">
               {step === "creds" && (
                 <motion.div
@@ -368,12 +369,12 @@ export default function Login() {
                     <span className="font-bold text-base login-brand-name">Vibe Tech Labs</span>
                   </div>
 
-                  <div className="space-y-1">
+                  <div className="space-y-1 text-center sm:text-left">
                     <h2 className="login-welcome">Welcome back</h2>
                     <p className="login-welcome-sub">Sign in with your email and password.</p>
                   </div>
 
-                  <form onSubmit={handleCreds} className="space-y-3">
+                  <form onSubmit={handleCreds} className="space-y-3 text-left">
                     <div className="space-y-1">
                       <Label htmlFor="email" className="login-label">Email</Label>
                       <Input id="email" type="email" value={email} onChange={(e) => setEmail(e.target.value)} required className="login-input" />
@@ -573,8 +574,9 @@ export default function Login() {
               )}
             </AnimatePresence>
 
-            <p className="login-protected mt-3">Sessions use JWT from the API · sign out clears tokens locally</p>
+            <p className="login-protected mt-3 text-center text-xs sm:text-left">Sessions use JWT from the API · sign out clears tokens locally</p>
           </div>
+        </div>
         </div>
       </div>
     </div>

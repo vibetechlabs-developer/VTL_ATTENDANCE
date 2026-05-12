@@ -1024,6 +1024,7 @@
   letter-spacing: -0.8px;
   color: #085041;
   margin-bottom: 10px;
+  text-align: center;
 }
 
 .login-headline em {
@@ -1034,6 +1035,7 @@
 .dark .login-headline {
   color: #dffff3;
   text-shadow: 0 0 40px rgba(29, 158, 117, 0.15);
+  text-align: center;
 }
 
 .dark .login-headline em {
@@ -1046,11 +1048,13 @@
   color: #0F6E56;
   line-height: 1.75;
   margin-bottom: 20px;
-  max-width: 340px;
+  max-width: 380px;
+  text-align: center;
 }
 
 .dark .login-subtext {
   color: #6fa896;
+  text-align: center;
 }
 
 /* ─── Tags ─── */
@@ -1442,17 +1446,7 @@
   box-shadow: 0 0 8px rgba(37, 212, 153, 0.6);
 }
 
-/* ─── Responsive: hide left panel on mobile ─── */
-@media (max-width: 1023px) {
-  .login-scene>div:first-of-type:not(.login-right-panel):not([class*="absolute"]) {
-    display: none;
-  }
-
-  .login-right-panel {
-    width: 100%;
-    min-height: 100vh;
-  }
-}
+/* Login: mobile layout handled in Login.tsx (hidden lg:flex). */
 
 /* ─── Premium motion accents (dashboard) ─── */
 @keyframes vtl-mesh-shift {
