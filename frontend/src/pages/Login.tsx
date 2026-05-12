@@ -276,7 +276,7 @@ export default function Login() {
               <img
                 src="/vtl-logo-transparent.png"
                 alt="Vibe Tech Labs"
-                className="h-full w-full relative z-10 object-cover object-left scale-125 ml-1"
+                className="h-full w-full relative z-10 object-cover object-left scale-[1.35] translate-x-1 translate-y-0.5"
               />
             </div>
             <div>
@@ -362,7 +362,7 @@ export default function Login() {
                       <img
                         src="/vtl-logo-transparent.png"
                         alt="Vibe Tech Labs"
-                        className="h-full w-full object-cover object-left scale-125 ml-1"
+                        className="h-full w-full object-cover object-left scale-[1.35] translate-x-1 translate-y-0.5"
                       />
                     </div>
                     <span className="font-bold text-base login-brand-name">Vibe Tech Labs</span>
