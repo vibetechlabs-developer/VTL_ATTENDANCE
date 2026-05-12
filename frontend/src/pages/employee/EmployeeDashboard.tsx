@@ -382,96 +382,7 @@ export default function EmployeeDashboard() {
         </div>
       </div>
 
-      <div className="grid gap-4 lg:grid-cols-3">
-        <Card className="soft-3d border-0 overflow-hidden">
-          <CardHeader className="pb-2">
-            <CardTitle className="text-sm font-semibold">Leave balance</CardTitle>
-            <p className="text-xs text-muted-foreground">Casual · Sick · Paid</p>
-          </CardHeader>
-          <CardContent>
-            {leaveBalanceLoading ? (
-              <div className="flex justify-center py-4 gap-8">
-                <Skeleton className="h-[76px] w-[76px] rounded-full" />
-                <Skeleton className="h-[76px] w-[76px] rounded-full hidden sm:block" />
-                <Skeleton className="h-[76px] w-[76px] rounded-full hidden sm:block" />
-              </div>
-            ) : (
-              <LeaveBalanceRings balance={leaveBalance} />
-            )}
-            <Button variant="ghost" size="sm" className="w-full mt-2 text-xs rounded-xl" asChild>
-              <Link to="/employee/leaves">View leave history</Link>
-            </Button>
-          </CardContent>
-        </Card>
-
-        <Card className="soft-3d border-0">
-          <CardHeader className="pb-2">
-            <CardTitle className="text-sm font-semibold">This week&apos;s hours</CardTitle>
-            <p className="text-xs text-muted-foreground">Goal {WEEK_GOAL_HOURS}h (Mon–Sun)</p>
-          </CardHeader>
-          <CardContent className="space-y-3">
-            <div className="flex items-baseline justify-between gap-2">
-              <span className="text-3xl font-bold tabular-nums tracking-tight">{weekWorkedHours}h</span>
-              <span className="text-sm text-muted-foreground tabular-nums">/ {WEEK_GOAL_HOURS}h</span>
-            </div>
-            <div className="h-2.5 rounded-full bg-muted overflow-hidden">
-              <motion.div
-                className="h-full rounded-full bg-gradient-to-r from-primary to-emerald-400"
-                initial={{ width: 0 }}
-                animate={{ width: `${weekProgressPct}%` }}
-                transition={{ type: "spring", stiffness: 120, damping: 18 }}
-              />
-            </div>
-            <p className="text-xs text-muted-foreground">{weekProgressPct}% of weekly goal logged.</p>
-          </CardContent>
-        </Card>
-
-        <Card className="soft-3d border-0">
-          <CardHeader className="pb-2">
-            <CardTitle className="text-sm font-semibold">Quick log</CardTitle>
-            <p className="text-xs text-muted-foreground">Add a bullet to your daily updates anytime</p>
-          </CardHeader>
-          <CardContent className="space-y-2">
-            <Textarea
-              value={quickNote}
-              onChange={(e) => setQuickNote(e.target.value)}
-              placeholder="Shipped feature X, blocked on Y…"
-              className="min-h-[72px] rounded-2xl text-sm"
-              disabled={quickNoteSending}
-            />
-            <Button
-              type="button"
-              size="sm"
-              className="w-full rounded-xl"
-              disabled={!quickNote.trim() || quickNoteSending}
-              onClick={() => void postQuickNote()}
-            >
-              {quickNoteSending ? "Saving…" : "Add to daily log"}
-            </Button>
-          </CardContent>
-        </Card>
-      </div>
-
-      {showHowToUse && (
-        <Card className="soft-3d border-0 hover-shine">
-          <CardContent className="p-4 sm:p-5 flex flex-col sm:flex-row sm:items-start gap-3">
-            <div className="h-10 w-10 rounded-2xl bg-primary/10 border border-primary/20 flex items-center justify-center">
-              <Sparkles className="h-5 w-5 text-primary" />
-            </div>
-            <div className="flex-1 min-w-0">
-              <p className="text-sm font-semibold">How to use</p>
-              <p className="text-xs text-muted-foreground mt-1">
-                1) Tap <b>Check In</b> (Face + GPS). 2) For breaks, tap <b>Break</b> and then <b>Resume</b>. 3) When your work is done, tap <b>Check Out</b>.
-              </p>
-            </div>
-            <Button size="sm" className="hover-shine" onClick={() => setShowHowToUse(false)} type="button">
-              Got it
-            </Button>
-          </CardContent>
-        </Card>
-      )}
-
-      {/* Check-in hero card — 3D sage */}
+      {/* Check-in hero card — 3D sage (primary: first thing after greeting) */}
       <Card className="relative overflow-hidden border-0 shadow-3d rounded-3xl min-h-[220px] flex flex-col justify-center">
         <div className="absolute inset-0 bg-sage-3d vtl-animated-mesh" />
         <div className="absolute -top-10 -right-10 w-48 h-48 rounded-full bg-white/15 blur-2xl motion-safe:animate-pulse" />
@@ -581,6 +492,95 @@ export default function EmployeeDashboard() {
           </AnimatePresence>
         </CardContent>
       </Card>
+
+      <div className="grid gap-4 lg:grid-cols-3">
+        <Card className="soft-3d border-0 overflow-hidden">
+          <CardHeader className="pb-2">
+            <CardTitle className="text-sm font-semibold">Leave balance</CardTitle>
+            <p className="text-xs text-muted-foreground">Casual · Sick · Paid</p>
+          </CardHeader>
+          <CardContent>
+            {leaveBalanceLoading ? (
+              <div className="flex justify-center py-4 gap-8">
+                <Skeleton className="h-[76px] w-[76px] rounded-full" />
+                <Skeleton className="h-[76px] w-[76px] rounded-full hidden sm:block" />
+                <Skeleton className="h-[76px] w-[76px] rounded-full hidden sm:block" />
+              </div>
+            ) : (
+              <LeaveBalanceRings balance={leaveBalance} />
+            )}
+            <Button variant="ghost" size="sm" className="w-full mt-2 text-xs rounded-xl" asChild>
+              <Link to="/employee/leaves">View leave history</Link>
+            </Button>
+          </CardContent>
+        </Card>
+
+        <Card className="soft-3d border-0">
+          <CardHeader className="pb-2">
+            <CardTitle className="text-sm font-semibold">This week&apos;s hours</CardTitle>
+            <p className="text-xs text-muted-foreground">Goal {WEEK_GOAL_HOURS}h (Mon–Sun)</p>
+          </CardHeader>
+          <CardContent className="space-y-3">
+            <div className="flex items-baseline justify-between gap-2">
+              <span className="text-3xl font-bold tabular-nums tracking-tight">{weekWorkedHours}h</span>
+              <span className="text-sm text-muted-foreground tabular-nums">/ {WEEK_GOAL_HOURS}h</span>
+            </div>
+            <div className="h-2.5 rounded-full bg-muted overflow-hidden">
+              <motion.div
+                className="h-full rounded-full bg-gradient-to-r from-primary to-emerald-400"
+                initial={{ width: 0 }}
+                animate={{ width: `${weekProgressPct}%` }}
+                transition={{ type: "spring", stiffness: 120, damping: 18 }}
+              />
+            </div>
+            <p className="text-xs text-muted-foreground">{weekProgressPct}% of weekly goal logged.</p>
+          </CardContent>
+        </Card>
+
+        <Card className="soft-3d border-0">
+          <CardHeader className="pb-2">
+            <CardTitle className="text-sm font-semibold">Quick log</CardTitle>
+            <p className="text-xs text-muted-foreground">Add a bullet to your daily updates anytime</p>
+          </CardHeader>
+          <CardContent className="space-y-2">
+            <Textarea
+              value={quickNote}
+              onChange={(e) => setQuickNote(e.target.value)}
+              placeholder="Shipped feature X, blocked on Y…"
+              className="min-h-[72px] rounded-2xl text-sm"
+              disabled={quickNoteSending}
+            />
+            <Button
+              type="button"
+              size="sm"
+              className="w-full rounded-xl"
+              disabled={!quickNote.trim() || quickNoteSending}
+              onClick={() => void postQuickNote()}
+            >
+              {quickNoteSending ? "Saving…" : "Add to daily log"}
+            </Button>
+          </CardContent>
+        </Card>
+      </div>
+
+      {showHowToUse && (
+        <Card className="soft-3d border-0 hover-shine">
+          <CardContent className="p-4 sm:p-5 flex flex-col sm:flex-row sm:items-start gap-3">
+            <div className="h-10 w-10 rounded-2xl bg-primary/10 border border-primary/20 flex items-center justify-center">
+              <Sparkles className="h-5 w-5 text-primary" />
+            </div>
+            <div className="flex-1 min-w-0">
+              <p className="text-sm font-semibold">How to use</p>
+              <p className="text-xs text-muted-foreground mt-1">
+                1) Tap <b>Check In</b> (Face + GPS). 2) For breaks, tap <b>Break</b> and then <b>Resume</b>. 3) When your work is done, tap <b>Check Out</b>.
+              </p>
+            </div>
+            <Button size="sm" className="hover-shine" onClick={() => setShowHowToUse(false)} type="button">
+              Got it
+            </Button>
+          </CardContent>
+        </Card>
+      )}
 
       {/* Quick actions — peach + powder + sage 3D */}
       <div className="grid grid-cols-1 sm:grid-cols-2 xl:grid-cols-4 gap-4 sm:gap-5">
