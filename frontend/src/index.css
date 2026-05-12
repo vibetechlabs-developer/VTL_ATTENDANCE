@@ -935,6 +935,23 @@
   animation: login-logopulse 3s ease-in-out infinite;
 }
 
+.login-logo-3d img {
+  display: block;
+  object-fit: contain;
+  object-position: center;
+  width: auto;
+  height: auto;
+  max-width: 82%;
+  max-height: 82%;
+  margin: auto;
+}
+
+.login-logo-3d-sm {
+  width: 36px;
+  height: 36px;
+  border-radius: 9px;
+}
+
 @keyframes login-logopulse {
 
   0%,

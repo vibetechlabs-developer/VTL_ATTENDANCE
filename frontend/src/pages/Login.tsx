@@ -273,14 +273,10 @@ export default function Login() {
             transition={{ duration: 0.5 }}
             className="flex items-center justify-center gap-3"
           >
-            <div className="login-logo-3d overflow-hidden flex items-center justify-center p-1.5">
-              <img
-                src="/vtl-logo-transparent.png"
-                alt="Vibe Tech Labs"
-                className="h-full w-full relative z-10 object-cover object-left scale-[1.35] translate-x-1 translate-y-0.5"
-              />
+            <div className="login-logo-3d shrink-0 overflow-hidden">
+              <img src="/vtl-logo-transparent.png" alt="" className="relative z-10" />
             </div>
-            <div>
+            <div className="text-left">
               <span className="font-bold text-[16px] block leading-tight login-brand-name">Vibe Tech Labs</span>
               <span className="text-[11px] login-brand-sub">A Digital Idea To Grow You Up</span>
             </div>
@@ -359,12 +355,8 @@ export default function Login() {
                 >
                   {/* Mobile logo */}
                   <div className="flex items-center justify-center gap-2.5 lg:hidden mb-1">
-                    <div className="h-9 w-9 overflow-hidden rounded-xl bg-primary/10 flex items-center justify-center p-1">
-                      <img
-                        src="/vtl-logo-transparent.png"
-                        alt="Vibe Tech Labs"
-                        className="h-full w-full object-cover object-left scale-[1.35] translate-x-1 translate-y-0.5"
-                      />
+                    <div className="login-logo-3d login-logo-3d-sm shrink-0 overflow-hidden">
+                      <img src="/vtl-logo-transparent.png" alt="" className="relative z-10" />
                     </div>
                     <span className="font-bold text-base login-brand-name">Vibe Tech Labs</span>
                   </div>
