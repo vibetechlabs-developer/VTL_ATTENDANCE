@@ -2,6 +2,7 @@ from rest_framework import serializers
 from django.db import transaction
 from django.utils.crypto import get_random_string
 from .models import User, Employee
+from attendance.face_utils import is_valid_stored_encoding
 
 class LoginSerializer(serializers.Serializer):
     email = serializers.EmailField()
@@ -56,7 +57,7 @@ class EmployeeListSerializer(serializers.ModelSerializer):
         return None
 
     def get_faceStatus(self, obj):
-        return 'registered' if obj.face_encoding else 'pending'
+        return 'registered' if is_valid_stored_encoding(obj.face_encoding) else 'pending'
 
     def get_status(self, obj):
         return 'active'

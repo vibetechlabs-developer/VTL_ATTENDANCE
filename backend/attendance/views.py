@@ -13,10 +13,12 @@ from users.models import Employee, OfficeLocation
 from leaves.models import LeaveRequest
 from .models import AttendanceLog, BreakLog
 from .serializers import CheckInSerializer, CheckOutSerializer, AttendanceLogSerializer
-from .face_utils import decode_base64_image, get_face_encoding, match_face
-
-# Keep strict verification enabled for production.
-TESTING_OPEN_ATTENDANCE = False
+from .face_utils import (
+    decode_base64_image,
+    get_face_encoding,
+    is_valid_stored_encoding,
+    match_face,
+)
 
 
 # ─── Helper: Location check ────────────────────────────
@@ -41,6 +43,24 @@ def validate_office_radius(user_lat, user_lng):
     return True, distance, None
 
 
+def _close_open_attendance_session(log, lat, lng):
+    """Set check-out and hours on an open log; end any active breaks."""
+    now = timezone.now()
+    for b in BreakLog.objects.filter(attendance=log, break_end__isnull=True):
+        b.break_end = now
+        b.save()
+        log.break_minutes += int((b.break_end - b.break_start).total_seconds() // 60)
+
+    log.check_out = now
+    log.check_out_lat = lat
+    log.check_out_lng = lng
+    total_minutes = int((log.check_out - log.check_in).total_seconds() // 60)
+    worked_minutes = max(0, total_minutes - (log.break_minutes or 0))
+    log.total_hours = round(worked_minutes / 60, 2)
+    log.overtime_hours = round(max(0, log.total_hours - 8), 2) if log.total_hours > 8 else 0
+    log.save()
+
+
 # ─── Check In ──────────────────────────────────────────
 class CheckInView(APIView):
     permission_classes = [IsAuthenticated]
@@ -54,24 +74,32 @@ class CheckInView(APIView):
         lat = serializer.validated_data['latitude']
         lng = serializer.validated_data['longitude']
 
+        relaxed = getattr(settings, "ATTENDANCE_RELAXED_VERIFY", False)
+
         in_range, distance_m, location_error = validate_office_radius(lat, lng)
-        if (not TESTING_OPEN_ATTENDANCE) and (not in_range):
+        if (not relaxed) and (not in_range):
             return Response(
                 {'error': location_error, 'distance_meters': int(distance_m) if distance_m is not None else None},
                 status=400
             )
 
-        # 2. Aaje check-in thai gayo che?
+        # 2. Aaje active check-in che? (open session = check_in set, check_out empty)
         today = timezone.now().date()
-        existing = AttendanceLog.objects.filter(
-            employee=request.user.employee,
-            date=today
-        ).first()
+        active_open = (
+            AttendanceLog.objects.filter(
+                employee=request.user.employee,
+                date=today,
+                check_in__isnull=False,
+                check_out__isnull=True,
+            )
+            .order_by('-check_in')
+            .first()
+        )
 
-        # TESTING MODE (temporary):
-        # allow multiple check-ins in same day only after user has checked out.
-        # Revert this block after testing to enforce single check-in/day.
-        if existing and existing.check_in and not existing.check_out:
+        if active_open and relaxed:
+            # Testing: close previous open session so another check-in / check-out cycle works.
+            _close_open_attendance_session(active_open, lat, lng)
+        elif active_open and not relaxed:
             return Response(
                 {'error': 'You have already checked in today.'},
                 status=400
@@ -81,12 +109,13 @@ class CheckInView(APIView):
         image_data = serializer.validated_data['image']
         matched_employee = request.user.employee
         distance = None
-        if (not TESTING_OPEN_ATTENDANCE) and (not request.user.employee.face_encoding):
+        request.user.employee.refresh_from_db(fields=["face_encoding"])
+        if (not relaxed) and (not is_valid_stored_encoding(request.user.employee.face_encoding)):
             return Response(
                 {'error': 'Face is not registered for your account. Please contact admin or register face first.'},
                 status=400
             )
-        if not TESTING_OPEN_ATTENDANCE:
+        if not relaxed:
             try:
                 image = decode_base64_image(image_data)
                 live_encoding = get_face_encoding(image)
@@ -99,7 +128,7 @@ class CheckInView(APIView):
                 matched_employee, distance = match_face(live_encoding, [request.user.employee])
 
                 if matched_employee is None:
-                    threshold = getattr(settings, "FACE_MATCH_THRESHOLD", 0.5)
+                    threshold = float(getattr(settings, "FACE_MATCH_THRESHOLD", 0.42))
                     return Response(
                         {
                             'error': 'Face does not match your registered profile. Please face camera clearly and retry.',
@@ -108,6 +137,8 @@ class CheckInView(APIView):
                         },
                         status=401
                     )
+                if matched_employee.id != request.user.employee.id:
+                    return Response({'error': 'Face verification failed.'}, status=401)
 
             except RuntimeError as err:
                 return Response(
@@ -145,19 +176,26 @@ class CheckOutView(APIView):
         lat = serializer.validated_data['latitude']
         lng = serializer.validated_data['longitude']
 
+        relaxed = getattr(settings, "ATTENDANCE_RELAXED_VERIFY", False)
+
         in_range, distance_m, location_error = validate_office_radius(lat, lng)
-        if (not TESTING_OPEN_ATTENDANCE) and (not in_range):
+        if (not relaxed) and (not in_range):
             return Response(
                 {'error': location_error, 'distance_meters': int(distance_m) if distance_m is not None else None},
                 status=400
             )
 
         today = timezone.now().date()
-        log = AttendanceLog.objects.filter(
-            employee=request.user.employee,
-            date=today,
-            check_out=None
-        ).first()
+        log = (
+            AttendanceLog.objects.filter(
+                employee=request.user.employee,
+                date=today,
+                check_out__isnull=True,
+                check_in__isnull=False,
+            )
+            .order_by('-check_in')
+            .first()
+        )
 
         if not log:
             return Response(
@@ -167,12 +205,13 @@ class CheckOutView(APIView):
 
         # Face verify for check-out too (strict; compare against own profile)
         image_data = serializer.validated_data['image']
-        if (not TESTING_OPEN_ATTENDANCE) and (not request.user.employee.face_encoding):
+        request.user.employee.refresh_from_db(fields=["face_encoding"])
+        if (not relaxed) and (not is_valid_stored_encoding(request.user.employee.face_encoding)):
             return Response(
                 {'error': 'Face is not registered for your account. Please contact admin or register face first.'},
                 status=400
             )
-        if not TESTING_OPEN_ATTENDANCE:
+        if not relaxed:
             try:
                 image = decode_base64_image(image_data)
                 live_encoding = get_face_encoding(image)
@@ -185,7 +224,7 @@ class CheckOutView(APIView):
                 matched_employee, distance = match_face(live_encoding, [request.user.employee])
 
                 if matched_employee is None:
-                    threshold = getattr(settings, "FACE_MATCH_THRESHOLD", 0.5)
+                    threshold = float(getattr(settings, "FACE_MATCH_THRESHOLD", 0.42))
                     return Response(
                         {
                             'error': 'Face does not match your registered profile. Please face camera clearly and retry.',
@@ -194,6 +233,8 @@ class CheckOutView(APIView):
                         },
                         status=401
                     )
+                if matched_employee.id != request.user.employee.id:
+                    return Response({'error': 'Face verification failed.'}, status=401)
             except RuntimeError as err:
                 return Response(
                     {'error': f'Face verification service unavailable: {str(err)}'},
@@ -464,11 +505,16 @@ class BreakStartView(APIView):
 
     def post(self, request):
         today = timezone.now().date()
-        log = AttendanceLog.objects.filter(
-            employee=request.user.employee,
-            date=today,
-            check_out=None
-        ).first()
+        log = (
+            AttendanceLog.objects.filter(
+                employee=request.user.employee,
+                date=today,
+                check_out__isnull=True,
+                check_in__isnull=False,
+            )
+            .order_by('-check_in')
+            .first()
+        )
 
         if not log:
             return Response({'error': 'Please check in first.'}, status=400)
@@ -499,10 +545,16 @@ class BreakEndView(APIView):
 
     def post(self, request):
         today = timezone.now().date()
-        log = AttendanceLog.objects.filter(
-            employee=request.user.employee,
-            date=today
-        ).first()
+        log = (
+            AttendanceLog.objects.filter(
+                employee=request.user.employee,
+                date=today,
+                check_out__isnull=True,
+                check_in__isnull=False,
+            )
+            .order_by('-check_in')
+            .first()
+        )
 
         if not log:
             return Response({'error': 'Attendance record not found.'}, status=400)

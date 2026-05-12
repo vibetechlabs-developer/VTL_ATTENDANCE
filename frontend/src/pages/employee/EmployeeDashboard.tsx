@@ -18,8 +18,19 @@ import { useAuthStore } from "@/store/authStore";
 import { useDataStore } from "@/store/dataStore";
 import { cn } from "@/lib/utils";
 import { toast } from "sonner";
-import { format } from "date-fns";
-import { attendanceBreakEndRequest, attendanceBreakStartRequest, attendanceSessionRequest, updatesPostRequest } from "@/lib/api";
+import { format, subDays, startOfWeek, endOfWeek, isWithinInterval, parseISO } from "date-fns";
+import {
+  attendanceBreakEndRequest,
+  attendanceBreakStartRequest,
+  attendanceHistoryRequest,
+  attendanceSessionRequest,
+  leaveBalanceRequest,
+  leaveHistoryRequest,
+  updatesPostRequest,
+} from "@/lib/api";
+import { LeaveBalanceRings, type LeaveBalanceShape } from "@/components/LeaveBalanceRings";
+import { Skeleton } from "@/components/ui/skeleton";
+import { Flame } from "lucide-react";
 
 function formatDuration(ms: number) {
   if (ms < 0) ms = 0;
@@ -31,8 +42,51 @@ function formatDuration(ms: number) {
 }
 
 const FULL_DAY_MS = 8 * 60 * 60 * 1000;
+const WEEK_GOAL_HOURS = 40;
 
-type VerifyStep = "face" | "location" | "done" | null;
+const DAY_TIPS = [
+  "Deep work before email — guard your first hour.",
+  "A short walk between meetings resets focus.",
+  "Leave buffers between tasks; humans are not APIs.",
+  "Ship something small today; momentum compounds.",
+];
+
+const EARLY_REASON_CHIPS = [
+  "Doctor appointment",
+  "Half day",
+  "Family",
+  "Personal errand",
+  "Feeling unwell",
+  "Approved early leave",
+];
+
+function isLateCheckIn(iso: string): boolean {
+  const dt = new Date(iso);
+  if (Number.isNaN(dt.getTime())) return false;
+  return dt.getHours() > 10 || (dt.getHours() === 10 && dt.getMinutes() > 15);
+}
+
+function punctualityStreakFromLogs(logs: { date: string; check_in: string | null }[]): number {
+  const map = new Map(logs.map((l) => [l.date, l]));
+  let d = new Date();
+  let streak = 0;
+  for (let i = 0; i < 200; i++) {
+    const w = d.getDay();
+    if (w === 0 || w === 6) {
+      d = subDays(d, 1);
+      continue;
+    }
+    const key = format(d, "yyyy-MM-dd");
+    const log = map.get(key);
+    if (log?.check_in && !isLateCheckIn(log.check_in)) {
+      streak += 1;
+      d = subDays(d, 1);
+    } else {
+      break;
+    }
+  }
+  return streak;
+}
 
 export default function EmployeeDashboard() {
   const { user, accessToken } = useAuthStore();
@@ -47,6 +101,12 @@ export default function EmployeeDashboard() {
   const [showCheckoutVerifyModal, setShowCheckoutVerifyModal] = useState(false);
   const [pendingApprovals, setPendingApprovals] = useState(0);
   const [showHowToUse, setShowHowToUse] = useState(false);
+  const [leaveBalance, setLeaveBalance] = useState<LeaveBalanceShape | null>(null);
+  const [leaveBalanceLoading, setLeaveBalanceLoading] = useState(true);
+  const [weekWorkedHours, setWeekWorkedHours] = useState(0);
+  const [streakDays, setStreakDays] = useState(0);
+  const [quickNote, setQuickNote] = useState("");
+  const [quickNoteSending, setQuickNoteSending] = useState(false);
 
   useEffect(() => {
     const t = setInterval(() => setNow(Date.now()), 1000);
@@ -122,6 +182,64 @@ export default function EmployeeDashboard() {
     void run();
   }, [accessToken, user?.empId]);
 
+  useEffect(() => {
+    if (!accessToken) return;
+    let cancelled = false;
+    setLeaveBalanceLoading(true);
+    void leaveBalanceRequest(accessToken).then(async (res) => {
+      if (!res.ok || cancelled) {
+        if (!cancelled) {
+          setLeaveBalance(null);
+          setLeaveBalanceLoading(false);
+        }
+        return;
+      }
+      const body = (await res.json().catch(() => null)) as LeaveBalanceShape | null;
+      if (!cancelled) {
+        setLeaveBalance(body);
+        setLeaveBalanceLoading(false);
+      }
+    });
+    return () => {
+      cancelled = true;
+    };
+  }, [accessToken]);
+
+  useEffect(() => {
+    if (!accessToken) return;
+    let cancelled = false;
+    void attendanceHistoryRequest(accessToken).then(async (res) => {
+      if (!res.ok || cancelled) return;
+      const logs = (await res.json().catch(() => [])) as { date: string; check_in: string | null; total_hours?: number }[];
+      if (!Array.isArray(logs) || cancelled) return;
+      const ws = startOfWeek(new Date(), { weekStartsOn: 1 });
+      const we = endOfWeek(new Date(), { weekStartsOn: 1 });
+      let hours = 0;
+      for (const l of logs) {
+        if (!l.date) continue;
+        const day = parseISO(l.date);
+        if (Number.isNaN(day.getTime())) continue;
+        if (isWithinInterval(day, { start: ws, end: we })) {
+          hours += Number(l.total_hours ?? 0) || 0;
+        }
+      }
+      setWeekWorkedHours(Math.round(hours * 10) / 10);
+      setStreakDays(punctualityStreakFromLogs(logs));
+    });
+    return () => {
+      cancelled = true;
+    };
+  }, [accessToken]);
+
+  const greetingLine = (() => {
+    const h = new Date().getHours();
+    if (h < 12) return "Good morning";
+    if (h < 17) return "Good afternoon";
+    return "Good evening";
+  })();
+
+  const tipOfDay = DAY_TIPS[(user?.empId?.charCodeAt(0) ?? 0) % DAY_TIPS.length];
+
   const currentBreak = status === "on-break" && breakStartAt ? now - breakStartAt : 0;
   const liveWorkMs = checkInAt ? now - checkInAt - totalBreakMs - currentBreak : 0;
   const workMs = status === "checked-out" ? workedMsToday : liveWorkMs;
@@ -139,7 +257,6 @@ export default function EmployeeDashboard() {
     setShowVerifyModal(false);
     const serverMs = data?.checkInAt ? new Date(data.checkInAt).getTime() : Date.now();
     setCheckInAt(serverMs);
-    toast.success("Check-in successful");
   };
 
   const handleBreak = async () => {
@@ -207,7 +324,6 @@ export default function EmployeeDashboard() {
     const outMs = data?.checkOutAt ? new Date(data.checkOutAt).getTime() : Date.now();
     const workedMsFromApi = typeof data?.totalHours === "number" ? Math.max(0, data.totalHours * 60 * 60 * 1000) : workMs;
     checkOut({ checkOutAt: outMs, workedMsToday: workedMsFromApi });
-    toast.success(isEarly ? "Checked out early. Take care!" : "Checked out. See you tomorrow!");
   };
 
   const quickActions = [
@@ -218,20 +334,122 @@ export default function EmployeeDashboard() {
   ];
 
   const completedPct = Math.min(100, Math.round((workMs / FULL_DAY_MS) * 100));
+  const weekProgressPct = Math.min(100, Math.round((weekWorkedHours / WEEK_GOAL_HOURS) * 100));
+
+  const postQuickNote = async () => {
+    const text = quickNote.trim();
+    if (!text || !accessToken) return;
+    setQuickNoteSending(true);
+    try {
+      const res = await updatesPostRequest(accessToken, `• ${text}`);
+      const body = (await res.json().catch(() => ({}))) as { error?: string };
+      if (!res.ok) {
+        toast.error(body.error || "Could not save note");
+        return;
+      }
+      setQuickNote("");
+      toast.success("Added to your daily log");
+    } finally {
+      setQuickNoteSending(false);
+    }
+  };
 
   return (
     <div className="space-y-6">
       <CheckInModal open={showVerifyModal} onOpenChange={setShowVerifyModal} onVerified={handleVerified} mode="check-in" />
       <CheckInModal open={showCheckoutVerifyModal} onOpenChange={setShowCheckoutVerifyModal} onVerified={handleCheckoutVerified} mode="check-out" />
       <div className="flex flex-wrap items-end justify-between gap-3">
-        <div>
-          <h1 className="text-2xl sm:text-3xl font-bold tracking-tight" style={{ letterSpacing: '-0.5px' }}>Hi, {user?.name.split(" ")[0]} 👋</h1>
-          <p className="text-sm text-muted-foreground mt-1">{format(new Date(), "EEEE, MMMM d, yyyy")}</p>
+        <div className="space-y-1.5 min-w-0">
+          <h1 className="text-2xl sm:text-3xl font-bold tracking-tight" style={{ letterSpacing: "-0.5px" }}>
+            {greetingLine}, {user?.name.split(" ")[0]}
+          </h1>
+          <p className="text-sm text-muted-foreground">{format(new Date(), "EEEE, MMMM d, yyyy")}</p>
+          <p className="text-xs text-muted-foreground/90 max-w-xl leading-relaxed border-l-2 border-primary/30 pl-3 italic">
+            {tipOfDay}
+          </p>
         </div>
-        <div className="hidden sm:flex items-center gap-2 px-3 py-1.5 rounded-full bg-card border border-border shadow-sm">
-          <Sparkles className="h-3.5 w-3.5 text-primary" />
-          <span className="text-xs font-medium">{completedPct}% of your day</span>
+        <div className="hidden sm:flex flex-col items-end gap-2">
+          <div className="flex items-center gap-2 px-3 py-1.5 rounded-full bg-card border border-border shadow-sm">
+            <Sparkles className="h-3.5 w-3.5 text-primary" />
+            <span className="text-xs font-medium tabular-nums">{completedPct}% of your day</span>
+          </div>
+          {streakDays > 0 && (
+            <div className="flex items-center gap-1.5 text-xs font-semibold text-warning px-2 py-1 rounded-full bg-warning/10 border border-warning/25">
+              <Flame className="h-3.5 w-3.5" />
+              <span className="tabular-nums">{streakDays} day punctuality streak</span>
+            </div>
+          )}
         </div>
+      </div>
+
+      <div className="grid gap-4 lg:grid-cols-3">
+        <Card className="soft-3d border-0 overflow-hidden">
+          <CardHeader className="pb-2">
+            <CardTitle className="text-sm font-semibold">Leave balance</CardTitle>
+            <p className="text-xs text-muted-foreground">Casual · Sick · Paid</p>
+          </CardHeader>
+          <CardContent>
+            {leaveBalanceLoading ? (
+              <div className="flex justify-center py-4 gap-8">
+                <Skeleton className="h-[76px] w-[76px] rounded-full" />
+                <Skeleton className="h-[76px] w-[76px] rounded-full hidden sm:block" />
+                <Skeleton className="h-[76px] w-[76px] rounded-full hidden sm:block" />
+              </div>
+            ) : (
+              <LeaveBalanceRings balance={leaveBalance} />
+            )}
+            <Button variant="ghost" size="sm" className="w-full mt-2 text-xs rounded-xl" asChild>
+              <Link to="/employee/leaves">View leave history</Link>
+            </Button>
+          </CardContent>
+        </Card>
+
+        <Card className="soft-3d border-0">
+          <CardHeader className="pb-2">
+            <CardTitle className="text-sm font-semibold">This week&apos;s hours</CardTitle>
+            <p className="text-xs text-muted-foreground">Goal {WEEK_GOAL_HOURS}h (Mon–Sun)</p>
+          </CardHeader>
+          <CardContent className="space-y-3">
+            <div className="flex items-baseline justify-between gap-2">
+              <span className="text-3xl font-bold tabular-nums tracking-tight">{weekWorkedHours}h</span>
+              <span className="text-sm text-muted-foreground tabular-nums">/ {WEEK_GOAL_HOURS}h</span>
+            </div>
+            <div className="h-2.5 rounded-full bg-muted overflow-hidden">
+              <motion.div
+                className="h-full rounded-full bg-gradient-to-r from-primary to-emerald-400"
+                initial={{ width: 0 }}
+                animate={{ width: `${weekProgressPct}%` }}
+                transition={{ type: "spring", stiffness: 120, damping: 18 }}
+              />
+            </div>
+            <p className="text-xs text-muted-foreground">{weekProgressPct}% of weekly goal logged.</p>
+          </CardContent>
+        </Card>
+
+        <Card className="soft-3d border-0">
+          <CardHeader className="pb-2">
+            <CardTitle className="text-sm font-semibold">Quick log</CardTitle>
+            <p className="text-xs text-muted-foreground">Add a bullet to your daily updates anytime</p>
+          </CardHeader>
+          <CardContent className="space-y-2">
+            <Textarea
+              value={quickNote}
+              onChange={(e) => setQuickNote(e.target.value)}
+              placeholder="Shipped feature X, blocked on Y…"
+              className="min-h-[72px] rounded-2xl text-sm"
+              disabled={quickNoteSending}
+            />
+            <Button
+              type="button"
+              size="sm"
+              className="w-full rounded-xl"
+              disabled={!quickNote.trim() || quickNoteSending}
+              onClick={() => void postQuickNote()}
+            >
+              {quickNoteSending ? "Saving…" : "Add to daily log"}
+            </Button>
+          </CardContent>
+        </Card>
       </div>
 
       {showHowToUse && (
@@ -255,9 +473,9 @@ export default function EmployeeDashboard() {
 
       {/* Check-in hero card — 3D sage */}
       <Card className="relative overflow-hidden border-0 shadow-3d rounded-3xl min-h-[220px] flex flex-col justify-center">
-        <div className="absolute inset-0 bg-sage-3d" />
-        <div className="absolute -top-10 -right-10 w-48 h-48 rounded-full bg-white/15 blur-2xl" />
-        <div className="absolute -bottom-12 -left-10 w-56 h-56 rounded-full bg-white/10 blur-2xl" />
+        <div className="absolute inset-0 bg-sage-3d vtl-animated-mesh" />
+        <div className="absolute -top-10 -right-10 w-48 h-48 rounded-full bg-white/15 blur-2xl motion-safe:animate-pulse" />
+        <div className="absolute -bottom-12 -left-10 w-56 h-56 rounded-full bg-white/10 blur-2xl motion-safe:animate-pulse" />
 
         <CardContent className="relative p-6 sm:p-8 text-primary-foreground">
           <AnimatePresence mode="wait">
@@ -342,8 +560,14 @@ export default function EmployeeDashboard() {
                   </div>
                 ) : (
                   <>
-                    <Button size="lg" onClick={handleBreak}
-                      className="h-14 px-6 bg-white/20 hover:bg-white/30 text-white border border-white/30 font-semibold backdrop-blur rounded-2xl hover-shine hover:scale-[1.02]">
+                    <Button
+                      size="lg"
+                      onClick={handleBreak}
+                      className={cn(
+                        "h-14 px-6 bg-white/20 hover:bg-white/30 text-white border border-white/30 font-semibold backdrop-blur rounded-2xl hover-shine hover:scale-[1.02]",
+                        status === "on-break" && "vtl-pulse-soft ring-2 ring-white/40"
+                      )}
+                    >
                       {status === "on-break" ? <><Play className="h-5 w-5 mr-2" /> Resume</> : <><Coffee className="h-5 w-5 mr-2" /> Break</>}
                     </Button>
                     <Button size="lg" onClick={openCheckout}
@@ -465,6 +689,23 @@ export default function EmployeeDashboard() {
             {isEarly && (
               <div className="space-y-1.5">
                 <Label>Reason for early check-out <span className="text-destructive">*</span></Label>
+                <div className="flex flex-wrap gap-2">
+                  {EARLY_REASON_CHIPS.map((chip) => (
+                    <button
+                      key={chip}
+                      type="button"
+                      onClick={() => setEarlyReason(chip)}
+                      className={cn(
+                        "text-xs px-3 py-1.5 rounded-full border transition-colors",
+                        earlyReason === chip
+                          ? "bg-primary text-primary-foreground border-primary"
+                          : "bg-muted/50 border-border hover:bg-muted"
+                      )}
+                    >
+                      {chip}
+                    </button>
+                  ))}
+                </div>
                 <Textarea
                   value={earlyReason}
                   onChange={(e) => setEarlyReason(e.target.value)}

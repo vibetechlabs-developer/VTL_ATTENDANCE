@@ -12,7 +12,7 @@ import base64
 import uuid
 from .serializers import LoginSerializer, EmployeeListSerializer, EmployeeCreateSerializer, EmployeeUpdateSerializer
 from .models import Employee, PushSubscription, User
-from attendance.face_utils import decode_base64_image, get_face_encoding
+from attendance.face_utils import decode_base64_image, get_face_encoding, is_valid_stored_encoding
 from attendance.models import AttendanceLog
 from leaves.models import LeaveRequest
 from updates.models import DailyUpdate
@@ -182,7 +182,7 @@ class EmployeesListView(APIView):
                     if employee and employee.created_at
                     else user.date_joined.strftime('%Y-%m-%d')
                 ),
-                'faceStatus': 'registered' if employee and employee.face_encoding else 'pending',
+                'faceStatus': 'registered' if employee and is_valid_stored_encoding(employee.face_encoding) else 'pending',
                 'avatar': avatar,
                 'status': 'active' if user.is_active else 'inactive',
                 'hasEmployeeProfile': bool(employee),
@@ -375,7 +375,7 @@ class EmployeeFaceDataView(APIView):
         return Response({
             'employee_id': employee.id,
             'employee_name': employee.name,
-            'has_face': bool(employee.face_encoding),
+            'has_face': is_valid_stored_encoding(employee.face_encoding),
             'profile_photo': request.build_absolute_uri(employee.profile_photo.url) if employee.profile_photo else None,
             'profile_photo_data_url': profile_photo_data_url,
             'vector_length': len(encoding) if isinstance(encoding, list) else 0,

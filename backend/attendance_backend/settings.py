@@ -187,3 +187,15 @@ WEB_PUSH_PRIVATE_KEY = os.getenv(
     str(BASE_DIR / "vapid_private.pem"),
 )
 WEB_PUSH_SUBJECT = os.getenv("WEB_PUSH_SUBJECT", "mailto:admin@vtl.local")
+
+# Face verification (dlib / face_recognition 128-D embeddings).
+# Lower = stricter (fewer false matches). Typical same-person distances are often < 0.45.
+FACE_MATCH_THRESHOLD = float(os.getenv("FACE_MATCH_THRESHOLD", "0.42"))
+
+# Only when DEBUG is enabled: allow skipping geo + face checks for local testing,
+# and allow many check-in / check-out cycles the same day (auto-closes any open session).
+# In production (DEBUG=false) this is always false, even if the env var is set.
+_debug_env = os.getenv("DEBUG", "false").strip().lower() in ["1", "true", "yes", "y"]
+ATTENDANCE_RELAXED_VERIFY = _debug_env and os.getenv(
+    "ATTENDANCE_RELAXED_VERIFY", ""
+).strip().lower() in ["1", "true", "yes", "y"]

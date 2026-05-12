@@ -417,7 +417,18 @@ export function CheckInModal({ open, onOpenChange, onVerified, mode = "check-in"
             if (!res.ok) {
                 const msg = parseApiError(res.status, body, rawText);
                 setErrorText(msg);
-                toast.error(msg);
+                const isLoc = /location|radius|outside office/i.test(msg);
+                if (isLoc) {
+                    toast.error(msg, {
+                        duration: 8000,
+                        action: {
+                            label: "Retry verification",
+                            onClick: () => void handleRetry(),
+                        },
+                    });
+                } else {
+                    toast.error(msg);
+                }
                 if (res.status === 401 && /session has expired/i.test(msg)) {
                     await logout();
                     onOpenChange(false);
@@ -430,14 +441,16 @@ export function CheckInModal({ open, onOpenChange, onVerified, mode = "check-in"
             setFaceProgress(100);
             setLocProgress(100);
             setStep("done");
-            toast.success(body.message || (mode === "check-in" ? "Check-in successful" : "Check-out successful"));
+            toast.success(body.message || (mode === "check-in" ? "Check-in successful" : "Check-out successful"), {
+                duration: 2200,
+            });
             setTimeout(() => {
                 onVerified({
                     checkInAt: body.check_in,
                     checkOutAt: body.check_out,
                     totalHours: Number(body.total_hours ?? 0),
                 });
-            }, 400);
+            }, 1100);
         } catch (e: any) {
             const msg = parseClientError(e);
             setErrorText(msg);
@@ -602,19 +615,62 @@ export function CheckInModal({ open, onOpenChange, onVerified, mode = "check-in"
                             key="done"
                             initial={{ opacity: 0, scale: 0.9 }}
                             animate={{ opacity: 1, scale: 1 }}
-                            className="text-center space-y-4 py-8"
+                            className="text-center space-y-4 py-8 relative overflow-hidden"
                         >
+                            <div className="pointer-events-none absolute inset-0 flex items-start justify-center pt-2">
+                                {[
+                                    [-55, 95],
+                                    [48, 88],
+                                    [-20, 102],
+                                    [62, 96],
+                                    [-40, 78],
+                                    [12, 110],
+                                    [-70, 85],
+                                    [35, 100],
+                                    [-8, 92],
+                                    [55, 82],
+                                    [-32, 105],
+                                    [22, 98],
+                                    [-58, 90],
+                                    [8, 108],
+                                ].map(([dx, dy], i) => (
+                                    <motion.span
+                                        key={i}
+                                        className="absolute w-2 h-2 rounded-full bg-primary/85"
+                                        initial={{ x: 0, y: 0, opacity: 1, scale: 1 }}
+                                        animate={{
+                                            x: dx,
+                                            y: dy,
+                                            opacity: 0,
+                                            scale: 0.15,
+                                        }}
+                                        transition={{ duration: 0.85, delay: i * 0.04, ease: "easeOut" }}
+                                    />
+                                ))}
+                            </div>
                             <motion.div
-                                initial={{ scale: 0 }}
-                                animate={{ scale: 1 }}
-                                transition={{ type: "spring", stiffness: 200, damping: 15 }}
-                                className="mx-auto h-20 w-20 rounded-full bg-sage-3d shadow-3d flex items-center justify-center"
+                                initial={{ scale: 0, rotate: -20 }}
+                                animate={{ scale: 1, rotate: 0 }}
+                                transition={{ type: "spring", stiffness: 260, damping: 16 }}
+                                className="mx-auto h-20 w-20 rounded-full bg-sage-3d shadow-3d flex items-center justify-center relative z-10"
                             >
-                                <CheckCircle2 className="h-10 w-10 text-white" />
+                                <motion.div
+                                    initial={{ scale: 0.5, opacity: 0 }}
+                                    animate={{ scale: 1, opacity: 1 }}
+                                    transition={{ duration: 0.35, delay: 0.12, ease: "easeOut" }}
+                                >
+                                    <CheckCircle2 className="h-10 w-10 text-white" />
+                                </motion.div>
                             </motion.div>
-                            <div className="space-y-1">
-                                <h2 className="text-2xl font-bold login-welcome">Checked In!</h2>
-                                <p className="text-sm login-welcome-sub">You are now successfully on the clock.</p>
+                            <div className="space-y-1 relative z-10">
+                                <h2 className="text-2xl font-bold login-welcome">
+                                    {mode === "check-in" ? "You're in!" : "Wrapped up!"}
+                                </h2>
+                                <p className="text-sm login-welcome-sub">
+                                    {mode === "check-in"
+                                        ? "Face and location verified — enjoy a focused day."
+                                        : "Great work today. Rest well."}
+                                </p>
                             </div>
                         </motion.div>
                     )}

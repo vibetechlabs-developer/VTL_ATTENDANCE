@@ -3,11 +3,38 @@ try:
 except ImportError:  # optional in dev environments
     face_recognition = None
 from django.conf import settings
-import cv2
-import numpy as np
 import base64
 from io import BytesIO
+
+import cv2
+import numpy as np
 from PIL import Image
+
+# dlib model used by face_recognition.face_encodings()
+EXPECTED_ENCODING_DIM = 128
+
+
+def is_valid_stored_encoding(raw) -> bool:
+    """True only for a usable 128-float face embedding from the DB."""
+    return normalize_stored_face_encoding(raw) is not None
+
+
+def normalize_stored_face_encoding(raw):
+    """
+    Return a (128,) float64 vector suitable for face_distance, or None if invalid.
+    Guards against corrupt / partial JSON so we never compare garbage embeddings.
+    """
+    if raw is None:
+        return None
+    try:
+        arr = np.asarray(raw, dtype=np.float64).reshape(-1)
+    except (ValueError, TypeError):
+        return None
+    if arr.size != EXPECTED_ENCODING_DIM:
+        return None
+    if not np.all(np.isfinite(arr)):
+        return None
+    return arr
 
 
 def _ensure_face_lib():
@@ -127,8 +154,9 @@ def match_face(live_encoding, all_employees):
     employees = []
 
     for emp in all_employees:
-        if emp.face_encoding:
-            known_encodings.append(np.array(emp.face_encoding))
+        vec = normalize_stored_face_encoding(emp.face_encoding)
+        if vec is not None:
+            known_encodings.append(vec)
             employees.append(emp)
 
     if not known_encodings:
@@ -140,14 +168,13 @@ def match_face(live_encoding, all_employees):
         live_encoding
     )
 
-    best_index = np.argmin(distances)
-    best_distance = distances[best_index]
+    best_index = int(np.argmin(distances))
+    best_distance = float(distances[best_index])
 
     # Lower threshold = stricter matching (reduce false positives).
-    threshold = getattr(settings, "FACE_MATCH_THRESHOLD", 0.5)
-    best_distance = float(best_distance)
+    threshold = float(getattr(settings, "FACE_MATCH_THRESHOLD", 0.42))
 
-    if best_distance < float(threshold):
+    if best_distance <= threshold:
         return employees[best_index], round(best_distance, 3)
 
     # Return best_distance for better error messaging/debugging.

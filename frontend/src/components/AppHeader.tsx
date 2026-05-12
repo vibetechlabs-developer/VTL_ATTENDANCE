@@ -253,7 +253,7 @@ export function AppHeader() {
           <Input
             value={headerSearch}
             onChange={(e) => setHeaderSearch(e.target.value)}
-            placeholder="Search and press Enter..."
+            placeholder="Search… (⌘K palette)"
             className="pl-9 h-10 bg-background/90 dark:bg-card/90 backdrop-blur-md border-border/70 shadow-sm focus-visible:ring-1 rounded-xl"
           />
         </form>
