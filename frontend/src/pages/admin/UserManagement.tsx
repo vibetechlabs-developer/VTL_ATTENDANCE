@@ -470,6 +470,7 @@ export default function UserManagement() {
                         <SelectItem value="admin">Admin</SelectItem>
                         <SelectItem value="hr">HR</SelectItem>
                         <SelectItem value="manager">Manager</SelectItem>
+                        <SelectItem value="sales">Sales</SelectItem>
                         <SelectItem value="employee">Employee</SelectItem>
                       </SelectContent>
                     </Select>
@@ -590,7 +591,17 @@ export default function UserManagement() {
                     </div>
                     <StatusPill
                       label={e.role}
-                      variant={e.role === "admin" ? "info" : e.role === "manager" ? "warning" : e.role === "hr" ? "success" : "muted"}
+                      variant={
+                        e.role === "admin"
+                          ? "info"
+                          : e.role === "manager"
+                            ? "warning"
+                            : e.role === "hr"
+                              ? "success"
+                              : e.role === "sales"
+                                ? "warning"
+                                : "muted"
+                      }
                     />
                   </div>
 
@@ -692,7 +703,17 @@ export default function UserManagement() {
                     <TableCell>
                       <StatusPill
                         label={e.role}
-                        variant={e.role === "admin" ? "info" : e.role === "manager" ? "warning" : e.role === "hr" ? "success" : "muted"}
+                        variant={
+                        e.role === "admin"
+                          ? "info"
+                          : e.role === "manager"
+                            ? "warning"
+                            : e.role === "hr"
+                              ? "success"
+                              : e.role === "sales"
+                                ? "warning"
+                                : "muted"
+                      }
                       />
                     </TableCell>
                     <TableCell className="text-sm">{e.department}</TableCell>
@@ -775,6 +796,7 @@ export default function UserManagement() {
                       <SelectItem value="admin">Admin</SelectItem>
                       <SelectItem value="hr">HR</SelectItem>
                       <SelectItem value="manager">Manager</SelectItem>
+                      <SelectItem value="sales">Sales</SelectItem>
                       <SelectItem value="employee">Employee</SelectItem>
                     </SelectContent>
                   </Select>

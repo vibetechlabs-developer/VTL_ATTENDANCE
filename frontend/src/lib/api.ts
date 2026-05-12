@@ -78,7 +78,7 @@ export interface ApiEmployee {
   name: string;
   email: string;
   empId: string;
-  role: "admin" | "manager" | "employee" | "hr";
+  role: "admin" | "manager" | "employee" | "hr" | "sales";
   department: string;
   managerUserId?: number | string | null;
   reportsTo?: string;
@@ -96,7 +96,7 @@ export async function usersListRequest(accessToken: string): Promise<Response> {
 export interface CreateEmployeePayload {
   name: string;
   email: string;
-  role: "admin" | "manager" | "employee" | "hr";
+  role: "admin" | "manager" | "employee" | "hr" | "sales";
   department: string;
   manager_id?: number | null;
   manager_employee_id?: number | null;
@@ -115,7 +115,7 @@ export async function usersCreateRequest(accessToken: string, payload: CreateEmp
 export interface UpdateEmployeePayload {
   name?: string;
   email?: string;
-  role?: "admin" | "manager" | "employee" | "hr";
+  role?: "admin" | "manager" | "employee" | "hr" | "sales";
   department?: string;
   manager_id?: number | null;
   manager_employee_id?: number | null;

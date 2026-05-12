@@ -917,22 +917,32 @@
   z-index: 1;
 }
 
-/* ─── Logo 3D ─── */
+/* ─── Logo 3D (orange tile + V mark assets: /vtl-dark.jpeg | /vtl-white.jpeg) ─── */
 .login-logo-3d {
   width: 42px;
   height: 42px;
   border-radius: 10px;
-  background: #1D9E75;
+  background: linear-gradient(145deg, #fdba74 0%, #f97316 42%, #ea580c 100%);
   display: flex;
   align-items: center;
   justify-content: center;
   flex-shrink: 0;
+  box-shadow:
+    0 4px 18px rgba(234, 88, 12, 0.42),
+    0 0 28px rgba(249, 115, 22, 0.2),
+    inset 0 1px 0 rgba(255, 255, 255, 0.35),
+    inset 0 -2px 0 rgba(0, 0, 0, 0.12);
+  animation: login-logopulse 3s ease-in-out infinite;
 }
 
 .dark .login-logo-3d {
-  background: linear-gradient(145deg, #25d499, #1D9E75);
-  box-shadow: 0 4px 20px rgba(29, 158, 117, 0.55), 0 0 40px rgba(29, 158, 117, 0.15), inset 0 1px 0 rgba(255, 255, 255, 0.3), inset 0 -2px 0 rgba(0, 0, 0, 0.25);
-  animation: login-logopulse 3s ease-in-out infinite;
+  background: linear-gradient(145deg, #fb923c 0%, #ea580c 48%, #c2410c 100%);
+  box-shadow:
+    0 4px 22px rgba(234, 88, 12, 0.55),
+    0 0 44px rgba(249, 115, 22, 0.22),
+    inset 0 1px 0 rgba(255, 255, 255, 0.28),
+    inset 0 -2px 0 rgba(0, 0, 0, 0.35);
+  animation: login-logopulse-dark 3s ease-in-out infinite;
 }
 
 .login-logo-3d img {
@@ -952,15 +962,49 @@
   border-radius: 9px;
 }
 
+.login-logo-3d-lg {
+  width: 96px;
+  height: 96px;
+  border-radius: 22px;
+}
+
 @keyframes login-logopulse {
 
   0%,
   100% {
-    box-shadow: 0 4px 20px rgba(29, 158, 117, 0.55), 0 0 40px rgba(29, 158, 117, 0.15), inset 0 1px 0 rgba(255, 255, 255, 0.3);
+    box-shadow:
+      0 4px 18px rgba(234, 88, 12, 0.42),
+      0 0 28px rgba(249, 115, 22, 0.2),
+      inset 0 1px 0 rgba(255, 255, 255, 0.35),
+      inset 0 -2px 0 rgba(0, 0, 0, 0.12);
   }
 
   50% {
-    box-shadow: 0 4px 28px rgba(29, 158, 117, 0.8), 0 0 60px rgba(29, 158, 117, 0.3), inset 0 1px 0 rgba(255, 255, 255, 0.3);
+    box-shadow:
+      0 6px 28px rgba(234, 88, 12, 0.55),
+      0 0 48px rgba(251, 146, 60, 0.35),
+      inset 0 1px 0 rgba(255, 255, 255, 0.38),
+      inset 0 -2px 0 rgba(0, 0, 0, 0.14);
+  }
+}
+
+@keyframes login-logopulse-dark {
+
+  0%,
+  100% {
+    box-shadow:
+      0 4px 22px rgba(234, 88, 12, 0.55),
+      0 0 44px rgba(249, 115, 22, 0.22),
+      inset 0 1px 0 rgba(255, 255, 255, 0.28),
+      inset 0 -2px 0 rgba(0, 0, 0, 0.35);
+  }
+
+  50% {
+    box-shadow:
+      0 6px 32px rgba(251, 146, 60, 0.45),
+      0 0 56px rgba(253, 186, 116, 0.25),
+      inset 0 1px 0 rgba(255, 255, 255, 0.32),
+      inset 0 -2px 0 rgba(0, 0, 0, 0.38);
   }
 }
 

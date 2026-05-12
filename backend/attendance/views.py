@@ -38,7 +38,7 @@ def validate_office_radius(user_lat, user_lng):
         return (
             False,
             distance,
-            f"You are outside office radius. Allowed: {radius}m, your distance: {int(distance)}m."
+            "You are outside the allowed check-in area. Move closer to the office and try again.",
         )
     return True, distance, None
 
@@ -121,30 +121,39 @@ class CheckInView(APIView):
                 live_encoding = get_face_encoding(image)
                 if live_encoding is None:
                     return Response(
-                        {'error': 'Face not detected. Keep face centered, improve light, remove mask/covering, and retry.'},
-                        status=400
+                        {
+                            'error': (
+                                'We could not see your face clearly. Use good lighting, '
+                                'center your face, and remove masks or coverings if possible.'
+                            ),
+                        },
+                        status=400,
                     )
 
                 matched_employee, distance = match_face(live_encoding, [request.user.employee])
 
                 if matched_employee is None:
                     threshold = float(getattr(settings, "FACE_MATCH_THRESHOLD", 0.42))
-                    return Response(
-                        {
-                            'error': 'Face does not match your registered profile. Please face camera clearly and retry.',
-                            'face_distance': distance,
-                            'threshold': threshold,
-                        },
-                        status=401
-                    )
+                    payload = {
+                        'error': (
+                            'Face does not match your registered profile. '
+                            'Look straight at the camera and try again.'
+                        ),
+                    }
+                    if settings.DEBUG:
+                        payload['face_distance'] = distance
+                        payload['threshold'] = threshold
+                    return Response(payload, status=401)
                 if matched_employee.id != request.user.employee.id:
                     return Response({'error': 'Face verification failed.'}, status=401)
 
             except RuntimeError as err:
-                return Response(
-                    {'error': f'Face verification service unavailable: {str(err)}'},
-                    status=503
+                msg = (
+                    f'Face verification service unavailable: {str(err)}'
+                    if settings.DEBUG
+                    else 'Face verification is temporarily unavailable. Please try again in a moment.'
                 )
+                return Response({'error': msg}, status=503)
 
         # 4. Attendance mark karo
         log = AttendanceLog.objects.create(
@@ -217,29 +226,38 @@ class CheckOutView(APIView):
                 live_encoding = get_face_encoding(image)
                 if live_encoding is None:
                     return Response(
-                        {'error': 'Face not detected. Keep face centered, improve light, remove mask/covering, and retry.'},
-                        status=400
+                        {
+                            'error': (
+                                'We could not see your face clearly. Use good lighting, '
+                                'center your face, and remove masks or coverings if possible.'
+                            ),
+                        },
+                        status=400,
                     )
 
                 matched_employee, distance = match_face(live_encoding, [request.user.employee])
 
                 if matched_employee is None:
                     threshold = float(getattr(settings, "FACE_MATCH_THRESHOLD", 0.42))
-                    return Response(
-                        {
-                            'error': 'Face does not match your registered profile. Please face camera clearly and retry.',
-                            'face_distance': distance,
-                            'threshold': threshold,
-                        },
-                        status=401
-                    )
+                    payload = {
+                        'error': (
+                            'Face does not match your registered profile. '
+                            'Look straight at the camera and try again.'
+                        ),
+                    }
+                    if settings.DEBUG:
+                        payload['face_distance'] = distance
+                        payload['threshold'] = threshold
+                    return Response(payload, status=401)
                 if matched_employee.id != request.user.employee.id:
                     return Response({'error': 'Face verification failed.'}, status=401)
             except RuntimeError as err:
-                return Response(
-                    {'error': f'Face verification service unavailable: {str(err)}'},
-                    status=503
+                msg = (
+                    f'Face verification service unavailable: {str(err)}'
+                    if settings.DEBUG
+                    else 'Face verification is temporarily unavailable. Please try again in a moment.'
                 )
+                return Response({'error': msg}, status=503)
 
         log.check_out = timezone.now()
         log.check_out_lat = lat

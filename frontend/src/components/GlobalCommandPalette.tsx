@@ -22,7 +22,9 @@ import {
   Clock,
   MessageSquare,
   Search,
+  BarChart3,
 } from "lucide-react";
+import { EXTERNAL_VTL_CRM_URL } from "@/components/AppSidebar";
 
 type EmpRow = { id: number; name: string; email: string };
 
@@ -76,6 +78,7 @@ export function GlobalCommandPalette() {
   const isAdmin = role === "admin";
   const isHR = role === "hr";
   const isManager = role === "manager";
+  const isSales = role === "sales";
 
   return (
     <CommandDialog open={open} onOpenChange={setOpen}>
@@ -84,6 +87,17 @@ export function GlobalCommandPalette() {
         <CommandEmpty>No matches. Try another keyword.</CommandEmpty>
 
         <CommandGroup heading="Navigate">
+          {(isAdmin || isHR || isSales) && (
+            <CommandItem
+              onSelect={() => {
+                setOpen(false);
+                window.location.assign(EXTERNAL_VTL_CRM_URL);
+              }}
+            >
+              <BarChart3 className="mr-2 h-4 w-4" />
+              Enterprise CRM
+            </CommandItem>
+          )}
           {(isAdmin || isManager) && (
             <CommandItem onSelect={() => go("/admin")}>
               <LayoutDashboard className="mr-2 h-4 w-4" />

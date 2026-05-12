@@ -66,6 +66,7 @@ export function CheckInModal({ open, onOpenChange, onVerified, mode = "check-in"
         return "Camera unavailable right now. Please retry.";
     };
 
+    /** Maps API errors to short, user-facing copy. Never expose scores/thresholds/HTTP codes. */
     const parseApiError = (
         status: number,
         body: {
@@ -79,35 +80,56 @@ export function CheckInModal({ open, onOpenChange, onVerified, mode = "check-in"
         rawText?: string
     ): string => {
         const base = body.error || body.detail || body.message;
+        const haystack = `${base || ""} ${rawText || ""}`.toLowerCase();
+
         if (base && /token not valid|given token not valid|token is invalid|token is expired/i.test(base)) {
-            return "Your session has expired. Please login again.";
+            return "Your session has expired. Please sign in again.";
         }
-        if (base) {
-            if (/already checked in/i.test(base)) return "You are already checked in for today.";
-            if (/outside office radius|distance/i.test(base)) {
-                const d = body.distance_meters != null ? ` Your distance is ${body.distance_meters}m.` : "";
-                return `Location error: you are outside allowed office radius.${d}`;
-            }
-            if (/face does not match/i.test(base)) {
-                if (body.face_distance != null && body.threshold != null) {
-                    return `Face mismatch. Score ${body.face_distance}, required <= ${body.threshold}.`;
-                }
-                return "Face mismatch. Please align your face clearly and retry.";
-            }
-            if (/face not detected/i.test(base)) return "Face not detected. Improve lighting and keep your face centered.";
-            if (body.face_distance != null && body.threshold != null) {
-                return `${base} (score: ${body.face_distance}, required <= ${body.threshold})`;
-            }
-            return base;
+        if (haystack.includes("already checked in")) {
+            return "You’re already checked in for today.";
         }
-        if (rawText && /outside office radius|face does not match|face not detected|already checked in/i.test(rawText)) {
-            const m = rawText.match(/(outside office radius[^"]*|face does not match[^"]*|face not detected[^"]*|already checked in[^"]*)/i);
-            if (m?.[1]) return m[1];
+        if (
+            haystack.includes("outside office") ||
+            haystack.includes("office radius") ||
+            haystack.includes("allowed radius") ||
+            (haystack.includes("location") && haystack.includes("radius"))
+        ) {
+            if (body.distance_meters != null && Number.isFinite(body.distance_meters)) {
+                const m = Math.round(body.distance_meters);
+                return `You’re outside the allowed check-in zone (about ${m} m away). Move closer to the office and try again.`;
+            }
+            return "You’re outside the allowed check-in area. Move closer to the office and try again.";
         }
-        if (status === 401) return "Face verification failed. Please align face clearly and retry.";
-        if (status === 403) return "You are not allowed to perform this action.";
-        if (status === 503) return "Face verification service is unavailable right now. Please retry in a moment.";
-        return `${mode === "check-in" ? "Check-in" : "Check-out"} failed (HTTP ${status}).`;
+        if (
+            haystack.includes("face does not match") ||
+            haystack.includes("doesn't match your registered") ||
+            haystack.includes("does not match your registered") ||
+            haystack.includes("face mismatch")
+        ) {
+            return "We couldn’t confirm it’s you. Look straight at the camera, remove hat or mask if possible, and try again.";
+        }
+        if (haystack.includes("face not detected") || haystack.includes("no face")) {
+            return "We can’t see your face clearly. Use good lighting, center your face in the circle, and try again.";
+        }
+        if (haystack.includes("face is not registered") || haystack.includes("not registered for your account")) {
+            return "Your face isn’t registered yet. Ask your admin to register your face, or register from your profile.";
+        }
+        if (haystack.includes("face verification failed")) {
+            return "Face check didn’t complete. Try again with your face centered and good lighting.";
+        }
+        if (haystack.includes("verification service unavailable") || haystack.includes("face_recognition") || status === 503) {
+            return "Face check is temporarily unavailable. Please wait a moment and try again.";
+        }
+        if (status === 401) {
+            return "We couldn’t verify you. Try again, or sign out and sign back in.";
+        }
+        if (status === 403) return "You don’t have permission for this action.";
+        if (status === 400 && base) {
+            return base.length > 160 ? `${base.slice(0, 157)}…` : base;
+        }
+        return mode === "check-in"
+            ? "Check-in couldn’t be completed. Please try again."
+            : "Check-out couldn’t be completed. Please try again.";
     };
 
     const restartCamera = async (): Promise<boolean> => {
@@ -417,24 +439,15 @@ export function CheckInModal({ open, onOpenChange, onVerified, mode = "check-in"
             if (!res.ok) {
                 const msg = parseApiError(res.status, body, rawText);
                 setErrorText(msg);
-                const isLoc = /location|radius|outside office/i.test(msg);
-                if (isLoc) {
-                    toast.error(msg, {
-                        duration: 8000,
-                        action: {
-                            label: "Retry verification",
-                            onClick: () => void handleRetry(),
-                        },
-                    });
-                } else {
+                const sessionGone = /session has expired|sign in again/i.test(msg);
+                if (sessionGone) {
                     toast.error(msg);
-                }
-                if (res.status === 401 && /session has expired/i.test(msg)) {
                     await logout();
                     onOpenChange(false);
                     window.location.href = "/login";
                     return;
                 }
+                // Inline error in the modal only — avoids the same text in a top toast and bottom banner.
                 setStep("face");
                 return;
             }

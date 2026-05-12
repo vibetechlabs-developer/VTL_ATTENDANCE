@@ -8,7 +8,7 @@ export interface Employee {
   name: string;
   email: string;
   empId: string;
-  role: "admin" | "manager" | "employee" | "hr";
+  role: "admin" | "manager" | "employee" | "hr" | "sales";
   department: string;
   managerUserId?: string;
   reportsTo: string;
@@ -247,7 +247,9 @@ export const useDataStore = create<DataState>((set) => ({
               ? "employee"
               : item.role === "hr"
                 ? "hr"
-                : "admin",
+                : item.role === "sales"
+                  ? "sales"
+                  : "admin",
         department: item.department || "General",
         managerUserId: item.managerUserId ? String(item.managerUserId) : undefined,
         managerEmployeeId: item.managerEmployeeId ? String(item.managerEmployeeId) : undefined,

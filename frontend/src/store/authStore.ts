@@ -1,7 +1,12 @@
 import { create } from "zustand";
 import { persist } from "zustand/middleware";
 
-export type Role = "admin" | "manager" | "employee" | "hr";
+export type Role = "admin" | "manager" | "employee" | "hr" | "sales";
+
+/** Roles that land on /employee (personal portal) after login. */
+export function roleUsesEmployeePortal(role: Role): boolean {
+  return role === "employee" || role === "hr" || role === "manager" || role === "sales";
+}
 
 export interface UserPreferences {
   theme: "light" | "dark" | "system";
@@ -29,6 +34,7 @@ function mapBackendRole(role: string): Role {
   if (role === "manager") return "manager";
   if (role === "employee") return "employee";
   if (role === "hr") return "hr";
+  if (role === "sales") return "sales";
   return "admin";
 }
 

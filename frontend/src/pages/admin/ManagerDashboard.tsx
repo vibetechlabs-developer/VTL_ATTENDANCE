@@ -148,7 +148,7 @@ export default function ManagerDashboard() {
         const dept = user?.department;
         const filtered = rows
           .filter((r) => (dept ? r.department === dept : true))
-          .filter((r) => r.role === "employee");
+          .filter((r) => r.role === "employee" || r.role === "sales");
 
         setTeamRows(filtered);
       } finally {

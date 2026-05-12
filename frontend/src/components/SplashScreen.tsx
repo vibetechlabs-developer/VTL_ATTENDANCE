@@ -1,5 +1,6 @@
 import { useState, useEffect } from "react";
 import { motion, AnimatePresence } from "framer-motion";
+import { BrandMarkIcon } from "@/components/BrandMarkIcon";
 
 export function SplashScreen({ children }: { children: React.ReactNode }) {
     const [show, setShow] = useState(() => {
@@ -60,15 +61,11 @@ export function SplashScreen({ children }: { children: React.ReactNode }) {
                                 {/* Glow behind logo */}
                                 <motion.div
                                     className="absolute inset-0 rounded-3xl"
-                                    style={{ boxShadow: "0 0 80px 30px hsl(140 40% 50% / 0.3)" }}
-                                    animate={{ opacity: [0.4, 0.8, 0.4] }}
+                                    style={{ boxShadow: "0 0 80px 36px hsl(27 95% 55% / 0.38)" }}
+                                    animate={{ opacity: [0.4, 0.85, 0.4] }}
                                     transition={{ duration: 2, repeat: Infinity, ease: "easeInOut" }}
                                 />
-                                <img
-                                    src="/vtl-logo-transparent.png"
-                                    alt="Vibe Tech Labs"
-                                    className="h-24 w-24 rounded-3xl shadow-3d relative z-10 object-contain"
-                                />
+                                <BrandMarkIcon className="login-logo-3d-lg relative z-10 shadow-3d" />
                             </motion.div>
 
                             <motion.div

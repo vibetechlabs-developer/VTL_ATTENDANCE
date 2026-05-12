@@ -1,7 +1,8 @@
 import { NavLink, useLocation, useNavigate } from "react-router-dom";
+import type { LucideIcon } from "lucide-react";
 import {
   LayoutDashboard, Users, Clock, CalendarDays, MessageSquare,
-  ShieldCheck, FileClock, LogOut, CheckCircle2, BarChart3,
+  ShieldCheck, FileClock, LogOut, CheckCircle2, BarChart3, PieChart,
 } from "lucide-react";
 import {
   Sidebar, SidebarContent, SidebarGroup, SidebarGroupContent, SidebarGroupLabel,
@@ -11,76 +12,100 @@ import { Logo } from "@/components/Logo";
 import { useAuthStore } from "@/store/authStore";
 import { cn } from "@/lib/utils";
 
-const adminNav = [
+/** External Enterprise CRM (same-tab navigation). */
+export const EXTERNAL_VTL_CRM_URL = "https://vibetechlabs.com/crm/" as const;
+
+type SidebarNavItem = {
+  title: string;
+  url: string;
+  icon: LucideIcon;
+  end?: boolean;
+  external?: boolean;
+};
+
+type SidebarNavSection = { group: string; items: SidebarNavItem[] };
+
+function prependCrmNav(sections: SidebarNavSection[]): SidebarNavSection[] {
+  const crm: SidebarNavSection = {
+    group: "Sales",
+    items: [{ title: "CRM", url: EXTERNAL_VTL_CRM_URL, icon: BarChart3, external: true }],
+  };
+  return [crm, ...sections];
+}
+
+const adminNav: SidebarNavSection[] = [
   {
-    group: "Overview", items: [
-      { title: "Dashboard", url: "/admin", icon: LayoutDashboard, end: true },
-    ]
+    group: "Overview",
+    items: [{ title: "Dashboard", url: "/admin", icon: LayoutDashboard, end: true }],
   },
   {
-    group: "Workforce", items: [
+    group: "Workforce",
+    items: [
       { title: "User Management", url: "/admin/users", icon: Users },
       { title: "Attendance", url: "/admin/attendance", icon: Clock },
       { title: "Leaves", url: "/admin/leaves", icon: CalendarDays },
-      { title: "Leave Usage", url: "/admin/leave-usage", icon: BarChart3 },
+      { title: "Leave Usage", url: "/admin/leave-usage", icon: PieChart },
       { title: "Daily Updates", url: "/admin/updates", icon: MessageSquare },
-    ]
+    ],
   },
   {
-    group: "System", items: [
+    group: "System",
+    items: [
       { title: "Audit Logs", url: "/admin/audit", icon: FileClock },
       { title: "Security", url: "/admin/security", icon: ShieldCheck },
-    ]
+    ],
   },
 ];
 
-const managerNav = [
+const managerNav: SidebarNavSection[] = [
   {
-    group: "Personal", items: [
+    group: "Personal",
+    items: [
       { title: "My Dashboard", url: "/employee", icon: LayoutDashboard, end: true },
       { title: "My Attendance", url: "/employee/attendance", icon: Clock },
       { title: "Daily Updates", url: "/employee/updates", icon: MessageSquare },
       { title: "My Leaves", url: "/employee/leaves", icon: CalendarDays },
       { title: "Approvals", url: "/employee/approvals", icon: CheckCircle2 },
-    ]
+    ],
   },
   {
-    group: "Team", items: [
-      { title: "Team Attendance", url: "/admin/attendance", icon: Users },
-    ]
+    group: "Team",
+    items: [{ title: "Team Attendance", url: "/admin/attendance", icon: Users }],
   },
 ];
 
-const hrNav = [
+const hrNav: SidebarNavSection[] = [
   {
-    group: "Personal", items: [
+    group: "Personal",
+    items: [
       { title: "My Dashboard", url: "/employee", icon: LayoutDashboard, end: true },
       { title: "My Attendance", url: "/employee/attendance", icon: Clock },
       { title: "Daily Updates", url: "/employee/updates", icon: MessageSquare },
       { title: "My Leaves", url: "/employee/leaves", icon: CalendarDays },
       { title: "Approvals", url: "/employee/approvals", icon: CheckCircle2 },
-    ]
+    ],
   },
   {
-    group: "Team", items: [
-      { title: "Team Attendance", url: "/admin/attendance", icon: Users },
-    ]
+    group: "Team",
+    items: [{ title: "Team Attendance", url: "/admin/attendance", icon: Users }],
   },
 ];
 
-const employeeNav = [
+const employeeNav: SidebarNavSection[] = [
   {
-    group: "You", items: [
+    group: "You",
+    items: [
       { title: "Dashboard", url: "/employee", icon: LayoutDashboard, end: true },
       { title: "Attendance", url: "/employee/attendance", icon: Clock },
       { title: "Daily Updates", url: "/employee/updates", icon: MessageSquare },
-    ]
+    ],
   },
   {
-    group: "Requests", items: [
+    group: "Requests",
+    items: [
       { title: "Leaves", url: "/employee/leaves", icon: CalendarDays },
       { title: "Approvals", url: "/employee/approvals", icon: CheckCircle2 },
-    ]
+    ],
   },
 ];
 
@@ -95,14 +120,20 @@ export function AppSidebar() {
     await logout();
     navigate("/login", { replace: true });
   };
-  const nav =
-    user?.role === "employee"
-      ? employeeNav
-      : user?.role === "manager"
-        ? managerNav
-        : user?.role === "hr"
-          ? hrNav
-          : adminNav;
+
+  const role = user?.role;
+  let nav: SidebarNavSection[];
+  if (role === "employee") {
+    nav = employeeNav;
+  } else if (role === "sales") {
+    nav = prependCrmNav(employeeNav);
+  } else if (role === "manager") {
+    nav = managerNav;
+  } else if (role === "hr") {
+    nav = prependCrmNav(hrNav);
+  } else {
+    nav = prependCrmNav(adminNav);
+  }
 
   const isActive = (url: string, end?: boolean) =>
     end ? pathname === url : pathname.startsWith(url);
@@ -124,26 +155,39 @@ export function AppSidebar() {
             <SidebarGroupContent>
               <SidebarMenu>
                 {section.items.map((item) => {
-                  const active = isActive(item.url, item.end);
+                  const active = item.external ? false : isActive(item.url, item.end);
+                  const rowClass = cn("flex items-center gap-2", collapsed && "justify-center w-full h-full");
+                  const iconWrap = cn(
+                    "rounded-full flex items-center justify-center shrink-0 transition-smooth",
+                    collapsed ? "h-8 w-8" : "h-8 w-8",
+                    active ? "bg-white/15" : "bg-muted/30"
+                  );
+                  const btnClass = cn(
+                    "h-11 px-2 rounded-xl transition-smooth text-sidebar-foreground relative overflow-hidden group-data-[collapsible=icon]:!p-0 group hover:scale-[1.01] active:scale-[0.99] hover:shadow-glass hover-shine",
+                    active &&
+                      "bg-gradient-primary !text-white font-medium shadow-glow hover:bg-gradient-primary hover:!text-white before:absolute before:left-0 before:top-1 before:bottom-1 before:w-[3px] before:rounded-r-full before:bg-primary/70",
+                    !active && "hover:bg-sidebar-accent hover:text-sidebar-accent-foreground hover:-translate-y-[1px]"
+                  );
+                  const inner = (
+                    <>
+                      <div className={iconWrap}>
+                        <item.icon className="h-[16px] w-[16px]" />
+                      </div>
+                      {!collapsed && <span className="text-sm">{item.title}</span>}
+                    </>
+                  );
                   return (
-                    <SidebarMenuItem key={item.title}>
-                      <SidebarMenuButton asChild isActive={active} tooltip={item.title}
-                        className={cn(
-                          "h-11 px-2 rounded-xl transition-smooth text-sidebar-foreground relative overflow-hidden group-data-[collapsible=icon]:!p-0 group hover:scale-[1.01] active:scale-[0.99] hover:shadow-glass hover-shine",
-                          active &&
-                            "bg-gradient-primary !text-white font-medium shadow-glow hover:bg-gradient-primary hover:!text-white before:absolute before:left-0 before:top-1 before:bottom-1 before:w-[3px] before:rounded-r-full before:bg-primary/70",
-                          !active && "hover:bg-sidebar-accent hover:text-sidebar-accent-foreground hover:-translate-y-[1px]"
-                        )}>
-                        <NavLink to={item.url} end={item.end} className={cn("flex items-center gap-2", collapsed && "justify-center w-full h-full")}>
-                          <div className={cn(
-                            "rounded-full flex items-center justify-center shrink-0 transition-smooth",
-                            collapsed ? "h-8 w-8" : "h-8 w-8",
-                            active ? "bg-white/15" : "bg-muted/30"
-                          )}>
-                            <item.icon className="h-[16px] w-[16px]" />
-                          </div>
-                          {!collapsed && <span className="text-sm">{item.title}</span>}
-                        </NavLink>
+                    <SidebarMenuItem key={`${section.group}-${item.title}-${item.url}`}>
+                      <SidebarMenuButton asChild isActive={active} tooltip={item.title} className={btnClass}>
+                        {item.external ? (
+                          <a href={item.url} className={rowClass}>
+                            {inner}
+                          </a>
+                        ) : (
+                          <NavLink to={item.url} end={item.end} className={rowClass}>
+                            {inner}
+                          </NavLink>
+                        )}
                       </SidebarMenuButton>
                     </SidebarMenuItem>
                   );

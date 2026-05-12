@@ -8,11 +8,12 @@ import {
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
-import { useAuthStore, Role, profileToAuthUser, type MeProfilePayload } from "@/store/authStore";
+import { useAuthStore, Role, profileToAuthUser, roleUsesEmployeePortal, type MeProfilePayload } from "@/store/authStore";
 import { loginRequest, meRequest } from "@/lib/api";
 import { toast } from "sonner";
 import { cn } from "@/lib/utils";
 import { ThemeToggle } from "@/components/ThemeToggle";
+import { BrandMarkIcon } from "@/components/BrandMarkIcon";
 
 type Step = "creds" | "face" | "location" | "done";
 
@@ -180,7 +181,7 @@ export default function Login() {
       if (data.notice) {
         toast.warning(data.notice);
       }
-      setRedirectTo(authUser.role === "employee" || authUser.role === "hr" || authUser.role === "manager" ? "/employee" : "/admin");
+      setRedirectTo(roleUsesEmployeePortal(authUser.role) ? "/employee" : "/admin");
       setStep("face");
       runFaceScan();
     } finally {
@@ -233,7 +234,7 @@ export default function Login() {
   }, []);
 
   if (user) {
-    return <Navigate to={user.role === "employee" || user.role === "hr" || user.role === "manager" ? "/employee" : "/admin"} replace />;
+    return <Navigate to={roleUsesEmployeePortal(user.role) ? "/employee" : "/admin"} replace />;
   }
 
   return (
@@ -273,9 +274,7 @@ export default function Login() {
             transition={{ duration: 0.5 }}
             className="flex items-center justify-center gap-3"
           >
-            <div className="login-logo-3d shrink-0 overflow-hidden">
-              <img src="/vtl-logo-transparent.png" alt="" className="relative z-10" />
-            </div>
+            <BrandMarkIcon />
             <div className="text-left">
               <span className="font-bold text-[16px] block leading-tight login-brand-name">Vibe Tech Labs</span>
               <span className="text-[11px] login-brand-sub">A Digital Idea To Grow You Up</span>
@@ -355,9 +354,7 @@ export default function Login() {
                 >
                   {/* Mobile logo */}
                   <div className="flex items-center justify-center gap-2.5 lg:hidden mb-1">
-                    <div className="login-logo-3d login-logo-3d-sm shrink-0 overflow-hidden">
-                      <img src="/vtl-logo-transparent.png" alt="" className="relative z-10" />
-                    </div>
+                    <BrandMarkIcon className="login-logo-3d-sm" />
                     <span className="font-bold text-base login-brand-name">Vibe Tech Labs</span>
                   </div>
 

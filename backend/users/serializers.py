@@ -73,7 +73,7 @@ class EmployeeListSerializer(serializers.ModelSerializer):
 class EmployeeCreateSerializer(serializers.Serializer):
     name = serializers.CharField(max_length=100)
     email = serializers.EmailField()
-    role = serializers.ChoiceField(choices=['admin', 'manager', 'employee', 'hr'])
+    role = serializers.ChoiceField(choices=['admin', 'manager', 'employee', 'hr', 'sales'])
     department = serializers.CharField(max_length=100)
     phone = serializers.CharField(max_length=15, required=False, allow_blank=True, default='')
     password = serializers.CharField(required=False, allow_blank=True, write_only=True)
@@ -147,7 +147,7 @@ class EmployeeCreateSerializer(serializers.Serializer):
 class EmployeeUpdateSerializer(serializers.Serializer):
     name = serializers.CharField(max_length=100, required=False)
     email = serializers.EmailField(required=False)
-    role = serializers.ChoiceField(choices=['admin', 'manager', 'employee', 'hr'], required=False)
+    role = serializers.ChoiceField(choices=['admin', 'manager', 'employee', 'hr', 'sales'], required=False)
     department = serializers.CharField(max_length=100, required=False)
     phone = serializers.CharField(max_length=15, required=False, allow_blank=True)
     password = serializers.CharField(required=False, allow_blank=True, write_only=True)
