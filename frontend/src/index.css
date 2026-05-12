@@ -917,7 +917,7 @@
   z-index: 1;
 }
 
-/* ─── Logo 3D (orange tile + V mark assets: /vtl-dark.jpeg | /vtl-white.jpeg) ─── */
+/* ─── Logo 3D (shared asset: /vtl-transperent.png) ─── */
 .login-logo-3d {
   width: 42px;
   height: 42px;

@@ -11,18 +11,9 @@ export function Logo({ className, collapsed = false }: { className?: string; col
     >
       <div className={cn("shrink-0 overflow-hidden rounded-xl", collapsed ? "h-9 w-9" : "h-10 w-10")}>
         <img
-          src="/vtl-dark.jpeg"
+          src="/vtl-transperent.png"
           alt="Vibe Tech Labs logo"
-          className="h-full w-full object-cover dark:hidden"
-          onError={(e) => {
-            e.currentTarget.src = "/download%20(2).png";
-          }}
-          draggable={false}
-        />
-        <img
-          src="/vtl-white.jpeg"
-          alt="Vibe Tech Labs logo"
-          className="hidden h-full w-full object-cover dark:block"
+          className="h-full w-full object-contain"
           onError={(e) => {
             e.currentTarget.src = "/download%20(2).png";
           }}

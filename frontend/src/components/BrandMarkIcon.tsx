@@ -1,11 +1,10 @@
 import { cn } from "@/lib/utils";
 
-/** Orange tile + centered V mark only: dark JPEG on light theme, white JPEG on dark theme. */
+/** Shared project logo asset. */
 export function BrandMarkIcon({ className }: { className?: string }) {
   return (
     <div className={cn("login-logo-3d shrink-0 overflow-hidden", className)} aria-hidden>
-      <img src="/vtl-dark.jpeg" alt="" className="relative z-10 dark:hidden" />
-      <img src="/vtl-white.jpeg" alt="" className="relative z-10 hidden dark:block" />
+      <img src="/vtl-transperent.png" alt="" className="relative z-10 h-full w-full object-contain" />
     </div>
   );
 }
