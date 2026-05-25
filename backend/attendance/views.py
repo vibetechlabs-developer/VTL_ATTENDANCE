@@ -1,4 +1,5 @@
 import logging
+from datetime import timedelta
 
 from rest_framework.views import APIView
 from rest_framework.response import Response
@@ -138,15 +139,42 @@ def _verify_face_match(user, image_data):
     return matched_employee, distance
 
 
+def _max_break_duration():
+    return timedelta(minutes=getattr(settings, "MAX_BREAK_DURATION_MINUTES", 60))
+
+
+def _auto_resume_expired_breaks(log):
+    """End any open break that exceeded MAX_BREAK_DURATION (counts exactly 1 hour)."""
+    if not log:
+        return False
+    now = timezone.now()
+    max_duration = _max_break_duration()
+    resumed = False
+    for b in BreakLog.objects.filter(attendance=log, break_end__isnull=True):
+        if (now - b.break_start) < max_duration:
+            continue
+        b.break_end = b.break_start + max_duration
+        b.save(update_fields=["break_end"])
+        log.break_minutes = (log.break_minutes or 0) + int(max_duration.total_seconds() // 60)
+        log.save(update_fields=["break_minutes"])
+        resumed = True
+    return resumed
+
+
 def _live_session_stats(log):
     """Return (live_work_minutes, worked_hours, overtime_hours) for today's log."""
     if not log or not log.check_in:
         return 0, 0.0, 0.0
 
+    _auto_resume_expired_breaks(log)
+    log.refresh_from_db(fields=["break_minutes"])
+
     now = timezone.now()
     break_minutes = log.break_minutes or 0
+    max_mins = int(_max_break_duration().total_seconds() // 60)
     for b in BreakLog.objects.filter(attendance=log, break_end__isnull=True):
-        break_minutes += int((now - b.break_start).total_seconds() // 60)
+        elapsed = int((now - b.break_start).total_seconds() // 60)
+        break_minutes += min(elapsed, max_mins)
 
     if log.check_out:
         worked_hours = float(log.total_hours or 0)
@@ -185,10 +213,14 @@ def _notify_overtime_if_needed(user, overtime_hours, worked_hours, title_suffix=
 
 def _close_open_attendance_session(log, lat, lng):
     """Set check-out and hours on an open log; end any active breaks."""
+    _auto_resume_expired_breaks(log)
+    log.refresh_from_db(fields=["break_minutes"])
     now = timezone.now()
+    max_duration = _max_break_duration()
     for b in BreakLog.objects.filter(attendance=log, break_end__isnull=True):
-        b.break_end = now
-        b.save()
+        elapsed = now - b.break_start
+        b.break_end = b.break_start + max_duration if elapsed >= max_duration else now
+        b.save(update_fields=["break_end"])
         log.break_minutes += int((b.break_end - b.break_start).total_seconds() // 60)
 
     log.check_out = now
@@ -375,6 +407,10 @@ class MyAttendanceSessionView(APIView):
         if not log or not log.check_in:
             return Response({'active': False})
 
+        auto_resumed = _auto_resume_expired_breaks(log)
+        if auto_resumed:
+            log.refresh_from_db(fields=["break_minutes"])
+
         breaks_qs = BreakLog.objects.filter(attendance=log).order_by('break_start')
         breaks = []
         total_break_minutes = 0
@@ -403,6 +439,8 @@ class MyAttendanceSessionView(APIView):
             'total_break_minutes': total_break_minutes,
             'active_break_start': active_break_start,
             'breaks': breaks,
+            'break_auto_resumed': auto_resumed,
+            'max_break_minutes': int(_max_break_duration().total_seconds() // 60),
         })
 
 
@@ -631,7 +669,8 @@ class BreakStartView(APIView):
         if not log:
             return Response({'error': 'Please check in first.'}, status=400)
 
-        # Active break already che?
+        _auto_resume_expired_breaks(log)
+
         active_break = BreakLog.objects.filter(
             attendance=log,
             break_end=None
@@ -671,28 +710,35 @@ class BreakEndView(APIView):
         if not log:
             return Response({'error': 'Attendance record not found.'}, status=400)
 
+        auto_resumed = _auto_resume_expired_breaks(log)
+        if auto_resumed:
+            log.refresh_from_db(fields=["break_minutes"])
+
         active_break = BreakLog.objects.filter(
             attendance=log,
             break_end=None
         ).first()
 
         if not active_break:
-            return Response({'error': 'No active break found.'}, status=400)
+            return Response({
+                'message': 'Break already ended.',
+                'auto_resumed': auto_resumed,
+            })
 
         active_break.break_end = timezone.now()
         active_break.save()
 
-        # Break minutes update karo
         break_minutes = int(
             (active_break.break_end - active_break.break_start).total_seconds() // 60
         )
 
         log.break_minutes += break_minutes
-        log.save()
+        log.save(update_fields=['break_minutes'])
 
         return Response({
             'message': 'Break ended.',
-            'break_minutes': break_minutes
+            'break_minutes': break_minutes,
+            'auto_resumed': False,
         })
 
 

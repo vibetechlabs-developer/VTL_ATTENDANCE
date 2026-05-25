@@ -1,4 +1,4 @@
-import { useEffect, useState, useRef } from "react";
+import { useCallback, useEffect, useState, useRef } from "react";
 import { motion, AnimatePresence } from "framer-motion";
 import {
   Play, Square, Coffee, Clock, CalendarDays, MessageSquare, User,
@@ -32,6 +32,7 @@ import {
 import { LeaveBalanceRings, type LeaveBalanceShape } from "@/components/LeaveBalanceRings";
 import { Skeleton } from "@/components/ui/skeleton";
 import { Flame } from "lucide-react";
+import { MAX_BREAK_DURATION_MS, msUntilBreakAutoResume } from "@/utils/breakLimits";
 
 function formatDuration(ms: number) {
   if (ms < 0) ms = 0;
@@ -89,6 +90,51 @@ function punctualityStreakFromLogs(logs: { date: string; check_in: string | null
   return streak;
 }
 
+type AttendanceSessionBody = {
+  active?: boolean;
+  checked_in_at?: string;
+  checked_out_at?: string | null;
+  total_work_minutes?: number;
+  worked_hours?: number;
+  overtime_hours?: number;
+  total_break_minutes?: number;
+  active_break_start?: string | null;
+  breaks?: { start: string; end: string }[];
+  break_auto_resumed?: boolean;
+};
+
+function applyAttendanceSession(
+  body: AttendanceSessionBody,
+  hydrateSession: ReturnType<typeof useAttendanceStore.getState>["hydrateSession"],
+  reset: ReturnType<typeof useAttendanceStore.getState>["reset"],
+) {
+  if (!body.checked_in_at) {
+    reset();
+    return;
+  }
+  const breakList = (body.breaks || [])
+    .map((b) => ({ start: new Date(b.start).getTime(), end: new Date(b.end).getTime() }))
+    .filter((b) => Number.isFinite(b.start) && Number.isFinite(b.end));
+  const breakStartAtMs = body.active_break_start ? new Date(body.active_break_start).getTime() : null;
+  const totalBreakMsFromApi = Math.max(0, (body.total_break_minutes || 0) * 60 * 1000);
+  const checkedOutAtMs = body.checked_out_at ? new Date(body.checked_out_at).getTime() : null;
+  const workedMs = Math.max(
+    0,
+    typeof body.worked_hours === "number"
+      ? body.worked_hours * 60 * 60 * 1000
+      : (body.total_work_minutes || 0) * 60 * 1000,
+  );
+  hydrateSession({
+    status: body.active ? (breakStartAtMs ? "on-break" : "checked-in") : "checked-out",
+    checkInAt: new Date(body.checked_in_at).getTime(),
+    checkOutAt: checkedOutAtMs,
+    workedMsToday: workedMs,
+    totalBreakMs: totalBreakMsFromApi,
+    breakStartAt: breakStartAtMs,
+    breaks: breakList,
+  });
+}
+
 export default function EmployeeDashboard() {
   const { user, accessToken } = useAuthStore();
   const { addNotification } = useDataStore();
@@ -123,55 +169,53 @@ export default function EmployeeDashboard() {
     localStorage.setItem(key, "1");
   }, [user?.empId]);
 
+  const refreshSession = useCallback(async () => {
+    if (!accessToken) return null;
+    const res = await attendanceSessionRequest(accessToken);
+    if (!res.ok) return null;
+    const body = (await res.json().catch(() => ({}))) as AttendanceSessionBody;
+    applyAttendanceSession(body, hydrateSession, reset);
+    return body;
+  }, [accessToken, hydrateSession, reset]);
+
   useEffect(() => {
     if (!accessToken) return;
-    const restore = async () => {
-      // Always clear previous session state when switching users.
-      reset();
-      const res = await attendanceSessionRequest(accessToken);
-      if (!res.ok) return;
-      const body = (await res.json().catch(() => ({}))) as {
-        active?: boolean;
-        checked_in_at?: string;
-        checked_out_at?: string | null;
-        total_work_minutes?: number;
-        worked_hours?: number;
-        overtime_hours?: number;
-        total_break_minutes?: number;
-        active_break_start?: string | null;
-        breaks?: { start: string; end: string }[];
-      };
-      if (!body.checked_in_at) {
-        // Not checked-in today for this employee.
-        reset();
+    reset();
+    void refreshSession();
+  }, [accessToken, refreshSession, reset]);
+
+  // Auto-resume break after 1 hour (client timer + server enforcement on session API).
+  useEffect(() => {
+    if (status !== "on-break" || !breakStartAt || !accessToken) return;
+
+    const autoResume = async () => {
+      const res = await attendanceBreakEndRequest(accessToken);
+      if (res.ok) {
+        endBreak(breakStartAt + MAX_BREAK_DURATION_MS);
+        toast.info("Break ended automatically after 1 hour. You are back on the clock.");
         return;
       }
-
-      const breakList = (body.breaks || [])
-        .map((b) => ({ start: new Date(b.start).getTime(), end: new Date(b.end).getTime() }))
-        .filter((b) => Number.isFinite(b.start) && Number.isFinite(b.end));
-      const breakStartAtMs = body.active_break_start ? new Date(body.active_break_start).getTime() : null;
-      const totalBreakMsFromApi = Math.max(0, (body.total_break_minutes || 0) * 60 * 1000);
-      const checkedOutAtMs = body.checked_out_at ? new Date(body.checked_out_at).getTime() : null;
-      const workedMs = Math.max(
-        0,
-        typeof body.worked_hours === "number"
-          ? body.worked_hours * 60 * 60 * 1000
-          : (body.total_work_minutes || 0) * 60 * 1000
-      );
-
-      hydrateSession({
-        status: body.active ? (breakStartAtMs ? "on-break" : "checked-in") : "checked-out",
-        checkInAt: new Date(body.checked_in_at).getTime(),
-        checkOutAt: checkedOutAtMs,
-        workedMsToday: workedMs,
-        totalBreakMs: totalBreakMsFromApi,
-        breakStartAt: breakStartAtMs,
-        breaks: breakList,
-      });
+      const body = await refreshSession();
+      if (body?.break_auto_resumed || !body?.active_break_start) {
+        toast.info("Break ended automatically after 1 hour. You are back on the clock.");
+      }
     };
-    void restore();
-  }, [accessToken, hydrateSession, reset]);
+
+    const remaining = msUntilBreakAutoResume(breakStartAt, now);
+    if (remaining <= 0) {
+      void autoResume();
+      return;
+    }
+    const timer = window.setTimeout(() => void autoResume(), remaining);
+    return () => window.clearTimeout(timer);
+  }, [status, breakStartAt, accessToken, endBreak, refreshSession]);
+
+  // Poll session while on break (covers background tabs / missed timers).
+  useEffect(() => {
+    if (status !== "on-break" || !accessToken) return;
+    const interval = window.setInterval(() => void refreshSession(), 30_000);
+    return () => window.clearInterval(interval);
+  }, [status, accessToken, refreshSession]);
 
   // Real pending approvals from backend (per employee), instead of demo seedLeaves.
   useEffect(() => {
@@ -248,7 +292,10 @@ export default function EmployeeDashboard() {
 
   const tipOfDay = DAY_TIPS[(user?.empId?.charCodeAt(0) ?? 0) % DAY_TIPS.length];
 
-  const currentBreak = status === "on-break" && breakStartAt ? now - breakStartAt : 0;
+  const currentBreak =
+    status === "on-break" && breakStartAt
+      ? Math.min(now - breakStartAt, MAX_BREAK_DURATION_MS)
+      : 0;
   const liveWorkMs = checkInAt ? now - checkInAt - totalBreakMs - currentBreak : 0;
   const workMs = status === "checked-out" ? workedMsToday : liveWorkMs;
   const isEarly = workMs < FULL_DAY_MS;
@@ -256,6 +303,8 @@ export default function EmployeeDashboard() {
   const overtimeMs = Math.max(0, workMs - FULL_DAY_MS);
   const hasOvertime = overtimeMs > 0;
   const breakTakenMs = totalBreakMs + currentBreak;
+  const breakAutoResumeInMs =
+    status === "on-break" && breakStartAt ? msUntilBreakAutoResume(breakStartAt, now) : 0;
   const remainingDisplayMs = status === "checked-out" ? 0 : status === "idle" ? FULL_DAY_MS : remainingMs;
   const breakProgressPct = Math.min(100, Math.round((breakTakenMs / FULL_DAY_MS) * 100));
 
@@ -526,22 +575,42 @@ export default function EmployeeDashboard() {
                     <CheckCircle2 className="h-5 w-5 mr-2" /> Checked out for today
                   </div>
                 ) : (
-                  <>
-                    <Button
-                      size="lg"
-                      onClick={handleBreak}
-                      className={cn(
-                        "h-14 px-6 bg-white/20 hover:bg-white/30 text-white border border-white/30 font-semibold backdrop-blur rounded-2xl hover-shine hover:scale-[1.02]",
-                        status === "on-break" && "vtl-pulse-soft ring-2 ring-white/40"
-                      )}
-                    >
-                      {status === "on-break" ? <><Play className="h-5 w-5 mr-2" /> Resume</> : <><Coffee className="h-5 w-5 mr-2" /> Break</>}
-                    </Button>
-                    <Button size="lg" onClick={openCheckout}
-                      className="h-14 px-6 bg-destructive hover:bg-destructive/90 font-semibold shadow-3d rounded-2xl hover-shine hover:scale-[1.02]">
-                      <Square className="h-5 w-5 mr-2 fill-current" /> Check Out
-                    </Button>
-                  </>
+                  <div className="flex w-full min-w-0 flex-col gap-2">
+                    <div className="flex flex-wrap gap-3">
+                      <Button
+                        size="lg"
+                        onClick={handleBreak}
+                        className={cn(
+                          "h-14 px-6 bg-white/20 hover:bg-white/30 text-white border border-white/30 font-semibold backdrop-blur rounded-2xl hover-shine hover:scale-[1.02]",
+                          status === "on-break" && "vtl-pulse-soft ring-2 ring-white/40",
+                        )}
+                      >
+                        {status === "on-break" ? (
+                          <>
+                            <Play className="h-5 w-5 mr-2" /> Resume
+                          </>
+                        ) : (
+                          <>
+                            <Coffee className="h-5 w-5 mr-2" /> Break
+                          </>
+                        )}
+                      </Button>
+                      <Button
+                        size="lg"
+                        onClick={openCheckout}
+                        className="h-14 px-6 bg-destructive hover:bg-destructive/90 font-semibold shadow-3d rounded-2xl hover-shine hover:scale-[1.02]"
+                      >
+                        <Square className="h-5 w-5 mr-2 fill-current" /> Check Out
+                      </Button>
+                    </div>
+                    {status === "on-break" && breakStartAt ? (
+                      <p className="text-xs text-primary-foreground/85 leading-snug">
+                        Auto-resumes in{" "}
+                        <span className="font-semibold tabular-nums">{formatDuration(breakAutoResumeInMs)}</span>
+                        {" "}(max 1 hour break)
+                      </p>
+                    ) : null}
+                  </div>
                 )}
               </div>
             </motion.div>
@@ -628,7 +697,7 @@ export default function EmployeeDashboard() {
             <div className="flex-1 min-w-0">
               <p className="text-sm font-semibold">How to use</p>
               <p className="text-xs text-muted-foreground mt-1">
-                1) Tap <b>Check In</b> (Face + GPS). 2) For breaks, tap <b>Break</b> and then <b>Resume</b>. 3) When your work is done, tap <b>Check Out</b>.
+                1) Tap <b>Check In</b> (Face + GPS). 2) Tap <b>Break</b> / <b>Resume</b> — breaks auto-resume after 1 hour. 3) Tap <b>Check Out</b> when done.
               </p>
             </div>
             <Button size="sm" className="hover-shine" onClick={() => setShowHowToUse(false)} type="button">

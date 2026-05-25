@@ -473,6 +473,11 @@
     scrollbar-width: none;
   }
 
+  .touch-scroll-x {
+    overflow-x: auto;
+    -webkit-overflow-scrolling: touch;
+  }
+
   .scrollbar-hide::-webkit-scrollbar {
     display: none;
   }

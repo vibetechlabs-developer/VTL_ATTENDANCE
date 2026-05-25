@@ -199,3 +199,6 @@ _debug_env = os.getenv("DEBUG", "false").strip().lower() in ["1", "true", "yes",
 ATTENDANCE_RELAXED_VERIFY = _debug_env and os.getenv(
     "ATTENDANCE_RELAXED_VERIFY", ""
 ).strip().lower() in ["1", "true", "yes", "y"]
+
+# Max continuous break before auto-resume (work clock restarts).
+MAX_BREAK_DURATION_MINUTES = int(os.getenv("MAX_BREAK_DURATION_MINUTES", "60"))

@@ -1,4 +1,5 @@
 import { create } from "zustand";
+import { cappedBreakEndMs } from "@/utils/breakLimits";
 
 export type AttendanceStatus = "idle" | "checked-in" | "on-break" | "checked-out";
 
@@ -51,12 +52,12 @@ export const useAttendanceStore = create<AttendanceState>((set, get) => ({
   endBreak: (atMs) => {
     const { breakStartAt, totalBreakMs, breaks } = get();
     if (!breakStartAt) return;
-    const now = atMs ?? Date.now();
+    const end = cappedBreakEndMs(breakStartAt, atMs ?? Date.now());
     set({
       status: "checked-in",
       breakStartAt: null,
-      totalBreakMs: totalBreakMs + (now - breakStartAt),
-      breaks: [...breaks, { start: breakStartAt, end: now }],
+      totalBreakMs: totalBreakMs + (end - breakStartAt),
+      breaks: [...breaks, { start: breakStartAt, end }],
     });
   },
   checkOut: (payload) => {

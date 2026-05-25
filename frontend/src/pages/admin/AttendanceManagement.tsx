@@ -1,8 +1,9 @@
-import { useEffect, useMemo, useState } from "react";
-import { Download, Search, ChevronLeft, ChevronRight, Calendar as CalendarIcon, Users, UserCheck, UserX, Plane, Eye, Coffee, UserPlus, UserMinus } from "lucide-react";
-import { format, addDays, subDays, startOfWeek, endOfWeek, startOfMonth, endOfMonth, eachDayOfInterval, startOfDay, isAfter } from "date-fns";
+import { useCallback, useEffect, useState } from "react";
+import { Download, Search, ChevronLeft, ChevronRight, Calendar as CalendarIcon, Users, UserCheck, UserX, Plane, Eye, UserPlus, UserMinus } from "lucide-react";
+import { format, addDays, subDays, startOfWeek, endOfWeek, startOfMonth, endOfMonth, startOfDay, isAfter } from "date-fns";
 import { toast } from "sonner";
 import { exportCsv } from "@/utils/csv";
+import { formatApiDate, safeEachDayOfInterval } from "@/utils/safeDate";
 import { Input } from "@/components/ui/input";
 import { Button } from "@/components/ui/button";
 import { useAuthStore } from "@/store/authStore";
@@ -24,13 +25,38 @@ export default function AttendanceManagement() {
   const [selectedEmployee, setSelectedEmployee] = useState<any | null>(null);
   const [historyRows, setHistoryRows] = useState<any[]>([]);
   const [historyLoading, setHistoryLoading] = useState(false);
+  const [loading, setLoading] = useState(false);
+  const [loadError, setLoadError] = useState<string | null>(null);
 
-  const loadAttendance = async () => {
+  const loadAttendance = useCallback(async () => {
     if (!accessToken) return;
-    const res = await attendanceAdminRequest(accessToken, format(date, "yyyy-MM-dd"));
-    if (!res.ok) return;
-    setAttendance(await res.json());
-  };
+    setLoading(true);
+    setLoadError(null);
+    try {
+      const res = await attendanceAdminRequest(accessToken, format(date, "yyyy-MM-dd"));
+      const body = (await res.json().catch(() => null)) as any[] | { error?: string } | null;
+      if (!res.ok) {
+        const msg =
+          body && typeof body === "object" && !Array.isArray(body) && typeof body.error === "string"
+            ? body.error
+            : res.status === 401
+              ? "Session expired. Please sign in again."
+              : "Could not load attendance. Check your connection and try again.";
+        setLoadError(msg);
+        setAttendance([]);
+        toast.error(msg);
+        return;
+      }
+      setAttendance(Array.isArray(body) ? body : []);
+    } catch {
+      const msg = "Network error loading attendance.";
+      setLoadError(msg);
+      setAttendance([]);
+      toast.error(msg);
+    } finally {
+      setLoading(false);
+    }
+  }, [accessToken, date]);
 
   const loadHistory = async (mode: "week" | "month", row: any) => {
     if (!accessToken) return;
@@ -53,7 +79,7 @@ export default function AttendanceManagement() {
       }
       const logs = Array.isArray(body) ? body : [];
       const byDate = new Map(logs.map((r) => [String(r.date).slice(0, 10), r]));
-      const days = eachDayOfInterval({ start: rawFrom, end: rangeEnd }).sort((a, b) => b.getTime() - a.getTime());
+      const days = safeEachDayOfInterval(rawFrom, rangeEnd).sort((a, b) => b.getTime() - a.getTime());
       setHistoryRows(
         days.map((d) => {
           const key = format(d, "yyyy-MM-dd");
@@ -86,7 +112,7 @@ export default function AttendanceManagement() {
 
   useEffect(() => {
     void loadAttendance();
-  }, [accessToken, date]);
+  }, [loadAttendance]);
 
   const rows = attendance.filter((a) =>
     (activeTab === "All" || (activeTab === "Present" && a.status === "Present") || (activeTab === "Absent" && a.status === "Absent") || (activeTab === "On Leave" && (a.status as string) === "On Leave")) &&
@@ -115,9 +141,9 @@ export default function AttendanceManagement() {
   };
 
   return (
-    <div className="space-y-8 w-full max-w-none">
+    <div className="min-w-0 space-y-6 sm:space-y-8 w-full max-w-none overflow-x-hidden">
       <Dialog open={historyOpen} onOpenChange={setHistoryOpen}>
-        <DialogContent className="sm:max-w-3xl rounded-3xl border-border/50 bg-card/95 backdrop-blur-2xl shadow-3d max-h-[85vh] overflow-y-auto">
+        <DialogContent className="w-[calc(100vw-2rem)] max-w-3xl rounded-2xl sm:rounded-3xl border-border/50 bg-card/95 backdrop-blur-2xl shadow-3d max-h-[min(85dvh,100%)] overflow-y-auto">
           <DialogHeader>
             <DialogTitle>Attendance History</DialogTitle>
             <DialogDescription>
@@ -163,18 +189,25 @@ export default function AttendanceManagement() {
         <p className="text-muted-foreground mt-1 ml-9">View and track staff attendance for any date</p>
       </div>
 
-      <div className="flex items-center justify-center gap-4">
-        <button onClick={() => setDate(subDays(date, 1))} className="p-2 rounded-full border border-border/50 hover:bg-muted/50 transition-smooth">
+      <div className="flex items-center justify-center gap-2 sm:gap-4">
+        <button
+          type="button"
+          onClick={() => setDate(subDays(date, 1))}
+          className="p-2 rounded-full border border-border/50 hover:bg-muted/50 transition-smooth touch-manipulation"
+          aria-label="Previous day"
+        >
           <ChevronLeft className="h-4 w-4 text-muted-foreground" />
         </button>
-        <div className="flex items-center gap-2 px-4 py-2 font-semibold text-base sm:text-lg text-primary bg-muted/20 rounded-xl">
-          <CalendarIcon className="h-5 w-5" />
-          {format(date, "dd-MM-yyyy")}
+        <div className="flex items-center gap-2 px-3 sm:px-4 py-2 font-semibold text-sm sm:text-lg text-primary bg-muted/20 rounded-xl min-w-0">
+          <CalendarIcon className="h-5 w-5 shrink-0" />
+          <span className="tabular-nums">{format(date, "dd-MM-yyyy")}</span>
         </div>
         <button
+          type="button"
           onClick={() => canGoNext && setDate(addDays(date, 1))}
           disabled={!canGoNext}
-          className="p-2 rounded-full border border-border/50 hover:bg-muted/50 transition-smooth disabled:opacity-40 disabled:cursor-not-allowed"
+          className="p-2 rounded-full border border-border/50 hover:bg-muted/50 transition-smooth disabled:opacity-40 disabled:cursor-not-allowed touch-manipulation"
+          aria-label="Next day"
         >
           <ChevronRight className="h-4 w-4 text-muted-foreground" />
         </button>
@@ -226,13 +259,14 @@ export default function AttendanceManagement() {
             <Input placeholder="Search by name, ID, or role..." className="pl-9 h-10 bg-transparent border-0 border-b border-border/50 rounded-none focus-visible:ring-0 focus-visible:border-primary shadow-none w-full" value={q} onChange={(e) => setQ(e.target.value)} />
           </div>
 
-          <div className="flex bg-muted/40 p-1 rounded-xl w-full sm:w-auto overflow-x-auto scrollbar-hide min-w-0">
+          <div className="flex bg-muted/40 p-1 rounded-xl w-full sm:w-auto touch-scroll-x scrollbar-hide min-w-0">
             {["All", "Present", "Absent", "On Leave"].map(tab => {
               const count = tab === "All" ? total : tab === "Present" ? presentCount : tab === "Absent" ? absentCount : leaveCount;
               return (
                 <button
                   key={tab}
-                  className={`px-4 py-1.5 rounded-lg text-xs sm:text-sm font-medium transition-smooth whitespace-nowrap ${activeTab === tab ? "bg-background shadow-sm border border-border/40" : "text-muted-foreground hover:text-foreground"}`}
+                  type="button"
+                  className={`px-4 py-1.5 rounded-lg text-xs sm:text-sm font-medium transition-smooth whitespace-nowrap touch-manipulation ${activeTab === tab ? "bg-background shadow-sm border border-border/40" : "text-muted-foreground hover:text-foreground"}`}
                   onClick={() => setActiveTab(tab)}
                 >
                   {tab} ({count})
@@ -242,14 +276,31 @@ export default function AttendanceManagement() {
           </div>
         </div>
 
-        <button onClick={() => exportCsv("team_attendance.csv", rows)} className="flex items-center gap-2 text-sm font-medium hover:text-primary transition-colors shrink-0">
+        <button
+          type="button"
+          onClick={() => exportCsv("team_attendance.csv", rows)}
+          className="flex items-center gap-2 text-sm font-medium hover:text-primary transition-colors shrink-0 touch-manipulation"
+        >
           <Download className="h-4 w-4" /> <span className="hidden sm:inline">Export CSV</span><span className="sm:hidden">Export</span>
         </button>
       </div>
 
+      {loadError && (
+        <div className="rounded-2xl border border-destructive/30 bg-destructive/10 px-4 py-3 text-sm text-destructive">
+          {loadError}
+          <button type="button" className="ml-2 underline font-medium touch-manipulation" onClick={() => void loadAttendance()}>
+            Retry
+          </button>
+        </div>
+      )}
+
       {/* Mobile/tablet: card list; Desktop: table */}
-      <div className="lg:hidden space-y-3">
-        {rows.length === 0 ? (
+      <div className="lg:hidden space-y-3 min-w-0">
+        {loading ? (
+          <div className="rounded-2xl bg-card shadow-sm border-glow-shine p-6 text-center text-sm text-muted-foreground">
+            Loading attendance…
+          </div>
+        ) : rows.length === 0 ? (
           <div className="rounded-2xl bg-card shadow-sm border-glow-shine p-6 text-center text-sm text-muted-foreground">
             No records found.
           </div>
@@ -268,9 +319,9 @@ export default function AttendanceManagement() {
             return (
               <div key={r.id} className="rounded-2xl bg-card shadow-sm border-glow-shine p-4">
                 <div className="flex items-start justify-between gap-3">
-                  <div className="min-w-0">
+                  <div className="min-w-0 flex-1">
                     <p className="font-semibold truncate">{r.name}</p>
-                    <p className="text-xs text-muted-foreground font-mono">{r.empId} · {r.department}</p>
+                    <p className="text-xs text-muted-foreground font-mono break-all">{r.empId} · {r.department}</p>
                     <p className="text-xs text-muted-foreground capitalize mt-0.5">{role}</p>
                   </div>
                   <div className={`inline-flex items-center gap-1.5 px-2 py-0.5 rounded text-xs font-semibold shrink-0 ${statusClass}`}>
@@ -282,11 +333,11 @@ export default function AttendanceManagement() {
                 <div className="grid grid-cols-2 gap-2 mt-3 text-xs">
                   <div className="rounded-lg bg-muted/30 px-3 py-2">
                     <p className="text-muted-foreground">Check In</p>
-                    <p className="font-medium text-sm">{r.checkIn ? format(new Date(r.checkIn), "h:mm a") : "—"}</p>
+                    <p className="font-medium text-sm">{formatApiDate(r.checkIn, "h:mm a")}</p>
                   </div>
                   <div className="rounded-lg bg-muted/30 px-3 py-2">
                     <p className="text-muted-foreground">Check Out</p>
-                    <p className="font-medium text-sm">{r.checkOut ? format(new Date(r.checkOut), "h:mm a") : "—"}</p>
+                    <p className="font-medium text-sm">{formatApiDate(r.checkOut, "h:mm a")}</p>
                   </div>
                   <div className="rounded-lg bg-muted/30 px-3 py-2">
                     <p className="text-muted-foreground">Breaks</p>
@@ -307,27 +358,40 @@ export default function AttendanceManagement() {
                   </div>
                 </div>
 
-                {canForceCheckout && (
-                  <div className="mt-3">
-                    {!r.checkIn || r.checkOut || r.status === "Absent" || r.status === "On Leave" ? null : (
-                      <Button
-                        size="sm"
-                        variant="outline"
-                        className="w-full text-destructive border-destructive/30 hover:bg-destructive/10"
-                        onClick={() => void handleForceCheckout(r)}
-                      >
-                        Force Out
-                      </Button>
-                    )}
-                  </div>
-                )}
+                <div className="mt-3 flex flex-col gap-2 sm:flex-row">
+                  <Button
+                    type="button"
+                    size="sm"
+                    variant="outline"
+                    className="w-full touch-manipulation"
+                    onClick={() => void openHistory(r)}
+                  >
+                    <Eye className="h-4 w-4 mr-2" />
+                    View history
+                  </Button>
+                  {canForceCheckout &&
+                  r.checkIn &&
+                  !r.checkOut &&
+                  r.status !== "Absent" &&
+                  r.status !== "On Leave" ? (
+                    <Button
+                      type="button"
+                      size="sm"
+                      variant="outline"
+                      className="w-full text-destructive border-destructive/30 hover:bg-destructive/10 touch-manipulation"
+                      onClick={() => void handleForceCheckout(r)}
+                    >
+                      Force Out
+                    </Button>
+                  ) : null}
+                </div>
               </div>
             );
           })
         )}
       </div>
 
-      <div className="hidden lg:block w-full overflow-x-auto text-sm rounded-2xl bg-card shadow-sm pb-2 border-glow-shine">
+      <div className="hidden lg:block w-full touch-scroll-x text-sm rounded-2xl bg-card shadow-sm pb-2 border-glow-shine">
         <table className="w-full min-w-[980px]">
           <thead>
             <tr className="border-b border-border/50">
@@ -379,7 +443,7 @@ export default function AttendanceManagement() {
                       {r.status}
                     </div>
                   </td>
-                  <td className="py-3 px-6 font-medium text-sm">{r.checkIn ? format(new Date(r.checkIn), "h:mm a") : "—"}</td>
+                  <td className="py-3 px-6 font-medium text-sm">{formatApiDate(r.checkIn, "h:mm a")}</td>
                   <td className="py-3 px-6">
                     {r.status === "Present" ? (
                       <div className="flex items-center gap-2 text-xs font-medium">
@@ -391,7 +455,7 @@ export default function AttendanceManagement() {
                     ) : <span className="text-muted-foreground">—</span>}
                   </td>
                   <td className="py-3 px-6">
-                    <span className="text-sm font-medium">{r.checkOut ? format(new Date(r.checkOut), "h:mm a") : "—"}</span>
+                    <span className="text-sm font-medium">{formatApiDate(r.checkOut, "h:mm a")}</span>
                   </td>
                   <td className="py-3 px-6 text-sm font-medium">
                     {r.hours > 0 ? `${Math.floor(r.hours)}h ${Math.round((r.hours * 60) % 60)}m` : "—"}
@@ -429,9 +493,9 @@ export default function AttendanceManagement() {
 
 function HistoryTable({ loading, rows }: { loading: boolean; rows: any[] }) {
   return (
-    <div className="w-full rounded-2xl border border-border/40 overflow-hidden">
-      <div className="max-h-[52vh] overflow-y-auto">
-      <table className="w-full text-sm">
+    <div className="w-full min-w-0 rounded-2xl border border-border/40 overflow-hidden">
+      <div className="max-h-[52vh] overflow-y-auto touch-scroll-x">
+      <table className="w-full min-w-[640px] text-sm">
         <thead>
           <tr className="border-b border-border/40 bg-muted/20 sticky top-0 z-10">
             <th className="text-left py-3 px-4 text-[11px] font-semibold text-muted-foreground uppercase tracking-wider">Date</th>
@@ -459,7 +523,7 @@ function HistoryTable({ loading, rows }: { loading: boolean; rows: any[] }) {
           ) : (
             rows.map((r) => (
               <tr key={r.id} className="border-b border-border/20 last:border-0 hover:bg-muted/20 transition-smooth">
-                <td className="py-3 px-4 font-medium">{r.date ? format(new Date(r.date), "dd MMM yyyy") : "—"}</td>
+                <td className="py-3 px-4 font-medium">{formatApiDate(r.date, "dd MMM yyyy")}</td>
                 <td className="py-3 px-4">
                   {r.status === "Late" ? (
                     <span className="inline-flex items-center rounded px-2 py-0.5 text-[11px] font-semibold bg-warning/15 text-warning">Late</span>
@@ -471,8 +535,8 @@ function HistoryTable({ loading, rows }: { loading: boolean; rows: any[] }) {
                     <span className="inline-flex items-center rounded px-2 py-0.5 text-[11px] font-semibold bg-muted text-muted-foreground">—</span>
                   )}
                 </td>
-                <td className="py-3 px-4 tabular-nums">{r.checkIn ? format(new Date(r.checkIn), "h:mm a") : "—"}</td>
-                <td className="py-3 px-4 tabular-nums">{r.checkOut ? format(new Date(r.checkOut), "h:mm a") : "—"}</td>
+                <td className="py-3 px-4 tabular-nums">{formatApiDate(r.checkIn, "h:mm a")}</td>
+                <td className="py-3 px-4 tabular-nums">{formatApiDate(r.checkOut, "h:mm a")}</td>
                 <td className="py-3 px-4 tabular-nums">
                   {typeof r.breakMinutes === "number"
                     ? `${Math.floor(r.breakMinutes / 60)}h ${r.breakMinutes % 60}m`
