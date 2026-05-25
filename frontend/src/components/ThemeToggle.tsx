@@ -1,12 +1,13 @@
 import { useEffect, useState } from "react";
 import { Moon, Sun } from "lucide-react";
 import { Button } from "@/components/ui/button";
+import { safeGetItem, safeSetItem } from "@/utils/storageSafe";
 
 export function ThemeToggle() {
   const [isDark, setIsDark] = useState(false);
 
   useEffect(() => {
-    const stored = localStorage.getItem("vtl-theme");
+    const stored = safeGetItem(localStorage, "vtl-theme");
     const dark = stored ? stored === "dark" : true;
     setIsDark(dark);
     document.documentElement.classList.toggle("dark", dark);
@@ -16,7 +17,7 @@ export function ThemeToggle() {
     const next = !isDark;
     setIsDark(next);
     document.documentElement.classList.toggle("dark", next);
-    localStorage.setItem("vtl-theme", next ? "dark" : "light");
+    safeSetItem(localStorage, "vtl-theme", next ? "dark" : "light");
   };
 
   return (

@@ -1,7 +1,7 @@
 import { useEffect, useMemo, useState } from "react";
 import { Search, Download } from "lucide-react";
 import { Input } from "@/components/ui/input";
-import { format } from "date-fns";
+import { formatApiDate } from "@/utils/safeDate";
 import { exportCsv } from "@/utils/csv";
 import { useAuthStore } from "@/store/authStore";
 import { auditLogsRequest } from "@/lib/api";
@@ -126,7 +126,7 @@ export default function AuditLogs() {
                   <div className="grid grid-cols-1 gap-2 mt-3 text-xs">
                     <div className="rounded-lg bg-muted/30 px-3 py-2">
                       <p className="text-muted-foreground">Timestamp</p>
-                      <p className="font-medium text-sm">{format(new Date(r.timestamp), "MMM dd, hh:mm a")}</p>
+                      <p className="font-medium text-sm">{formatApiDate(r.timestamp, "MMM dd, hh:mm a")}</p>
                     </div>
                     <div className="rounded-lg bg-muted/30 px-3 py-2">
                       <p className="text-muted-foreground">Action</p>
@@ -166,7 +166,7 @@ export default function AuditLogs() {
                 return (
                   <tr key={r.id} className="border-b border-border/20 last:border-0 hover:bg-muted/10 transition-colors">
                     <td className="py-4 px-2 text-muted-foreground font-medium text-[13px] whitespace-nowrap">
-                      {format(new Date(r.timestamp), "MMM dd, hh:mm a")}
+                      {formatApiDate(r.timestamp, "MMM dd, hh:mm a")}
                     </td>
                     <td className="py-4 px-2">
                       <div className="flex items-center gap-3">

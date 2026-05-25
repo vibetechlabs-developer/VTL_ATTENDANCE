@@ -2,7 +2,7 @@ import { useEffect, useState } from "react";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { StatusPill } from "@/components/StatusPill";
 import { Shield, Eye } from "lucide-react";
-import { formatDistanceToNow } from "date-fns";
+import { safeFormatDistanceToNow } from "@/utils/safeDate";
 import { useAuthStore } from "@/store/authStore";
 import { securityOverviewRequest } from "@/lib/api";
 
@@ -46,7 +46,7 @@ export default function SecurityPanel() {
                 <div className="flex flex-col items-end gap-1">
                   <StatusPill label={l.status} variant={l.status === "success" ? "success" : "destructive"} />
                   <span className="text-[11px] text-muted-foreground">
-                    {formatDistanceToNow(new Date(l.timestamp), { addSuffix: true })}
+                    {safeFormatDistanceToNow(l.timestamp, { addSuffix: true })}
                   </span>
                 </div>
               </div>
@@ -71,7 +71,7 @@ export default function SecurityPanel() {
                 <div className="flex flex-col items-end gap-1">
                   <StatusPill label={f.status} variant={f.status === "verified" ? "success" : "warning"} />
                   <span className="text-[11px] text-muted-foreground">
-                    {formatDistanceToNow(new Date(f.timestamp), { addSuffix: true })}
+                    {safeFormatDistanceToNow(f.timestamp, { addSuffix: true })}
                   </span>
                 </div>
               </div>

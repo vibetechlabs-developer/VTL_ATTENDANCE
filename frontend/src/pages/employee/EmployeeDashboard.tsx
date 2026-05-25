@@ -19,6 +19,7 @@ import { useDataStore } from "@/store/dataStore";
 import { cn } from "@/lib/utils";
 import { toast } from "sonner";
 import { format, subDays, startOfWeek, endOfWeek, isWithinInterval, parseISO } from "date-fns";
+import { formatTimestampMs, parseApiDate } from "@/utils/safeDate";
 import {
   attendanceBreakEndRequest,
   attendanceBreakStartRequest,
@@ -63,8 +64,8 @@ const EARLY_REASON_CHIPS = [
 ];
 
 function isLateCheckIn(iso: string): boolean {
-  const dt = new Date(iso);
-  if (Number.isNaN(dt.getTime())) return false;
+  const dt = parseApiDate(iso);
+  if (!dt) return false;
   return dt.getHours() > 10 || (dt.getHours() === 10 && dt.getMinutes() > 15);
 }
 
@@ -113,11 +114,11 @@ function applyAttendanceSession(
     return;
   }
   const breakList = (body.breaks || [])
-    .map((b) => ({ start: new Date(b.start).getTime(), end: new Date(b.end).getTime() }))
+    .map((b) => ({ start: parseApiDate(b.start)?.getTime() ?? NaN, end: parseApiDate(b.end)?.getTime() ?? NaN }))
     .filter((b) => Number.isFinite(b.start) && Number.isFinite(b.end));
-  const breakStartAtMs = body.active_break_start ? new Date(body.active_break_start).getTime() : null;
+  const breakStartAtMs = body.active_break_start ? parseApiDate(body.active_break_start)?.getTime() ?? null : null;
   const totalBreakMsFromApi = Math.max(0, (body.total_break_minutes || 0) * 60 * 1000);
-  const checkedOutAtMs = body.checked_out_at ? new Date(body.checked_out_at).getTime() : null;
+  const checkedOutAtMs = body.checked_out_at ? parseApiDate(body.checked_out_at)?.getTime() ?? null : null;
   const workedMs = Math.max(
     0,
     typeof body.worked_hours === "number"
@@ -126,7 +127,7 @@ function applyAttendanceSession(
   );
   hydrateSession({
     status: body.active ? (breakStartAtMs ? "on-break" : "checked-in") : "checked-out",
-    checkInAt: new Date(body.checked_in_at).getTime(),
+    checkInAt: parseApiDate(body.checked_in_at)?.getTime() ?? Date.now(),
     checkOutAt: checkedOutAtMs,
     workedMsToday: workedMs,
     totalBreakMs: totalBreakMsFromApi,
@@ -552,12 +553,12 @@ export default function EmployeeDashboard() {
 
                 {status !== "idle" && status !== "checked-out" && (
                   <p className="mt-2 text-sm text-primary-foreground/85">
-                    Checked in at {format(new Date(checkInAt!), "h:mm a")} · {breaks.length} breaks taken
+                    Checked in at {formatTimestampMs(checkInAt!, "h:mm a")} · {breaks.length} breaks taken
                   </p>
                 )}
                 {status === "checked-out" && (
                   <p className="mt-2 text-sm text-primary-foreground/85">
-                    {checkInAt ? format(new Date(checkInAt), "h:mm a") : "—"} - {checkOutAt ? format(new Date(checkOutAt), "h:mm a") : "—"}
+                    {checkInAt ? formatTimestampMs(checkInAt, "h:mm a") : "—"} - {checkOutAt ? formatTimestampMs(checkOutAt, "h:mm a") : "—"}
                     {" · "}Total {formatDuration(workMs)}
                     {hasOvertime ? ` · Overtime ${formatDuration(overtimeMs)}` : ""}
                   </p>
@@ -765,7 +766,7 @@ export default function EmployeeDashboard() {
                     <div>
                       <p className="text-sm font-medium">Break #{i + 1}</p>
                       <p className="text-xs text-muted-foreground">
-                        {format(new Date(b.start), "h:mm a")} – {format(new Date(b.end), "h:mm a")}
+                        {formatTimestampMs(b.start, "h:mm a")} – {formatTimestampMs(b.end, "h:mm a")}
                       </p>
                     </div>
                   </div>

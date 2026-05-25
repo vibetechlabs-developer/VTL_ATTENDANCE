@@ -1,10 +1,12 @@
 import { useState, useEffect } from "react";
 import { motion, AnimatePresence } from "framer-motion";
 import { BrandMarkIcon } from "@/components/BrandMarkIcon";
+import { safeGetItem, safeSetItem } from "@/utils/storageSafe";
 
 export function SplashScreen({ children }: { children: React.ReactNode }) {
     const [show, setShow] = useState(() => {
-        if (sessionStorage.getItem("vtl-splash-shown")) return false;
+        if (typeof window === "undefined") return false;
+        if (safeGetItem(sessionStorage, "vtl-splash-shown")) return false;
         return true;
     });
 
@@ -12,7 +14,7 @@ export function SplashScreen({ children }: { children: React.ReactNode }) {
         if (!show) return;
         const timer = setTimeout(() => {
             setShow(false);
-            sessionStorage.setItem("vtl-splash-shown", "1");
+            safeSetItem(sessionStorage, "vtl-splash-shown", "1");
         }, 2800);
         return () => clearTimeout(timer);
     }, [show]);
@@ -26,7 +28,7 @@ export function SplashScreen({ children }: { children: React.ReactNode }) {
                         initial={{ opacity: 1 }}
                         exit={{ opacity: 0 }}
                         transition={{ duration: 0.6, ease: "easeInOut" }}
-                        className="fixed inset-0 z-[9999] flex items-center justify-center bg-background overflow-hidden"
+                        className="fixed inset-0 z-[9999] flex items-center justify-center bg-background overflow-hidden pointer-events-auto"
                     >
                         {/* Animated gradient orbs */}
                         <div className="absolute inset-0 pointer-events-none">

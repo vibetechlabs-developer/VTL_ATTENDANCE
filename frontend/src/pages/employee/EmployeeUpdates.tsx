@@ -7,7 +7,7 @@ import { Avatar, AvatarFallback } from "@/components/ui/avatar";
 import { StatusPill } from "@/components/StatusPill";
 import { useAuthStore } from "@/store/authStore";
 import { toast } from "sonner";
-import { formatDistanceToNow } from "date-fns";
+import { safeFormatDistanceToNow } from "@/utils/safeDate";
 import { updatesPostRequest, updatesRequest } from "@/lib/api";
 
 export default function EmployeeUpdates() {
@@ -84,7 +84,7 @@ export default function EmployeeUpdates() {
                     <p className="font-semibold text-sm">{u.employee_name}</p>
                     <StatusPill label={u.role} variant="muted" />
                     <span className="text-xs text-muted-foreground ml-auto">
-                      {formatDistanceToNow(new Date(u.created_at), { addSuffix: true })}
+                      {safeFormatDistanceToNow(u.created_at, { addSuffix: true })}
                     </span>
                   </div>
                   <p className="text-sm mt-2 leading-relaxed">{u.update_text}</p>

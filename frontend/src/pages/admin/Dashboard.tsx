@@ -21,7 +21,8 @@ import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Avatar, AvatarFallback } from "@/components/ui/avatar";
 import { Button } from "@/components/ui/button";
 import { Skeleton } from "@/components/ui/skeleton";
-import { formatDistanceToNow, format, subDays } from "date-fns";
+import { format, subDays } from "date-fns";
+import { formatApiDate, safeFormatDistanceToNow } from "@/utils/safeDate";
 import { motion, AnimatePresence } from "framer-motion";
 import { useNavigate } from "react-router-dom";
 import { useCallback, useEffect, useMemo, useState } from "react";
@@ -385,7 +386,7 @@ export default function AdminDashboard() {
                     <div className="flex flex-wrap items-baseline gap-x-2">
                       <p className="font-medium text-sm truncate">{u.employee_name}</p>
                       <span className="text-xs text-muted-foreground">
-                        {formatDistanceToNow(new Date(u.created_at), { addSuffix: true })}
+                        {safeFormatDistanceToNow(u.created_at, { addSuffix: true })}
                       </span>
                     </div>
                     <p className="text-sm text-muted-foreground mt-0.5">{u.update_text}</p>
@@ -476,7 +477,7 @@ export default function AdminDashboard() {
                 </div>
                 <div className="flex items-center gap-3">
                   <span className="text-xs text-muted-foreground whitespace-nowrap">
-                    {a.checkIn ? `In ${format(new Date(a.checkIn), "h:mm a")}` : "Not checked in"}
+                    {a.checkIn ? `In ${formatApiDate(a.checkIn, "h:mm a")}` : "Not checked in"}
                   </span>
                   <span
                     className={`inline-flex items-center gap-1.5 rounded-full px-2.5 py-1 text-xs font-semibold border ${

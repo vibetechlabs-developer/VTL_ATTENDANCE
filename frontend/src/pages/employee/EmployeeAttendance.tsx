@@ -5,6 +5,7 @@ import { Calendar } from "@/components/ui/calendar";
 import { StatusPill } from "@/components/StatusPill";
 import { Download } from "lucide-react";
 import { addDays, eachDayOfInterval, format, isWeekend, startOfWeek, subWeeks } from "date-fns";
+import { formatApiDate, parseApiDate } from "@/utils/safeDate";
 import { exportCsv } from "@/utils/csv";
 import { toast } from "sonner";
 import { useAuthStore } from "@/store/authStore";
@@ -23,8 +24,8 @@ type AttendanceLogApi = {
 
 function isLateCheckIn(iso: string | null): boolean {
   if (!iso) return false;
-  const dt = new Date(iso);
-  if (Number.isNaN(dt.getTime())) return false;
+  const dt = parseApiDate(iso);
+  if (!dt) return false;
   return dt.getHours() > 10 || (dt.getHours() === 10 && dt.getMinutes() > 15);
 }
 
@@ -268,11 +269,11 @@ export default function EmployeeAttendance() {
                         <div className="text-sm space-y-1 pt-2 border-t">
                           <p>
                             <span className="text-muted-foreground">Check-in: </span>
-                            {selectedLog?.check_in ? format(new Date(selectedLog.check_in), "h:mm a") : "—"}
+                            {selectedLog?.check_in ? formatApiDate(selectedLog.check_in, "h:mm a") : "—"}
                           </p>
                           <p>
                             <span className="text-muted-foreground">Check-out: </span>
-                            {selectedLog?.check_out ? format(new Date(selectedLog.check_out), "h:mm a") : "—"}
+                            {selectedLog?.check_out ? formatApiDate(selectedLog.check_out, "h:mm a") : "—"}
                           </p>
                           <p>
                             <span className="text-muted-foreground">Hours: </span>
@@ -306,13 +307,13 @@ export default function EmployeeAttendance() {
                 <div className="flex items-center justify-between text-sm">
                   <span className="text-muted-foreground">Check In</span>
                   <span className="font-medium tabular-nums">
-                    {todayLog?.check_in ? format(new Date(todayLog.check_in), "hh:mm a") : "--:--"}
+                    {todayLog?.check_in ? formatApiDate(todayLog.check_in, "hh:mm a") : "--:--"}
                   </span>
                 </div>
                 <div className="flex items-center justify-between text-sm">
                   <span className="text-muted-foreground">Check Out</span>
                   <span className="font-medium tabular-nums">
-                    {todayLog?.check_out ? format(new Date(todayLog.check_out), "hh:mm a") : "--:--"}
+                    {todayLog?.check_out ? formatApiDate(todayLog.check_out, "hh:mm a") : "--:--"}
                   </span>
                 </div>
               </>

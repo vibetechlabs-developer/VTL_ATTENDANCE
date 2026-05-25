@@ -14,6 +14,7 @@ import { toast } from "sonner";
 import { cn } from "@/lib/utils";
 import { ThemeToggle } from "@/components/ThemeToggle";
 import { BrandMarkIcon } from "@/components/BrandMarkIcon";
+import { useAuthHydrated } from "@/hooks/useAuthHydrated";
 
 type Step = "creds" | "face" | "location" | "done";
 
@@ -134,6 +135,7 @@ function useParticleCanvas(canvasRef: React.RefObject<HTMLCanvasElement | null>,
 }
 
 export default function Login() {
+  const hydrated = useAuthHydrated();
   const user = useAuthStore((s) => s.user);
   const setSession = useAuthStore((s) => s.setSession);
   const navigate = useNavigate();
@@ -232,6 +234,14 @@ export default function Login() {
     if (faceTimer.current) window.clearInterval(faceTimer.current);
     if (locTimer.current) window.clearInterval(locTimer.current);
   }, []);
+
+  if (!hydrated) {
+    return (
+      <div className="min-h-dvh flex items-center justify-center text-sm text-muted-foreground">
+        Loading…
+      </div>
+    );
+  }
 
   if (user) {
     return <Navigate to={roleUsesEmployeePortal(user.role) ? "/employee" : "/admin"} replace />;

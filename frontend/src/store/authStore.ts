@@ -1,5 +1,6 @@
 import { create } from "zustand";
-import { persist } from "zustand/middleware";
+import { createJSONStorage, persist } from "zustand/middleware";
+import { safeGetItem, safeRemoveItem, safeSetItem } from "@/utils/storageSafe";
 
 export type Role = "admin" | "manager" | "employee" | "hr" | "sales";
 
@@ -130,6 +131,11 @@ export const useAuthStore = create<AuthState>()(
     }),
     {
       name: "vtl-auth",
+      storage: createJSONStorage(() => ({
+        getItem: (name) => safeGetItem(localStorage, name),
+        setItem: (name, value) => safeSetItem(localStorage, name, value),
+        removeItem: (name) => safeRemoveItem(localStorage, name),
+      })),
       partialize: (s) => ({
         user: s.user,
         preferences: s.preferences,

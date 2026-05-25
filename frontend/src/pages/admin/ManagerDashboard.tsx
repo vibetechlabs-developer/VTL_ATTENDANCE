@@ -1,4 +1,5 @@
 import { format } from "date-fns";
+import { formatApiDate, formatTimestampMs, parseApiDate } from "@/utils/safeDate";
 import { useEffect, useMemo, useState } from "react";
 import { AnimatePresence, motion } from "framer-motion";
 import {
@@ -121,17 +122,17 @@ export default function ManagerDashboard() {
       }
 
       const breakList = (body.breaks || [])
-        .map((b) => ({ start: new Date(b.start).getTime(), end: new Date(b.end).getTime() }))
+        .map((b) => ({ start: parseApiDate(b.start)?.getTime() ?? NaN, end: parseApiDate(b.end)?.getTime() ?? NaN }))
         .filter((b) => Number.isFinite(b.start) && Number.isFinite(b.end));
 
-      const breakStartAtMs = body.active_break_start ? new Date(body.active_break_start).getTime() : null;
+      const breakStartAtMs = body.active_break_start ? parseApiDate(body.active_break_start)?.getTime() ?? null : null;
       const totalBreakMsFromApi = Math.max(0, (body.total_break_minutes || 0) * 60 * 1000);
-      const checkedOutAtMs = body.checked_out_at ? new Date(body.checked_out_at).getTime() : null;
+      const checkedOutAtMs = body.checked_out_at ? parseApiDate(body.checked_out_at)?.getTime() ?? null : null;
       const workedMs = Math.max(0, (body.total_work_minutes || 0) * 60 * 1000);
 
       hydrateSession({
         status: body.active ? (breakStartAtMs ? "on-break" : "checked-in") : "checked-out",
-        checkInAt: new Date(body.checked_in_at).getTime(),
+        checkInAt: parseApiDate(body.checked_in_at)?.getTime() ?? Date.now(),
         checkOutAt: checkedOutAtMs,
         workedMsToday: workedMs,
         totalBreakMs: totalBreakMsFromApi,
@@ -183,14 +184,7 @@ export default function ManagerDashboard() {
     return { total, present, absent, late };
   }, [teamRows]);
 
-  const formatTime = (iso: string | null) => {
-    if (!iso) return "—";
-    try {
-      return format(new Date(iso), "h:mm a");
-    } catch {
-      return "—";
-    }
-  };
+  const formatTime = (iso: string | null) => formatApiDate(iso, "h:mm a");
 
   const handleVerified = (data?: { checkInAt?: string }) => {
     setShowVerifyModal(false);
@@ -335,15 +329,15 @@ export default function ManagerDashboard() {
                       Remaining working time
                     </p>
                     <p className="mt-2 text-sm text-primary-foreground/85">
-                      Checked in at {checkInAt ? format(new Date(checkInAt), "h:mm a") : "—"} · {breaks.length} breaks taken
+                      Checked in at {checkInAt ? formatTimestampMs(checkInAt, "h:mm a") : "—"} · {breaks.length} breaks taken
                     </p>
                   </>
                 )}
 
                 {status === "checked-out" && (
                   <p className="mt-2 text-sm text-primary-foreground/85">
-                    {checkInAt ? format(new Date(checkInAt), "h:mm a") : "—"} -{" "}
-                    {checkOutAt ? format(new Date(checkOutAt), "h:mm a") : "—"} · Total worked today
+                    {checkInAt ? formatTimestampMs(checkInAt, "h:mm a") : "—"} -{" "}
+                    {checkOutAt ? formatTimestampMs(checkOutAt, "h:mm a") : "—"} · Total worked today
                   </p>
                 )}
               </div>

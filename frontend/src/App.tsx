@@ -5,6 +5,8 @@ import { Toaster as Sonner } from "@/components/ui/sonner";
 import { Toaster } from "@/components/ui/toaster";
 import { TooltipProvider } from "@/components/ui/tooltip";
 import { SplashScreen } from "@/components/SplashScreen";
+import { ErrorBoundary } from "@/components/ErrorBoundary";
+import { safeGetItem } from "@/utils/storageSafe";
 
 import Index from "./pages/Index";
 import NotFound from "./pages/NotFound";
@@ -43,7 +45,7 @@ const RoleBasedAdminDashboard = () => {
 
 const App = () => {
   useEffect(() => {
-    const stored = localStorage.getItem("vtl-theme");
+    const stored = safeGetItem(localStorage, "vtl-theme");
     const dark = stored ? stored === "dark" : true;
     document.documentElement.classList.toggle("dark", dark);
   }, []);
@@ -53,6 +55,7 @@ const App = () => {
       <TooltipProvider>
         <Toaster />
         <Sonner position="top-right" richColors />
+        <ErrorBoundary>
         <SplashScreen>
           <BrowserRouter future={{ v7_relativeSplatPath: true }}>
             <Routes>
@@ -108,6 +111,7 @@ const App = () => {
             </Routes>
           </BrowserRouter>
         </SplashScreen>
+        </ErrorBoundary>
       </TooltipProvider>
     </QueryClientProvider>
   );

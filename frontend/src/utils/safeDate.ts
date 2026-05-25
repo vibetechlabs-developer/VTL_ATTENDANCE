@@ -1,4 +1,9 @@
-import { format as fnsFormat, eachDayOfInterval as fnsEachDay } from "date-fns";
+import {
+  format as fnsFormat,
+  eachDayOfInterval as fnsEachDay,
+  formatDistanceToNow as fnsFormatDistanceToNow,
+  type FormatDistanceToNowOptions,
+} from "date-fns";
 
 /**
  * Parse API date/time strings safely (Safari is strict about ISO formats).
@@ -43,5 +48,29 @@ export function safeEachDayOfInterval(start: Date, end: Date): Date[] {
     return fnsEachDay({ start, end });
   } catch {
     return [];
+  }
+}
+
+export function safeFormatDistanceToNow(
+  value: string | number | Date | null | undefined,
+  options?: FormatDistanceToNowOptions,
+  fallback = "recently",
+): string {
+  const d = parseApiDate(value);
+  if (!d) return fallback;
+  try {
+    return fnsFormatDistanceToNow(d, options);
+  } catch {
+    return fallback;
+  }
+}
+
+/** Format a millisecond timestamp from the attendance store (always valid). */
+export function formatTimestampMs(ms: number | null | undefined, pattern: string, fallback = "—"): string {
+  if (ms == null || !Number.isFinite(ms)) return fallback;
+  try {
+    return fnsFormat(new Date(ms), pattern);
+  } catch {
+    return fallback;
   }
 }
