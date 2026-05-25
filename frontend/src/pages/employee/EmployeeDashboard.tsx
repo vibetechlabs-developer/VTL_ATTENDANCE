@@ -389,7 +389,7 @@ export default function EmployeeDashboard() {
   };
 
   return (
-    <div className="space-y-6">
+    <div className="min-w-0 space-y-6 overflow-x-hidden">
       <CheckInModal open={showVerifyModal} onOpenChange={setShowVerifyModal} onVerified={handleVerified} mode="check-in" />
       <CheckInModal open={showCheckoutVerifyModal} onOpenChange={setShowCheckoutVerifyModal} onVerified={handleCheckoutVerified} mode="check-out" />
       <div className="flex flex-wrap items-end justify-between gap-3">
@@ -710,52 +710,54 @@ export default function EmployeeDashboard() {
 
       {/* Smart checkout dialog */}
       <Dialog open={coDialog} onOpenChange={setCoDialog}>
-        <DialogContent className="sm:max-w-[480px] rounded-3xl">
-          <DialogHeader>
-            <DialogTitle className="flex items-center gap-2">
-              <Square className="h-5 w-5 text-primary" /> Wrap up your day
+        <DialogContent className="max-w-[min(100%,480px)] rounded-2xl sm:rounded-3xl">
+          <DialogHeader className="min-w-0 pr-8 text-left">
+            <DialogTitle className="flex flex-wrap items-center gap-2 text-base sm:text-lg">
+              <Square className="h-5 w-5 shrink-0 text-primary" /> Wrap up your day
             </DialogTitle>
-            <DialogDescription>
+            <DialogDescription className="text-left break-words">
               Worked {formatDuration(workMs)} today · {completedPct}% of an 8h day
             </DialogDescription>
           </DialogHeader>
 
-          <div className="space-y-4 py-1">
+          <div className="min-w-0 space-y-4 py-1">
             {isEarly && (
-              <div className="rounded-2xl border border-warning/40 bg-warning/10 p-3.5 flex gap-3">
-                <AlertTriangle className="h-5 w-5 text-warning shrink-0 mt-0.5" />
-                <div className="text-sm">
+              <div className="flex min-w-0 gap-2.5 rounded-2xl border border-warning/40 bg-warning/10 p-3 sm:gap-3 sm:p-3.5">
+                <AlertTriangle className="mt-0.5 h-5 w-5 shrink-0 text-warning" />
+                <div className="min-w-0 text-sm">
                   <p className="font-semibold text-warning-foreground">Early check-out</p>
-                  <p className="text-xs text-muted-foreground">You haven't completed 8 hours yet. Please share a reason below.</p>
+                  <p className="text-xs leading-relaxed text-muted-foreground">
+                    You haven&apos;t completed 8 hours yet. Please share a reason below.
+                  </p>
                 </div>
               </div>
             )}
 
-            <div className="space-y-1.5">
-              <Label>Daily update <span className="text-destructive">*</span></Label>
+            <div className="min-w-0 space-y-1.5">
+              <Label className="text-sm">Daily update <span className="text-destructive">*</span></Label>
               <Textarea
                 value={workNote}
                 onChange={(e) => setWorkNote(e.target.value)}
                 placeholder="Write your daily update (tasks completed, blockers, next steps)..."
-                className="min-h-[90px] rounded-2xl"
+                className="min-h-[90px] w-full min-w-0 resize-none rounded-2xl"
               />
-              <p className="text-[11px] text-muted-foreground">This will also post to the Daily Updates feed.</p>
+              <p className="text-[11px] leading-snug text-muted-foreground">This will also post to the Daily Updates feed.</p>
             </div>
 
             {isEarly && (
-              <div className="space-y-1.5">
-                <Label>Reason for early check-out <span className="text-destructive">*</span></Label>
-                <div className="flex flex-wrap gap-2">
+              <div className="min-w-0 space-y-1.5">
+                <Label className="text-sm">Reason for early check-out <span className="text-destructive">*</span></Label>
+                <div className="flex flex-wrap gap-1.5 sm:gap-2">
                   {EARLY_REASON_CHIPS.map((chip) => (
                     <button
                       key={chip}
                       type="button"
                       onClick={() => setEarlyReason(chip)}
                       className={cn(
-                        "text-xs px-3 py-1.5 rounded-full border transition-colors",
+                        "max-w-full rounded-full border px-2.5 py-1.5 text-[11px] leading-tight transition-colors sm:px-3 sm:text-xs",
                         earlyReason === chip
-                          ? "bg-primary text-primary-foreground border-primary"
-                          : "bg-muted/50 border-border hover:bg-muted"
+                          ? "border-primary bg-primary text-primary-foreground"
+                          : "border-border bg-muted/50 hover:bg-muted"
                       )}
                     >
                       {chip}
@@ -766,17 +768,20 @@ export default function EmployeeDashboard() {
                   value={earlyReason}
                   onChange={(e) => setEarlyReason(e.target.value)}
                   placeholder="Doctor appointment, family emergency, half-day approved..."
-                  className="min-h-[70px] rounded-2xl"
+                  className="min-h-[70px] w-full min-w-0 resize-none rounded-2xl"
                 />
               </div>
             )}
           </div>
 
-          <DialogFooter className="gap-2">
-            <Button variant="outline" onClick={() => setCoDialog(false)} className="rounded-xl">
+          <DialogFooter className="flex flex-col gap-2 sm:flex-row sm:justify-end">
+            <Button variant="outline" onClick={() => setCoDialog(false)} className="w-full rounded-xl sm:w-auto">
               Cancel
             </Button>
-            <Button onClick={confirmCheckout} className="bg-sage-3d shadow-3d border-0 text-primary-foreground rounded-xl">
+            <Button
+              onClick={confirmCheckout}
+              className="w-full rounded-xl border-0 bg-sage-3d text-primary-foreground shadow-3d sm:w-auto"
+            >
               Confirm check-out
             </Button>
           </DialogFooter>
