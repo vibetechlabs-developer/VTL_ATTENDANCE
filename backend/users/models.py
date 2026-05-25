@@ -31,8 +31,10 @@ class User(AbstractUser):
 
 class Employee(models.Model):
     user = models.OneToOneField(User, on_delete=models.CASCADE)
-    # For manager scoping: which manager this employee reports to.
+    # Primary manager (first selected); kept for backward-compatible queries.
     manager = models.ForeignKey(User, null=True, blank=True, on_delete=models.SET_NULL, related_name='managed_employees')
+    # All reporting managers (multi-select in admin UI).
+    managers = models.ManyToManyField(User, blank=True, related_name='managed_team_members')
     name = models.CharField(max_length=100)
     department = models.CharField(max_length=100)
     phone = models.CharField(max_length=15, blank=True)
@@ -66,6 +68,22 @@ class PushSubscription(models.Model):
 
     def __str__(self):
         return f"PushSubscription<{self.user.email}>"
+
+
+class Appraisal(models.Model):
+    employee = models.ForeignKey(Employee, on_delete=models.CASCADE, related_name='appraisals')
+    given_by = models.ForeignKey(
+        User, on_delete=models.SET_NULL, null=True, blank=True, related_name='appraisals_given'
+    )
+    rating = models.PositiveSmallIntegerField(default=5)
+    message = models.TextField()
+    created_at = models.DateTimeField(auto_now_add=True)
+
+    class Meta:
+        ordering = ['-created_at']
+
+    def __str__(self):
+        return f"Appraisal<{self.employee.name}>"
 
 
 class AppNotification(models.Model):

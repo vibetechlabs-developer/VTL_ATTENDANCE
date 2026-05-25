@@ -1,6 +1,10 @@
+import logging
+
 from rest_framework.views import APIView
 from rest_framework.response import Response
 from rest_framework.permissions import IsAuthenticated
+
+logger = logging.getLogger(__name__)
 from django.utils import timezone
 from django.core.files.base import ContentFile
 from django.conf import settings
@@ -9,7 +13,7 @@ import numpy as np
 import base64
 import uuid
 
-from users.models import Employee, OfficeLocation
+from users.models import Employee, OfficeLocation, AppNotification
 from leaves.models import LeaveRequest
 from .models import AttendanceLog, BreakLog
 from .serializers import CheckInSerializer, CheckOutSerializer, AttendanceLogSerializer
@@ -17,7 +21,7 @@ from .face_utils import (
     decode_base64_image,
     get_face_encoding,
     is_valid_stored_encoding,
-    match_face,
+    match_face_from_image,
 )
 
 
@@ -41,6 +45,142 @@ def validate_office_radius(user_lat, user_lng):
             "You are outside the allowed check-in area. Move closer to the office and try again.",
         )
     return True, distance, None
+
+
+def _face_mismatch_payload(distance):
+    threshold = float(getattr(settings, "FACE_MATCH_THRESHOLD", 0.55))
+    payload = {
+        'error': (
+            'Face does not match your registered profile. '
+            'Look straight at the camera, use good lighting, and try again. '
+            'If this keeps failing, re-register your face from Profile or ask your admin.'
+        ),
+        'code': 'face_mismatch',
+    }
+    if settings.DEBUG:
+        payload['face_distance'] = distance
+        payload['threshold'] = threshold
+    return payload
+
+
+def _verify_face_match(user, image_data):
+    """
+    Compare live image to the logged-in user's stored face.
+    Returns (matched_employee, distance) or raises nothing — returns Response on failure.
+    """
+    try:
+        employee = user.employee
+    except Employee.DoesNotExist:
+        return Response(
+            {
+                'error': 'Employee profile not found for this account.',
+                'code': 'no_employee',
+            },
+            status=400,
+        )
+
+    employee.refresh_from_db(fields=["face_encoding"])
+    if not is_valid_stored_encoding(employee.face_encoding):
+        return Response(
+            {
+                'error': 'Face is not registered for your account. Please contact admin or register face first.',
+                'code': 'face_not_registered',
+            },
+            status=400,
+        )
+
+    try:
+        image = decode_base64_image(image_data)
+    except ValueError as err:
+        return Response(
+            {'error': str(err), 'code': 'invalid_image'},
+            status=400,
+        )
+
+    try:
+        matched_employee, distance = match_face_from_image(image, [employee])
+    except RuntimeError as err:
+        msg = (
+            str(err)
+            if settings.DEBUG
+            else 'Face verification is temporarily unavailable. Please try again in a moment.'
+        )
+        return Response({'error': msg, 'code': 'face_service_unavailable'}, status=503)
+    except Exception:
+        logger.exception('Unexpected error during face verification')
+        msg = (
+            'Face verification crashed or failed unexpectedly. Please retry.'
+            if settings.DEBUG
+            else 'Face verification is temporarily unavailable. Please try again in a moment.'
+        )
+        return Response({'error': msg, 'code': 'face_service_unavailable'}, status=503)
+
+    if matched_employee is None:
+        if distance is None:
+            return Response(
+                {
+                    'error': (
+                        'We could not see your face clearly. Use good lighting, '
+                        'center your face, and remove masks or coverings if possible.'
+                    ),
+                    'code': 'face_not_detected',
+                },
+                status=400,
+            )
+        return Response(_face_mismatch_payload(distance), status=401)
+
+    if matched_employee.id != employee.id:
+        return Response(
+            {'error': 'Face verification failed.', 'code': 'face_mismatch'},
+            status=401,
+        )
+
+    return matched_employee, distance
+
+
+def _live_session_stats(log):
+    """Return (live_work_minutes, worked_hours, overtime_hours) for today's log."""
+    if not log or not log.check_in:
+        return 0, 0.0, 0.0
+
+    now = timezone.now()
+    break_minutes = log.break_minutes or 0
+    for b in BreakLog.objects.filter(attendance=log, break_end__isnull=True):
+        break_minutes += int((now - b.break_start).total_seconds() // 60)
+
+    if log.check_out:
+        worked_hours = float(log.total_hours or 0)
+        live_work_minutes = int(round(worked_hours * 60))
+    else:
+        total_minutes = int((now - log.check_in).total_seconds() // 60)
+        worked_minutes = max(0, total_minutes - break_minutes)
+        live_work_minutes = worked_minutes
+        worked_hours = round(worked_minutes / 60, 2)
+
+    overtime_hours = round(max(0, worked_hours - 8), 2)
+    return live_work_minutes, worked_hours, overtime_hours
+
+
+def _notify_overtime_if_needed(user, overtime_hours, worked_hours, title_suffix=''):
+    if overtime_hours <= 0:
+        return
+    today = timezone.now().date()
+    title = f'Overtime{title_suffix}'
+    if AppNotification.objects.filter(
+        user=user,
+        title=title,
+        created_at__date=today,
+    ).exists():
+        return
+    AppNotification.objects.create(
+        user=user,
+        title=title,
+        body=(
+            f'You have worked {worked_hours:.1f} hours today. '
+            f'Overtime: {overtime_hours:.1f} hour(s) beyond the 8-hour shift.'
+        ),
+        type='warning',
+    )
 
 
 def _close_open_attendance_session(log, lat, lng):
@@ -109,51 +249,11 @@ class CheckInView(APIView):
         image_data = serializer.validated_data['image']
         matched_employee = request.user.employee
         distance = None
-        request.user.employee.refresh_from_db(fields=["face_encoding"])
-        if (not relaxed) and (not is_valid_stored_encoding(request.user.employee.face_encoding)):
-            return Response(
-                {'error': 'Face is not registered for your account. Please contact admin or register face first.'},
-                status=400
-            )
         if not relaxed:
-            try:
-                image = decode_base64_image(image_data)
-                live_encoding = get_face_encoding(image)
-                if live_encoding is None:
-                    return Response(
-                        {
-                            'error': (
-                                'We could not see your face clearly. Use good lighting, '
-                                'center your face, and remove masks or coverings if possible.'
-                            ),
-                        },
-                        status=400,
-                    )
-
-                matched_employee, distance = match_face(live_encoding, [request.user.employee])
-
-                if matched_employee is None:
-                    threshold = float(getattr(settings, "FACE_MATCH_THRESHOLD", 0.42))
-                    payload = {
-                        'error': (
-                            'Face does not match your registered profile. '
-                            'Look straight at the camera and try again.'
-                        ),
-                    }
-                    if settings.DEBUG:
-                        payload['face_distance'] = distance
-                        payload['threshold'] = threshold
-                    return Response(payload, status=401)
-                if matched_employee.id != request.user.employee.id:
-                    return Response({'error': 'Face verification failed.'}, status=401)
-
-            except RuntimeError as err:
-                msg = (
-                    f'Face verification service unavailable: {str(err)}'
-                    if settings.DEBUG
-                    else 'Face verification is temporarily unavailable. Please try again in a moment.'
-                )
-                return Response({'error': msg}, status=503)
+            face_result = _verify_face_match(request.user, image_data)
+            if isinstance(face_result, Response):
+                return face_result
+            matched_employee, distance = face_result
 
         # 4. Attendance mark karo
         log = AttendanceLog.objects.create(
@@ -214,50 +314,13 @@ class CheckOutView(APIView):
 
         # Face verify for check-out too (strict; compare against own profile)
         image_data = serializer.validated_data['image']
-        request.user.employee.refresh_from_db(fields=["face_encoding"])
-        if (not relaxed) and (not is_valid_stored_encoding(request.user.employee.face_encoding)):
-            return Response(
-                {'error': 'Face is not registered for your account. Please contact admin or register face first.'},
-                status=400
-            )
+        matched_employee = log.employee
+        distance = None
         if not relaxed:
-            try:
-                image = decode_base64_image(image_data)
-                live_encoding = get_face_encoding(image)
-                if live_encoding is None:
-                    return Response(
-                        {
-                            'error': (
-                                'We could not see your face clearly. Use good lighting, '
-                                'center your face, and remove masks or coverings if possible.'
-                            ),
-                        },
-                        status=400,
-                    )
-
-                matched_employee, distance = match_face(live_encoding, [request.user.employee])
-
-                if matched_employee is None:
-                    threshold = float(getattr(settings, "FACE_MATCH_THRESHOLD", 0.42))
-                    payload = {
-                        'error': (
-                            'Face does not match your registered profile. '
-                            'Look straight at the camera and try again.'
-                        ),
-                    }
-                    if settings.DEBUG:
-                        payload['face_distance'] = distance
-                        payload['threshold'] = threshold
-                    return Response(payload, status=401)
-                if matched_employee.id != request.user.employee.id:
-                    return Response({'error': 'Face verification failed.'}, status=401)
-            except RuntimeError as err:
-                msg = (
-                    f'Face verification service unavailable: {str(err)}'
-                    if settings.DEBUG
-                    else 'Face verification is temporarily unavailable. Please try again in a moment.'
-                )
-                return Response({'error': msg}, status=503)
+            face_result = _verify_face_match(request.user, image_data)
+            if isinstance(face_result, Response):
+                return face_result
+            matched_employee, distance = face_result
 
         log.check_out = timezone.now()
         log.check_out_lat = lat
@@ -270,11 +333,15 @@ class CheckOutView(APIView):
 
         log.total_hours = worked_hours
 
-        # Overtime check
-        if worked_hours > 8:
-            log.overtime_hours = round(worked_hours - 8, 2)
+        log.overtime_hours = round(max(0, worked_hours - 8), 2)
 
         log.save()
+        _notify_overtime_if_needed(
+            request.user,
+            log.overtime_hours,
+            log.total_hours,
+            title_suffix=' recorded',
+        )
 
         return Response({
             'message': 'Check-out successful!',
@@ -324,15 +391,42 @@ class MyAttendanceSessionView(APIView):
             else:
                 active_break_start = b.break_start.isoformat()
 
+        live_work_minutes, worked_hours, overtime_hours = _live_session_stats(log)
+
         return Response({
             'active': log.check_out is None,
             'checked_in_at': log.check_in.isoformat(),
             'checked_out_at': log.check_out.isoformat() if log.check_out else None,
-            'total_work_minutes': int((log.total_hours or 0) * 60),
+            'total_work_minutes': live_work_minutes,
+            'worked_hours': worked_hours,
+            'overtime_hours': overtime_hours,
             'total_break_minutes': total_break_minutes,
             'active_break_start': active_break_start,
             'breaks': breaks,
         })
+
+
+class OvertimeNotifyView(APIView):
+    """Create a one-per-day overtime notification when the employee crosses 8 hours."""
+    permission_classes = [IsAuthenticated]
+
+    def post(self, request):
+        try:
+            employee = request.user.employee
+        except Employee.DoesNotExist:
+            return Response({'error': 'Employee profile not found.'}, status=404)
+
+        today = timezone.now().date()
+        log = AttendanceLog.objects.filter(employee=employee, date=today).order_by('-check_in').first()
+        if not log or not log.check_in:
+            return Response({'notified': False})
+
+        _, worked_hours, overtime_hours = _live_session_stats(log)
+        if overtime_hours <= 0:
+            return Response({'notified': False})
+
+        _notify_overtime_if_needed(request.user, overtime_hours, worked_hours)
+        return Response({'notified': True, 'overtime_hours': overtime_hours})
 
 
 class AdminAttendanceView(APIView):
@@ -361,8 +455,8 @@ class AdminAttendanceView(APIView):
         leave_emp_ids = {l.employee_id for l in leaves_today}
         employees = Employee.objects.select_related('user').all()
         if request.user.role == 'manager':
-            # Manager can only see assigned employees
-            employees = employees.filter(manager=request.user)
+            # Manager can only see employees who report to them
+            employees = employees.filter(managers=request.user).distinct()
 
         rows = []
         late_cutoff = timezone.datetime.combine(
@@ -478,8 +572,8 @@ class AdminEmployeeAttendanceHistoryView(APIView):
 
         if request.user.role == 'manager':
             # Manager can only query history of employees assigned to them.
-            emp_obj = Employee.objects.filter(id=employee_id).select_related('manager').first()
-            if not emp_obj or emp_obj.manager_id != request.user.id:
+            emp_obj = Employee.objects.filter(id=employee_id).prefetch_related('managers').first()
+            if not emp_obj or not emp_obj.managers.filter(id=request.user.id).exists():
                 return Response({'error': 'Permission denied.'}, status=403)
 
         logs = (

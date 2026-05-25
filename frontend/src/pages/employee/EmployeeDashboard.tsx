@@ -23,6 +23,7 @@ import {
   attendanceBreakEndRequest,
   attendanceBreakStartRequest,
   attendanceHistoryRequest,
+  attendanceOvertimeNotifyRequest,
   attendanceSessionRequest,
   leaveBalanceRequest,
   leaveHistoryRequest,
@@ -90,7 +91,7 @@ function punctualityStreakFromLogs(logs: { date: string; check_in: string | null
 
 export default function EmployeeDashboard() {
   const { user, accessToken } = useAuthStore();
-  useDataStore(); // keep store hydrated for other parts of app (employees etc.), but don't use seed leaves for pending banner.
+  const { addNotification } = useDataStore();
   const { status, checkInAt, checkOutAt, workedMsToday, totalBreakMs, breakStartAt, breaks, setCheckInAt, hydrateSession, startBreak, endBreak, checkOut, reset } = useAttendanceStore();
   const [now, setNow] = useState(Date.now());
   const [coDialog, setCoDialog] = useState(false);
@@ -134,6 +135,8 @@ export default function EmployeeDashboard() {
         checked_in_at?: string;
         checked_out_at?: string | null;
         total_work_minutes?: number;
+        worked_hours?: number;
+        overtime_hours?: number;
         total_break_minutes?: number;
         active_break_start?: string | null;
         breaks?: { start: string; end: string }[];
@@ -150,7 +153,12 @@ export default function EmployeeDashboard() {
       const breakStartAtMs = body.active_break_start ? new Date(body.active_break_start).getTime() : null;
       const totalBreakMsFromApi = Math.max(0, (body.total_break_minutes || 0) * 60 * 1000);
       const checkedOutAtMs = body.checked_out_at ? new Date(body.checked_out_at).getTime() : null;
-      const workedMs = Math.max(0, (body.total_work_minutes || 0) * 60 * 1000);
+      const workedMs = Math.max(
+        0,
+        typeof body.worked_hours === "number"
+          ? body.worked_hours * 60 * 60 * 1000
+          : (body.total_work_minutes || 0) * 60 * 1000
+      );
 
       hydrateSession({
         status: body.active ? (breakStartAtMs ? "on-break" : "checked-in") : "checked-out",
@@ -245,9 +253,32 @@ export default function EmployeeDashboard() {
   const workMs = status === "checked-out" ? workedMsToday : liveWorkMs;
   const isEarly = workMs < FULL_DAY_MS;
   const remainingMs = Math.max(0, FULL_DAY_MS - workMs);
+  const overtimeMs = Math.max(0, workMs - FULL_DAY_MS);
+  const hasOvertime = overtimeMs > 0;
   const breakTakenMs = totalBreakMs + currentBreak;
   const remainingDisplayMs = status === "checked-out" ? 0 : status === "idle" ? FULL_DAY_MS : remainingMs;
   const breakProgressPct = Math.min(100, Math.round((breakTakenMs / FULL_DAY_MS) * 100));
+
+  useEffect(() => {
+    if (!accessToken || !user?.empId) return;
+    if (!hasOvertime || status === "idle") return;
+    const dayKey = format(new Date(), "yyyy-MM-dd");
+    const storageKey = `vtl_ot_notify_${user.empId}_${dayKey}`;
+    if (localStorage.getItem(storageKey) === "1") return;
+    localStorage.setItem(storageKey, "1");
+    void attendanceOvertimeNotifyRequest(accessToken).then(async (res) => {
+      if (!res.ok) return;
+      const body = (await res.json().catch(() => ({}))) as { notified?: boolean; overtime_hours?: number };
+      if (!body.notified) return;
+      const otH = body.overtime_hours ?? overtimeMs / (60 * 60 * 1000);
+      addNotification({
+        title: "Overtime",
+        body: `You've worked beyond 8 hours today. Overtime: ${Number(otH).toFixed(1)}h.`,
+        type: "warning",
+      });
+      toast.info("Overtime is now counting — you've passed 8 hours today.");
+    });
+  }, [accessToken, user?.empId, hasOvertime, status, overtimeMs, addNotification]);
 
   const handleCheckIn = () => {
     setShowVerifyModal(true);
@@ -319,11 +350,14 @@ export default function EmployeeDashboard() {
     setShowCheckoutVerifyModal(true);
   };
 
-  const handleCheckoutVerified = (data?: { checkOutAt?: string; totalHours?: number }) => {
+  const handleCheckoutVerified = (data?: { checkOutAt?: string; totalHours?: number; overtimeHours?: number }) => {
     setShowCheckoutVerifyModal(false);
     const outMs = data?.checkOutAt ? new Date(data.checkOutAt).getTime() : Date.now();
     const workedMsFromApi = typeof data?.totalHours === "number" ? Math.max(0, data.totalHours * 60 * 60 * 1000) : workMs;
     checkOut({ checkOutAt: outMs, workedMsToday: workedMsFromApi });
+    if (typeof data?.overtimeHours === "number" && data.overtimeHours > 0) {
+      toast.success(`Checked out. Overtime recorded: ${data.overtimeHours.toFixed(1)}h`);
+    }
   };
 
   const quickActions = [
@@ -399,26 +433,46 @@ export default function EmployeeDashboard() {
             >
               <div>
                 <p className="text-sm font-medium uppercase tracking-wider text-primary-foreground/80">
-                  {status === "idle" ? "You're off the clock" : status === "on-break" ? "On break" : status === "checked-out" ? "Today's work complete" : "Currently working"}
+                  {status === "idle"
+                    ? "You're off the clock"
+                    : status === "on-break"
+                      ? "On break"
+                      : status === "checked-out"
+                        ? "Today's work complete"
+                        : hasOvertime
+                          ? "Overtime — time worked today"
+                          : "Time worked today"}
                 </p>
                 <motion.p
-                  key={status}
+                  key={`${status}-${hasOvertime}`}
                   initial={{ opacity: 0, y: 8 }}
                   animate={{ opacity: 1, y: 0 }}
                   className="mt-2 text-4xl sm:text-6xl font-bold tabular-nums tracking-tight"
                 >
-                  {status === "idle" ? formatDuration(0) : status === "checked-out" ? formatDuration(workMs) : formatDuration(remainingMs)}
+                  {status === "idle" ? formatDuration(0) : formatDuration(workMs)}
                 </motion.p>
 
-                {/* Clear status stats (remaining + break time) */}
                 <div className="mt-4 grid grid-cols-1 sm:grid-cols-2 gap-3">
-                  <div className="rounded-2xl bg-white/10 border border-white/15 p-3">
-                    <p className="text-[11px] uppercase tracking-wider text-primary-foreground/75">Remaining</p>
-                    <p className="mt-1 text-2xl sm:text-3xl font-bold tabular-nums tracking-tight">
-                      {formatDuration(remainingDisplayMs)}
-                    </p>
-                  </div>
-                  <div className="rounded-2xl bg-white/10 border border-white/15 p-3">
+                  {hasOvertime ? (
+                    <div className="rounded-2xl bg-amber-400/25 border border-amber-200/40 p-3 sm:col-span-2">
+                      <p className="text-[11px] uppercase tracking-wider text-primary-foreground/90 font-semibold">Overtime (&gt; 8h)</p>
+                      <p className="mt-1 text-2xl sm:text-3xl font-bold tabular-nums tracking-tight">
+                        {formatDuration(overtimeMs)}
+                      </p>
+                      <p className="mt-1 text-xs text-primary-foreground/80">
+                        Standard shift complete — extra time is tracked as overtime.
+                      </p>
+                    </div>
+                  ) : null}
+                  {!hasOvertime && status !== "idle" && status !== "checked-out" ? (
+                    <div className="rounded-2xl bg-white/10 border border-white/15 p-3">
+                      <p className="text-[11px] uppercase tracking-wider text-primary-foreground/75">Remaining</p>
+                      <p className="mt-1 text-2xl sm:text-3xl font-bold tabular-nums tracking-tight">
+                        {formatDuration(remainingDisplayMs)}
+                      </p>
+                    </div>
+                  ) : null}
+                  <div className={cn("rounded-2xl bg-white/10 border border-white/15 p-3", hasOvertime && status !== "idle" && status !== "checked-out" ? "" : !hasOvertime ? "" : "sm:col-span-2")}>
                     <p className="text-[11px] uppercase tracking-wider text-primary-foreground/75">Break taken</p>
                     <p className="mt-1 text-2xl sm:text-3xl font-bold tabular-nums tracking-tight">
                       {formatDuration(breakTakenMs)}
@@ -454,7 +508,9 @@ export default function EmployeeDashboard() {
                 )}
                 {status === "checked-out" && (
                   <p className="mt-2 text-sm text-primary-foreground/85">
-                    {checkInAt ? format(new Date(checkInAt), "h:mm a") : "—"} - {checkOutAt ? format(new Date(checkOutAt), "h:mm a") : "—"} · Total worked today
+                    {checkInAt ? format(new Date(checkInAt), "h:mm a") : "—"} - {checkOutAt ? format(new Date(checkOutAt), "h:mm a") : "—"}
+                    {" · "}Total {formatDuration(workMs)}
+                    {hasOvertime ? ` · Overtime ${formatDuration(overtimeMs)}` : ""}
                   </p>
                 )}
               </div>

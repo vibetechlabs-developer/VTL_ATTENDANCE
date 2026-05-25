@@ -2,6 +2,62 @@ from rest_framework import serializers
 from django.db import transaction
 from django.utils.crypto import get_random_string
 from .models import User, Employee
+
+
+def _manager_users_from_employee_ids(employee_ids):
+    if not employee_ids:
+        return []
+    seen = set()
+    users = []
+    for emp in Employee.objects.select_related('user').filter(id__in=employee_ids):
+        if emp.user_id and emp.user_id not in seen:
+            seen.add(emp.user_id)
+            users.append(emp.user)
+    return users
+
+
+def _format_reports_to(employee):
+    names = []
+    for mgr in employee.managers.select_related('employee').all():
+        if getattr(mgr, 'employee', None) and mgr.employee.name:
+            names.append(mgr.employee.name.strip())
+        elif mgr.email:
+            names.append(mgr.email)
+    if names:
+        return ', '.join(names)
+    if getattr(employee, 'manager', None) and getattr(employee.manager, 'employee', None):
+        return employee.manager.employee.name
+    if getattr(employee, 'manager', None):
+        return employee.manager.email
+    return '—'
+
+
+def _manager_employee_ids(employee):
+    ids = []
+    for mgr in employee.managers.select_related('employee').all():
+        if hasattr(mgr, 'employee') and mgr.employee:
+            ids.append(mgr.employee.id)
+    if ids:
+        return ids
+    if getattr(employee, 'manager', None) and hasattr(employee.manager, 'employee'):
+        return [employee.manager.employee.id]
+    return []
+
+
+def _apply_managers(employee, manager_employee_ids=None, manager_user=None, legacy_manager_id=None, legacy_manager_employee_id=None):
+    """Set managers M2M and sync primary manager FK from employee id list or legacy single fields."""
+    ids = list(manager_employee_ids or [])
+    if not ids and legacy_manager_employee_id:
+        ids = [legacy_manager_employee_id]
+    manager_users = _manager_users_from_employee_ids(ids)
+    if not manager_users and manager_user:
+        manager_users = [manager_user]
+    if not manager_users and legacy_manager_id:
+        u = User.objects.filter(id=legacy_manager_id).first()
+        if u:
+            manager_users = [u]
+    employee.managers.set(manager_users)
+    employee.manager = manager_users[0] if manager_users else None
 from attendance.face_utils import is_valid_stored_encoding
 
 class LoginSerializer(serializers.Serializer):
@@ -63,11 +119,7 @@ class EmployeeListSerializer(serializers.ModelSerializer):
         return 'active'
 
     def get_reportsTo(self, obj):
-        if getattr(obj, 'manager', None) and getattr(obj.manager, 'employee', None):
-            return obj.manager.employee.name
-        if getattr(obj, 'manager', None):
-            return obj.manager.email
-        return '—'
+        return _format_reports_to(obj)
 
 
 class EmployeeCreateSerializer(serializers.Serializer):
@@ -79,6 +131,11 @@ class EmployeeCreateSerializer(serializers.Serializer):
     password = serializers.CharField(required=False, allow_blank=True, write_only=True)
     manager_id = serializers.IntegerField(required=False, allow_null=True)
     manager_employee_id = serializers.IntegerField(required=False, allow_null=True)
+    manager_employee_ids = serializers.ListField(
+        child=serializers.IntegerField(),
+        required=False,
+        allow_empty=True,
+    )
 
     def validate_name(self, value):
         name = (value or "").strip()
@@ -125,22 +182,19 @@ class EmployeeCreateSerializer(serializers.Serializer):
             password=temp_password,
             role=validated_data['role'],
         )
-        manager_user = None
-        if validated_data.get('manager_employee_id'):
-            mgr_emp = Employee.objects.select_related('user').filter(
-                id=validated_data.get('manager_employee_id')
-            ).first()
-            manager_user = mgr_emp.user if mgr_emp else None
-        elif validated_data.get('manager_id'):
-            manager_user = User.objects.filter(id=validated_data.get('manager_id')).first()
-
         employee = Employee.objects.create(
             user=user,
             name=validated_data['name'],
             department=validated_data['department'],
             phone=validated_data.get('phone', '').strip(),
-            manager=manager_user,
         )
+        _apply_managers(
+            employee,
+            manager_employee_ids=validated_data.get('manager_employee_ids'),
+            legacy_manager_id=validated_data.get('manager_id'),
+            legacy_manager_employee_id=validated_data.get('manager_employee_id'),
+        )
+        employee.save()
         return employee, temp_password
 
 
@@ -153,6 +207,11 @@ class EmployeeUpdateSerializer(serializers.Serializer):
     password = serializers.CharField(required=False, allow_blank=True, write_only=True)
     manager_id = serializers.IntegerField(required=False, allow_null=True)
     manager_employee_id = serializers.IntegerField(required=False, allow_null=True)
+    manager_employee_ids = serializers.ListField(
+        child=serializers.IntegerField(),
+        required=False,
+        allow_empty=True,
+    )
 
     def update(self, instance, validated_data):
         user = instance.user
@@ -173,20 +232,16 @@ class EmployeeUpdateSerializer(serializers.Serializer):
         if 'phone' in validated_data:
             instance.phone = validated_data['phone'].strip()
 
-        # Manager: frontend often sends both keys with manager_id: null and manager_employee_id set.
-        # Checking manager_id first would clear the manager and skip employee resolution.
+        has_me_ids = 'manager_employee_ids' in validated_data
         has_me = 'manager_employee_id' in validated_data
         has_mid = 'manager_id' in validated_data
-        if has_me or has_mid:
-            meid = validated_data.get('manager_employee_id') if has_me else None
-            mid = validated_data.get('manager_id') if has_mid else None
-            if meid:
-                mgr_emp = Employee.objects.select_related('user').filter(id=meid).first()
-                instance.manager = mgr_emp.user if mgr_emp else None
-            elif mid:
-                instance.manager = User.objects.filter(id=mid).first()
-            else:
-                instance.manager = None
+        if has_me_ids or has_me or has_mid:
+            _apply_managers(
+                instance,
+                manager_employee_ids=validated_data.get('manager_employee_ids') if has_me_ids else None,
+                legacy_manager_id=validated_data.get('manager_id') if has_mid else None,
+                legacy_manager_employee_id=validated_data.get('manager_employee_id') if has_me else None,
+            )
 
         instance.save()
         return instance

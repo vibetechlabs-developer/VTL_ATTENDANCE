@@ -75,6 +75,7 @@ export interface ApiEmployee {
   id: number | string;
   userId?: number | string;
   managerEmployeeId?: number | string | null;
+  managerEmployeeIds?: (number | string)[];
   name: string;
   email: string;
   empId: string;
@@ -100,6 +101,7 @@ export interface CreateEmployeePayload {
   department: string;
   manager_id?: number | null;
   manager_employee_id?: number | null;
+  manager_employee_ids?: number[];
   phone?: string;
   password?: string;
 }
@@ -119,6 +121,7 @@ export interface UpdateEmployeePayload {
   department?: string;
   manager_id?: number | null;
   manager_employee_id?: number | null;
+  manager_employee_ids?: number[];
   phone?: string;
   password?: string;
 }
@@ -193,6 +196,25 @@ export async function attendanceHistoryRequest(accessToken: string): Promise<Res
 
 export async function attendanceSessionRequest(accessToken: string): Promise<Response> {
   return fetchWithAutoRefresh(accessToken, "/api/attendance/session/");
+}
+
+export async function attendanceOvertimeNotifyRequest(accessToken: string): Promise<Response> {
+  return fetchWithAutoRefresh(accessToken, "/api/attendance/overtime-notify/", { method: "POST" });
+}
+
+export async function appraisalCreateRequest(
+  accessToken: string,
+  payload: { employee_id: number | string; rating: number; message: string }
+): Promise<Response> {
+  return fetchWithAutoRefresh(accessToken, "/api/users/appraisals/create/", {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify(payload),
+  });
+}
+
+export async function myAppraisalsRequest(accessToken: string): Promise<Response> {
+  return fetchWithAutoRefresh(accessToken, "/api/users/appraisals/mine/");
 }
 
 export async function attendanceAdminRequest(accessToken: string, date: string): Promise<Response> {

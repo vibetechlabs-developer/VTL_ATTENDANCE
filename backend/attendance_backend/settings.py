@@ -189,8 +189,8 @@ WEB_PUSH_PRIVATE_KEY = os.getenv(
 WEB_PUSH_SUBJECT = os.getenv("WEB_PUSH_SUBJECT", "mailto:admin@vtl.local")
 
 # Face verification (dlib / face_recognition 128-D embeddings).
-# Lower = stricter (fewer false matches). Typical same-person distances are often < 0.45.
-FACE_MATCH_THRESHOLD = float(os.getenv("FACE_MATCH_THRESHOLD", "0.42"))
+# Lower = stricter. 0.55 balances same-person matches vs impostors (library default is ~0.6).
+FACE_MATCH_THRESHOLD = float(os.getenv("FACE_MATCH_THRESHOLD", "0.55"))
 
 # Only when DEBUG is enabled: allow skipping geo + face checks for local testing,
 # and allow many check-in / check-out cycles the same day (auto-closes any open session).

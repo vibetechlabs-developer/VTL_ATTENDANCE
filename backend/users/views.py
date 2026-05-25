@@ -10,8 +10,15 @@ from django.utils import timezone
 from django.core.files.base import ContentFile
 import base64
 import uuid
-from .serializers import LoginSerializer, EmployeeListSerializer, EmployeeCreateSerializer, EmployeeUpdateSerializer
-from .models import Employee, PushSubscription, User
+from .serializers import (
+    LoginSerializer,
+    EmployeeListSerializer,
+    EmployeeCreateSerializer,
+    EmployeeUpdateSerializer,
+    _format_reports_to,
+    _manager_employee_ids,
+)
+from .models import Employee, PushSubscription, User, Appraisal, AppNotification
 from attendance.face_utils import decode_base64_image, get_face_encoding, is_valid_stored_encoding
 from attendance.models import AttendanceLog
 from leaves.models import LeaveRequest
@@ -141,7 +148,9 @@ class EmployeesListView(APIView):
     permission_classes = [IsAuthenticated]
 
     def get(self, request):
-        users = User.objects.select_related('employee').order_by('-id')
+        users = User.objects.select_related('employee').prefetch_related(
+            'employee__managers__employee'
+        ).order_by('-id')
         rows = []
         for user in users:
             employee = getattr(user, 'employee', None)
@@ -168,15 +177,12 @@ class EmployeesListView(APIView):
                 'department': employee.department if employee else ('Administration' if user.role == 'admin' else 'General'),
                 'managerUserId': str(employee.manager_id) if employee and employee.manager_id else None,
                 'managerEmployeeId': (
-                    str(employee.manager.employee.id)
-                    if employee and employee.manager and hasattr(employee.manager, 'employee')
+                    str(_manager_employee_ids(employee)[0])
+                    if employee and _manager_employee_ids(employee)
                     else None
                 ),
-                'reportsTo': (
-                    employee.manager.employee.name
-                    if employee and employee.manager and hasattr(employee.manager, 'employee')
-                    else (employee.manager.email if employee and employee.manager else '—')
-                ),
+                'managerEmployeeIds': [str(i) for i in _manager_employee_ids(employee)] if employee else [],
+                'reportsTo': _format_reports_to(employee) if employee else '—',
                 'joiningDate': (
                     employee.created_at.strftime('%Y-%m-%d')
                     if employee and employee.created_at
@@ -652,3 +658,82 @@ class MarkNotificationsReadView(APIView):
     def post(self, request):
         request.user.notifications.filter(read=False).update(read=True)
         return Response({'message': 'Notifications marked as read.'})
+
+
+class AppraisalCreateView(APIView):
+    permission_classes = [IsAuthenticated]
+
+    def post(self, request):
+        if request.user.role not in ['admin', 'manager', 'hr']:
+            return Response({'error': 'Permission denied.'}, status=403)
+
+        employee_id = request.data.get('employee_id')
+        message = (request.data.get('message') or '').strip()
+        try:
+            rating = int(request.data.get('rating', 5))
+        except (TypeError, ValueError):
+            rating = 5
+        rating = max(1, min(5, rating))
+
+        if not employee_id:
+            return Response({'error': 'employee_id is required.'}, status=400)
+        if not message:
+            return Response({'error': 'Appraisal message is required.'}, status=400)
+        if len(message) < 10:
+            return Response({'error': 'Message must be at least 10 characters.'}, status=400)
+
+        employee = Employee.objects.select_related('user').filter(pk=employee_id).first()
+        if not employee:
+            return Response({'error': 'Employee not found.'}, status=404)
+
+        giver_name = request.user.get_full_name().strip() or request.user.email
+        appraisal = Appraisal.objects.create(
+            employee=employee,
+            given_by=request.user,
+            rating=rating,
+            message=message,
+        )
+
+        AppNotification.objects.create(
+            user=employee.user,
+            title='Performance appraisal',
+            body=(
+                f'{giver_name} shared feedback ({rating}/5): '
+                f'{message[:240]}{"…" if len(message) > 240 else ""}'
+            ),
+            type='success',
+        )
+
+        return Response(
+            {
+                'message': 'Appraisal sent and employee notified.',
+                'id': appraisal.id,
+                'employee_name': employee.name,
+                'rating': rating,
+            },
+            status=201,
+        )
+
+
+class MyAppraisalsView(APIView):
+    permission_classes = [IsAuthenticated]
+
+    def get(self, request):
+        try:
+            employee = request.user.employee
+        except Employee.DoesNotExist:
+            return Response([])
+
+        rows = []
+        for a in Appraisal.objects.filter(employee=employee).select_related('given_by')[:30]:
+            giver = a.given_by
+            rows.append({
+                'id': a.id,
+                'rating': a.rating,
+                'message': a.message,
+                'given_by': (
+                    giver.get_full_name().strip() or giver.email if giver else 'Manager'
+                ),
+                'created_at': a.created_at.isoformat(),
+            })
+        return Response(rows)

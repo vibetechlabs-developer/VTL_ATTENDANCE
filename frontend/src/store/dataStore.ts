@@ -5,6 +5,7 @@ export interface Employee {
   id: string;
   userId?: string;
   managerEmployeeId?: string;
+  managerEmployeeIds?: string[];
   name: string;
   email: string;
   empId: string;
@@ -253,6 +254,12 @@ export const useDataStore = create<DataState>((set) => ({
         department: item.department || "General",
         managerUserId: item.managerUserId ? String(item.managerUserId) : undefined,
         managerEmployeeId: item.managerEmployeeId ? String(item.managerEmployeeId) : undefined,
+        managerEmployeeIds: (item.managerEmployeeIds?.length
+          ? item.managerEmployeeIds
+          : item.managerEmployeeId
+            ? [item.managerEmployeeId]
+            : []
+        ).map(String),
         reportsTo: item.reportsTo || "—",
         joiningDate: item.joiningDate || iso(new Date()),
         faceStatus: item.faceStatus || "pending",

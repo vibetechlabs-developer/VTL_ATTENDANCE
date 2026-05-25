@@ -21,6 +21,11 @@ import { AttendanceChart } from "@/components/Charts";
 import { StatusPill } from "@/components/StatusPill";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
+import { Label } from "@/components/ui/label";
+import { Textarea } from "@/components/ui/textarea";
+import {
+  Select, SelectContent, SelectItem, SelectTrigger, SelectValue,
+} from "@/components/ui/select";
 
 import { useAuthStore } from "@/store/authStore";
 import { useAttendanceStore } from "@/store/attendanceStore";
@@ -29,6 +34,7 @@ import {
   attendanceBreakEndRequest,
   attendanceBreakStartRequest,
   attendanceSessionRequest,
+  appraisalCreateRequest,
 } from "@/lib/api";
 
 const FULL_DAY_MS = 8 * 60 * 60 * 1000;
@@ -80,6 +86,10 @@ export default function ManagerDashboard() {
 
   const [teamRows, setTeamRows] = useState<AttendanceAdminRow[]>([]);
   const [teamLoading, setTeamLoading] = useState(false);
+  const [appraisalEmployeeId, setAppraisalEmployeeId] = useState("");
+  const [appraisalRating, setAppraisalRating] = useState("5");
+  const [appraisalMessage, setAppraisalMessage] = useState("");
+  const [appraisalSending, setAppraisalSending] = useState(false);
 
   useEffect(() => {
     const t = window.setInterval(() => setNow(Date.now()), 1000);
@@ -196,6 +206,38 @@ export default function ManagerDashboard() {
       typeof data?.totalHours === "number" ? Math.max(0, data.totalHours * 60 * 60 * 1000) : workMs;
     checkOut({ checkOutAt: outMs, workedMsToday: workedMsFromApi });
     toast.success("Checked out successfully");
+  };
+
+  const handleGiveAppraisal = async () => {
+    if (!accessToken) return;
+    const message = appraisalMessage.trim();
+    if (!appraisalEmployeeId) {
+      toast.error("Select a team member");
+      return;
+    }
+    if (message.length < 10) {
+      toast.error("Appraisal message must be at least 10 characters");
+      return;
+    }
+    setAppraisalSending(true);
+    try {
+      const res = await appraisalCreateRequest(accessToken, {
+        employee_id: Number(appraisalEmployeeId),
+        rating: Number(appraisalRating),
+        message,
+      });
+      const body = (await res.json().catch(() => ({}))) as { error?: string; message?: string };
+      if (!res.ok) {
+        toast.error(body.error || "Could not send appraisal");
+        return;
+      }
+      toast.success(body.message || "Appraisal sent — employee will be notified");
+      setAppraisalMessage("");
+      setAppraisalEmployeeId("");
+      setAppraisalRating("5");
+    } finally {
+      setAppraisalSending(false);
+    }
   };
 
   const handleBreak = async () => {
@@ -454,6 +496,65 @@ export default function ManagerDashboard() {
               </tbody>
             </table>
           </div>
+        </CardContent>
+      </Card>
+
+      <Card className="soft-3d border-0">
+        <CardHeader>
+          <CardTitle className="text-base">Give performance appraisal</CardTitle>
+          <p className="text-sm text-muted-foreground font-normal">
+            Feedback is sent instantly as an in-app notification to the employee.
+          </p>
+        </CardHeader>
+        <CardContent className="space-y-4">
+          <div className="grid gap-4 sm:grid-cols-2">
+            <div className="space-y-1.5">
+              <Label>Team member</Label>
+              <Select value={appraisalEmployeeId} onValueChange={setAppraisalEmployeeId}>
+                <SelectTrigger>
+                  <SelectValue placeholder="Select employee" />
+                </SelectTrigger>
+                <SelectContent>
+                  {teamRows.map((row) => (
+                    <SelectItem key={row.employeePk} value={String(row.employeePk)}>
+                      {row.name} ({row.empId})
+                    </SelectItem>
+                  ))}
+                </SelectContent>
+              </Select>
+            </div>
+            <div className="space-y-1.5">
+              <Label>Rating</Label>
+              <Select value={appraisalRating} onValueChange={setAppraisalRating}>
+                <SelectTrigger>
+                  <SelectValue />
+                </SelectTrigger>
+                <SelectContent>
+                  {["5", "4", "3", "2", "1"].map((r) => (
+                    <SelectItem key={r} value={r}>
+                      {r} / 5
+                    </SelectItem>
+                  ))}
+                </SelectContent>
+              </Select>
+            </div>
+          </div>
+          <div className="space-y-1.5">
+            <Label>Appraisal message</Label>
+            <Textarea
+              value={appraisalMessage}
+              onChange={(e) => setAppraisalMessage(e.target.value)}
+              placeholder="Share strengths, areas to improve, and goals for the next period..."
+              rows={4}
+            />
+          </div>
+          <Button
+            className="bg-gradient-primary"
+            disabled={appraisalSending || teamRows.length === 0}
+            onClick={() => void handleGiveAppraisal()}
+          >
+            {appraisalSending ? "Sending..." : "Send appraisal & notify"}
+          </Button>
         </CardContent>
       </Card>
     </div>

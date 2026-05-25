@@ -1,30 +1,38 @@
 import { useState, useRef, useEffect } from "react";
 import { Dialog, DialogContent, DialogDescription, DialogHeader, DialogTitle, DialogFooter } from "@/components/ui/dialog";
 import { motion, AnimatePresence } from "framer-motion";
-import { ScanFace, MapPin, CheckCircle2 } from "lucide-react";
+import { MapPin, CheckCircle2, AlertCircle } from "lucide-react";
 import { cn } from "@/lib/utils";
 import { Button } from "@/components/ui/button";
 import { attendanceCheckInRequest, attendanceCheckOutRequest } from "@/lib/api";
 import { useAuthStore } from "@/store/authStore";
 import { toast } from "sonner";
+import {
+    inferApiErrorContext,
+    parseVerificationApiError,
+    toVerificationError,
+    type VerificationError,
+} from "@/utils/verificationErrors";
+import { captureFaceDataUrl, drawFaceFrame, MIRROR_CAMERA_PREVIEW } from "@/utils/faceCapture";
 
 interface CheckInModalProps {
     open: boolean;
     onOpenChange: (open: boolean) => void;
-    onVerified: (data?: { checkInAt?: string; checkOutAt?: string; totalHours?: number }) => void;
+    onVerified: (data?: { checkInAt?: string; checkOutAt?: string; totalHours?: number; overtimeHours?: number }) => void;
     mode?: "check-in" | "check-out";
 }
 
 export function CheckInModal({ open, onOpenChange, onVerified, mode = "check-in" }: CheckInModalProps) {
-    // Keep camera in natural orientation for both check-in/check-out.
-    const NORMALIZE_FRONT_CAMERA = false;
+    // Mirror preview only; captured frames stay unflipped (matches Profile face registration).
     const [step, setStep] = useState<"face" | "location" | "done" | null>(null);
     const [faceProgress, setFaceProgress] = useState(0);
     const [locProgress, setLocProgress] = useState(0);
     const [cameraReady, setCameraReady] = useState(false);
     const [submitting, setSubmitting] = useState(false);
-    const [errorText, setErrorText] = useState<string>("");
+    const [verificationError, setVerificationError] = useState<VerificationError | null>(null);
     const startedRef = useRef(false);
+    /** Face scan hold duration (ms) — keeps camera steady before capture. */
+    const SCAN_DURATION_MS = 4000;
 
     const videoRef = useRef<HTMLVideoElement | null>(null);
     const canvasRef = useRef<HTMLCanvasElement | null>(null);
@@ -33,103 +41,26 @@ export function CheckInModal({ open, onOpenChange, onVerified, mode = "check-in"
     const accessToken = useAuthStore((s) => s.accessToken);
     const logout = useAuthStore((s) => s.logout);
 
-    const parseClientError = (err: unknown): string => {
-        const msg = typeof (err as { message?: unknown })?.message === "string"
-            ? (err as { message: string }).message
-            : "";
-        if (!msg) return mode === "check-in" ? "Check-in failed." : "Check-out failed.";
-        if (/permission/i.test(msg) && /geolocation/i.test(msg)) return "Location permission denied. Please allow GPS/location and retry.";
-        if (/timeout/i.test(msg) && /position/i.test(msg)) return "Could not fetch location in time. Please enable GPS and retry.";
-        if (/camera/i.test(msg)) return msg;
-        return msg;
-    };
-
-    const cameraInitErrorMessage = (err: unknown): string => {
+    const cameraInitError = (err: unknown): VerificationError => {
         const e = err as { name?: string; message?: string };
         const name = (e?.name || "").toLowerCase();
         const msg = (e?.message || "").toLowerCase();
         if (name.includes("notallowed") || name.includes("security")) {
-            return "Camera permission denied. Please allow camera access in browser settings.";
+            return toVerificationError("camera permission denied", mode, "camera");
         }
         if (name.includes("notreadable") || msg.includes("could not start video source")) {
-            return "Camera is busy in another app/tab. Close other camera apps and retry.";
+            return toVerificationError("camera busy notreadable", mode, "camera");
         }
         if (name.includes("overconstrained")) {
-            return "Camera constraints not supported on this device. Please retry.";
+            return toVerificationError("camera overconstrained", mode, "camera");
         }
         if (name.includes("notfound")) {
-            return "No camera device found.";
+            return toVerificationError("camera not found", mode, "camera");
         }
         if (name.includes("abort")) {
-            return "Camera initialization was interrupted. Please retry.";
+            return toVerificationError("camera abort", mode, "camera");
         }
-        return "Camera unavailable right now. Please retry.";
-    };
-
-    /** Maps API errors to short, user-facing copy. Never expose scores/thresholds/HTTP codes. */
-    const parseApiError = (
-        status: number,
-        body: {
-            error?: string;
-            message?: string;
-            detail?: string;
-            distance_meters?: number | null;
-            face_distance?: number | null;
-            threshold?: number | null;
-        },
-        rawText?: string
-    ): string => {
-        const base = body.error || body.detail || body.message;
-        const haystack = `${base || ""} ${rawText || ""}`.toLowerCase();
-
-        if (base && /token not valid|given token not valid|token is invalid|token is expired/i.test(base)) {
-            return "Your session has expired. Please sign in again.";
-        }
-        if (haystack.includes("already checked in")) {
-            return "You’re already checked in for today.";
-        }
-        if (
-            haystack.includes("outside office") ||
-            haystack.includes("office radius") ||
-            haystack.includes("allowed radius") ||
-            (haystack.includes("location") && haystack.includes("radius"))
-        ) {
-            if (body.distance_meters != null && Number.isFinite(body.distance_meters)) {
-                const m = Math.round(body.distance_meters);
-                return `You’re outside the allowed check-in zone (about ${m} m away). Move closer to the office and try again.`;
-            }
-            return "You’re outside the allowed check-in area. Move closer to the office and try again.";
-        }
-        if (
-            haystack.includes("face does not match") ||
-            haystack.includes("doesn't match your registered") ||
-            haystack.includes("does not match your registered") ||
-            haystack.includes("face mismatch")
-        ) {
-            return "We couldn’t confirm it’s you. Look straight at the camera, remove hat or mask if possible, and try again.";
-        }
-        if (haystack.includes("face not detected") || haystack.includes("no face")) {
-            return "We can’t see your face clearly. Use good lighting, center your face in the circle, and try again.";
-        }
-        if (haystack.includes("face is not registered") || haystack.includes("not registered for your account")) {
-            return "Your face isn’t registered yet. Ask your admin to register your face, or register from your profile.";
-        }
-        if (haystack.includes("face verification failed")) {
-            return "Face check didn’t complete. Try again with your face centered and good lighting.";
-        }
-        if (haystack.includes("verification service unavailable") || haystack.includes("face_recognition") || status === 503) {
-            return "Face check is temporarily unavailable. Please wait a moment and try again.";
-        }
-        if (status === 401) {
-            return "We couldn’t verify you. Try again, or sign out and sign back in.";
-        }
-        if (status === 403) return "You don’t have permission for this action.";
-        if (status === 400 && base) {
-            return base.length > 160 ? `${base.slice(0, 157)}…` : base;
-        }
-        return mode === "check-in"
-            ? "Check-in couldn’t be completed. Please try again."
-            : "Check-out couldn’t be completed. Please try again.";
+        return toVerificationError(e?.message || "camera unavailable", mode, "camera");
     };
 
     const restartCamera = async (): Promise<boolean> => {
@@ -187,7 +118,9 @@ export function CheckInModal({ open, onOpenChange, onVerified, mode = "check-in"
             }
             if (!v) {
                 setCameraReady(false);
-                setErrorText("Camera view not ready yet. Please wait a moment and retry.");
+                setVerificationError(
+                    toVerificationError("Camera view not ready yet", mode, "camera")
+                );
                 return false;
             }
             v.srcObject = stream;
@@ -197,8 +130,7 @@ export function CheckInModal({ open, onOpenChange, onVerified, mode = "check-in"
             return ready;
         } catch (err) {
             setCameraReady(false);
-            const msg = cameraInitErrorMessage(err);
-            setErrorText(msg);
+            setVerificationError(cameraInitError(err));
             return false;
         }
     };
@@ -264,7 +196,7 @@ export function CheckInModal({ open, onOpenChange, onVerified, mode = "check-in"
             setLocProgress(0);
             setCameraReady(false);
             setSubmitting(false);
-            setErrorText("");
+            setVerificationError(null);
             startedRef.current = false;
         } else {
             setStep(null);
@@ -287,25 +219,37 @@ export function CheckInModal({ open, onOpenChange, onVerified, mode = "check-in"
                 await new Promise((r) => window.setTimeout(r, 220 + attempt * 180));
             }
             if (!ok) {
-                // On initial open, silently show inline message instead of global error toast.
-                const msg = errorText || "Camera unavailable right now. Please tap Retry scan.";
-                setErrorText(msg);
+                setVerificationError((prev) =>
+                    prev ?? toVerificationError("camera unavailable", mode, "camera")
+                );
             }
         };
         void startCamera();
     }, [open]);
 
     useEffect(() => {
-        // Auto-start verification once the modal opens and camera is ready.
-        if (!open) return;
-        if (step !== "face") return;
-        if (!cameraReady) return;
-        if (submitting) return;
+        if (!open || step !== "face" || !cameraReady || submitting || verificationError) return;
         if (startedRef.current) return;
-        // Allow camera pipeline one frame to stabilize before auto-capture.
-        const t = window.setTimeout(() => void handleVerifyAndSubmit(), 220);
+        const t = window.setTimeout(() => void handleVerifyAndSubmit(), 450);
         return () => window.clearTimeout(t);
-    }, [open, step, cameraReady, submitting]);
+    }, [open, step, cameraReady, submitting, verificationError]);
+
+    const runFaceScanProgress = (): Promise<void> =>
+        new Promise((resolve) => {
+            const start = Date.now();
+            const tick = () => {
+                const elapsed = Date.now() - start;
+                const pct = Math.min(90, Math.round((elapsed / SCAN_DURATION_MS) * 90));
+                setFaceProgress(pct);
+                if (elapsed >= SCAN_DURATION_MS) {
+                    resolve();
+                    return;
+                }
+                requestAnimationFrame(tick);
+            };
+            setFaceProgress(0);
+            requestAnimationFrame(tick);
+        });
 
     const getLocation = (): Promise<{ latitude: number; longitude: number }> =>
         new Promise((resolve, reject) => {
@@ -329,16 +273,8 @@ export function CheckInModal({ open, onOpenChange, onVerified, mode = "check-in"
             canvas.height = h;
             const ctx = canvas.getContext("2d");
             if (!ctx) throw new Error("Could not capture frame");
-            if (NORMALIZE_FRONT_CAMERA) {
-                // Keep captured frame in natural orientation.
-                ctx.save();
-                ctx.scale(-1, 1);
-                ctx.drawImage(video, -w, 0, w, h);
-                ctx.restore();
-            } else {
-                ctx.drawImage(video, 0, 0, w, h);
-            }
-            return canvas.toDataURL("image/png");
+            drawFaceFrame(ctx, video, w, h);
+            return captureFaceDataUrl(canvas);
         };
 
         // Attempt 1: standard video-frame capture
@@ -356,15 +292,8 @@ export function CheckInModal({ open, onOpenChange, onVerified, mode = "check-in"
                 canvas.height = bitmap.height;
                 const ctx = canvas.getContext("2d");
                 if (!ctx) throw new Error("Could not capture frame");
-                if (NORMALIZE_FRONT_CAMERA) {
-                    ctx.save();
-                    ctx.scale(-1, 1);
-                    ctx.drawImage(bitmap, -bitmap.width, 0, bitmap.width, bitmap.height);
-                    ctx.restore();
-                } else {
-                    ctx.drawImage(bitmap, 0, 0);
-                }
-                return canvas.toDataURL("image/png");
+                ctx.drawImage(bitmap, 0, 0);
+                return captureFaceDataUrl(canvas);
             }
         } catch {
             // fall through to final error
@@ -374,22 +303,24 @@ export function CheckInModal({ open, onOpenChange, onVerified, mode = "check-in"
     };
 
     const handleVerifyAndSubmit = async () => {
-        setErrorText("");
+        setVerificationError(null);
         if (!accessToken) { toast.error("Session expired. Please login again."); return; }
         if (!cameraReady) {
             const ready = await restartCamera();
             if (!ready) {
-                const msg = "Camera stream not ready. Please allow camera access and close other camera apps, then retry.";
-                setErrorText(msg);
-                toast.error(msg);
+                setVerificationError(
+                    toVerificationError("Camera stream not ready", mode, "camera")
+                );
                 return;
             }
             setCameraReady(true);
         }
         startedRef.current = true;
         setSubmitting(true);
-        setFaceProgress(10);
+        setFaceProgress(0);
         try {
+            await runFaceScanProgress();
+            setFaceProgress(92);
             let image = "";
             let lastErr: unknown = null;
             for (let attempt = 0; attempt < 3; attempt += 1) {
@@ -431,24 +362,30 @@ export function CheckInModal({ open, onOpenChange, onVerified, mode = "check-in"
                 check_in?: string;
                 check_out?: string;
                 total_hours?: number;
+                overtime_hours?: number;
                 detail?: string;
                 distance_meters?: number | null;
                 face_distance?: number | null;
                 threshold?: number | null;
             };
             if (!res.ok) {
-                const msg = parseApiError(res.status, body, rawText);
-                setErrorText(msg);
-                const sessionGone = /session has expired|sign in again/i.test(msg);
+                const errStep = inferApiErrorContext(
+                    body as { error?: string; code?: string },
+                    rawText
+                );
+                const errInfo = parseVerificationApiError(res.status, body, rawText, mode, errStep);
+                setVerificationError(errInfo);
+                const sessionGone = errInfo.title === "Session expired";
                 if (sessionGone) {
-                    toast.error(msg);
+                    toast.error(`${errInfo.title}. ${errInfo.message}`);
                     await logout();
                     onOpenChange(false);
                     window.location.href = "/login";
                     return;
                 }
-                // Inline error in the modal only — avoids the same text in a top toast and bottom banner.
-                setStep("face");
+                const isLocationIssue =
+                    errInfo.title === "Outside office area" || errInfo.title === "Location timed out";
+                setStep(isLocationIssue ? "location" : "face");
                 return;
             }
             setFaceProgress(100);
@@ -462,33 +399,82 @@ export function CheckInModal({ open, onOpenChange, onVerified, mode = "check-in"
                     checkInAt: body.check_in,
                     checkOutAt: body.check_out,
                     totalHours: Number(body.total_hours ?? 0),
+                    overtimeHours: Number(body.overtime_hours ?? 0),
                 });
             }, 1100);
-        } catch (e: any) {
-            const msg = parseClientError(e);
-            setErrorText(msg);
-            toast.error(msg);
-            setStep("face");
+        } catch (e: unknown) {
+            const geo = e as GeolocationPositionError;
+            const ctx = step === "location" ? "location" : "face";
+            let errInfo: VerificationError;
+            if (geo?.code === 3) {
+                errInfo = toVerificationError("Timeout expired", mode, "location");
+            } else if (geo?.code === 1) {
+                errInfo = toVerificationError("location permission denied", mode, "location");
+            } else {
+                const msg =
+                    typeof (e as { message?: unknown })?.message === "string"
+                        ? (e as { message: string }).message
+                        : "";
+                errInfo = toVerificationError(msg, mode, ctx);
+            }
+            setVerificationError(errInfo);
+            setStep(ctx === "location" ? "location" : "face");
         } finally {
             setSubmitting(false);
+            startedRef.current = false;
         }
     };
 
-    const handleRetry = async () => {
+    const handleRetryScan = async () => {
         if (submitting) return;
-        setErrorText("");
+        startedRef.current = false;
+        setVerificationError(null);
         setFaceProgress(0);
         setLocProgress(0);
         setStep("face");
         const ready = await restartCamera();
         if (!ready) {
-            const msg = "Camera could not be re-initialized. Please close other camera apps and retry.";
-            setErrorText(msg);
-            toast.error(msg);
+            setVerificationError(toVerificationError("camera could not restart", mode, "camera"));
             return;
         }
         await handleVerifyAndSubmit();
     };
+
+    const scanSecondsLeft = submitting
+        ? Math.max(1, Math.ceil(((90 - faceProgress) / 90) * (SCAN_DURATION_MS / 1000)))
+        : 0;
+
+    const showRetryScan = step === "face" || (step === "location" && Boolean(verificationError));
+
+    const verificationAlert = verificationError ? (
+        <motion.div
+            key="verification-error"
+            initial={{ opacity: 0, y: -8 }}
+            animate={{ opacity: 1, y: 0 }}
+            exit={{ opacity: 0, y: -8 }}
+            className="mx-auto w-full max-w-sm rounded-xl border border-destructive/25 bg-destructive/8 px-4 py-3.5 text-left shadow-sm"
+            role="alert"
+        >
+            <div className="flex gap-3">
+                <AlertCircle className="h-5 w-5 shrink-0 text-destructive mt-0.5" aria-hidden />
+                <div className="min-w-0 space-y-1.5">
+                    <p className="text-sm font-semibold text-destructive leading-snug">
+                        {verificationError.title}
+                    </p>
+                    <p className="text-sm text-destructive/90 leading-relaxed">
+                        {verificationError.message}
+                    </p>
+                    {verificationError.tips && verificationError.tips.length > 0 ? (
+                        <ul className="text-xs text-destructive/85 space-y-1 pt-0.5 list-disc pl-4">
+                            {verificationError.tips.map((tip) => (
+                                <li key={tip}>{tip}</li>
+                            ))}
+                        </ul>
+                    ) : null}
+                </div>
+            </div>
+        </motion.div>
+    ) : null;
 
     return (
         <Dialog open={open} onOpenChange={onOpenChange}>
@@ -515,30 +501,46 @@ export function CheckInModal({ open, onOpenChange, onVerified, mode = "check-in"
                                 </p>
                             </div>
 
-                            <div className="relative mx-auto w-44 h-44">
+                            <AnimatePresence>{verificationAlert}</AnimatePresence>
+
+                            <div className="relative mx-auto w-52 h-52 sm:w-56 sm:h-56">
                                 <div className="absolute inset-0 rounded-full login-verify-ring" />
-                                <div className="absolute inset-2 rounded-full login-verify-inner flex items-center justify-center overflow-hidden">
-                                    <ScanFace className="h-16 w-16 text-primary" />
-                                    <motion.div
-                                        className="absolute left-0 right-0 h-0.5 bg-primary/70 shadow-[0_0_16px_hsl(var(--primary))]"
-                                        initial={{ top: "10%" }}
-                                        animate={{ top: ["10%", "90%", "10%"] }}
-                                        transition={{ duration: 1.6, repeat: Infinity, ease: "easeInOut" }}
+                                <div className="absolute inset-2 rounded-full overflow-hidden border-2 border-primary/40 bg-muted/20 shadow-sm">
+                                    <video
+                                        ref={videoRef}
+                                        autoPlay
+                                        playsInline
+                                        muted
+                                        className="h-full w-full object-cover"
+                                        style={{ transform: MIRROR_CAMERA_PREVIEW ? "scaleX(-1)" : "none" }}
                                     />
+                                    {submitting && (
+                                        <motion.div
+                                            className="absolute left-0 right-0 h-0.5 bg-primary/80 shadow-[0_0_16px_hsl(var(--primary))] z-10"
+                                            initial={{ top: "12%" }}
+                                            animate={{ top: ["12%", "88%", "12%"] }}
+                                            transition={{ duration: 1.4, repeat: Infinity, ease: "easeInOut" }}
+                                        />
+                                    )}
+                                    {/* Corner focus brackets */}
+                                    <span className="pointer-events-none absolute top-3 left-3 h-5 w-5 border-l-2 border-t-2 border-primary/70 rounded-tl-sm" />
+                                    <span className="pointer-events-none absolute top-3 right-3 h-5 w-5 border-r-2 border-t-2 border-primary/70 rounded-tr-sm" />
+                                    <span className="pointer-events-none absolute bottom-3 left-3 h-5 w-5 border-l-2 border-b-2 border-primary/70 rounded-bl-sm" />
+                                    <span className="pointer-events-none absolute bottom-3 right-3 h-5 w-5 border-r-2 border-b-2 border-primary/70 rounded-br-sm" />
                                 </div>
-                                <svg className="absolute inset-0 -rotate-90" viewBox="0 0 100 100">
+                                <svg className="absolute inset-0 -rotate-90 pointer-events-none" viewBox="0 0 100 100">
                                     <circle cx="50" cy="50" r="48" fill="none" stroke="hsl(var(--border))" strokeWidth="2" />
                                     <circle
                                         cx="50" cy="50" r="48" fill="none"
                                         stroke="hsl(var(--primary))" strokeWidth="2.5" strokeLinecap="round"
                                         strokeDasharray={`${(faceProgress / 100) * 301.6} 301.6`}
-                                        className="transition-all duration-100"
+                                        className="transition-all duration-150"
                                     />
                                 </svg>
                             </div>
 
                             <div className="flex justify-center gap-2">
-                                {[0, 16, 33, 50, 66, 83].map((threshold) => (
+                                {[0, 18, 36, 54, 72, 90].map((threshold) => (
                                     <div
                                         key={threshold}
                                         className={cn(
@@ -555,19 +557,13 @@ export function CheckInModal({ open, onOpenChange, onVerified, mode = "check-in"
                                     {!cameraReady
                                         ? "Waiting for camera..."
                                         : submitting
-                                            ? "Verifying face..."
-                                            : "Ready. Click start to verify."}
+                                            ? faceProgress < 90
+                                                ? `Hold still — scanning (${scanSecondsLeft}s)`
+                                                : "Capturing your face..."
+                                            : verificationError
+                                              ? "Fix the issue below, then tap Retry scan."
+                                              : "Center your face in the circle — scan starts automatically."}
                                 </p>
-                            </div>
-                            <div className="mx-auto h-44 w-44 rounded-full overflow-hidden border-2 border-primary/40 bg-muted/10 shadow-sm">
-                                <video
-                                    ref={videoRef}
-                                    autoPlay
-                                    playsInline
-                                    muted
-                                    className="h-full w-full object-cover"
-                                    style={{ transform: NORMALIZE_FRONT_CAMERA ? "scaleX(-1)" : "none" }}
-                                />
                             </div>
                             <canvas ref={canvasRef} className="hidden" />
                         </motion.div>
@@ -585,6 +581,8 @@ export function CheckInModal({ open, onOpenChange, onVerified, mode = "check-in"
                                 <h2 className="login-welcome text-2xl">Location Check</h2>
                                 <p className="login-welcome-sub">Ensuring you are inside the active radius.</p>
                             </div>
+
+                            <AnimatePresence>{verificationAlert}</AnimatePresence>
 
                             <div className="relative mx-auto w-44 h-44">
                                 <div className="absolute inset-0 rounded-3xl login-verify-ring" />
@@ -690,22 +688,24 @@ export function CheckInModal({ open, onOpenChange, onVerified, mode = "check-in"
                 </AnimatePresence>
 
                 {step !== "done" && (
-                    <DialogFooter className="mt-4 gap-2 sticky bottom-0 bg-card/95 pt-3">
-                        {errorText ? (
-                            <div className="w-full rounded-lg border border-destructive/30 bg-destructive/10 px-3 py-2 text-sm text-destructive">
-                                {errorText}
-                            </div>
-                        ) : null}
-                        <Button variant="outline" onClick={() => onOpenChange(false)} disabled={submitting}>
+                    <DialogFooter className="mt-2 sm:mt-4 pt-2 border-t border-border/40 flex-col gap-2 sm:flex-row sm:justify-stretch">
+                        <Button
+                            variant="outline"
+                            className="w-full sm:flex-1"
+                            onClick={() => onOpenChange(false)}
+                            disabled={submitting && step === "location"}
+                        >
                             Cancel
                         </Button>
-                        <Button
-                            onClick={() => void handleRetry()}
-                            disabled={submitting}
-                            className="bg-sage-3d border-0 text-primary-foreground"
-                        >
-                            {submitting ? "Scanning..." : (errorText ? "Retry scan" : "Start scan")}
-                        </Button>
+                        {showRetryScan ? (
+                            <Button
+                                className="w-full sm:flex-1 bg-sage-3d border-0 text-primary-foreground hover:opacity-90"
+                                onClick={() => void handleRetryScan()}
+                                disabled={submitting || (step === "face" && !cameraReady)}
+                            >
+                                {submitting ? "Scanning..." : "Retry scan"}
+                            </Button>
+                        ) : null}
                     </DialogFooter>
                 )}
             </DialogContent>

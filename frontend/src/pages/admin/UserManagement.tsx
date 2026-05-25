@@ -1,6 +1,7 @@
 import { useEffect, useMemo, useRef, useState } from "react";
 import { useSearchParams } from "react-router-dom";
 import { Plus, Search, Download, Trash2, Camera, Pencil, Copy, Eye, EyeOff } from "lucide-react";
+import { ManagerMultiSelect } from "@/components/ManagerMultiSelect";
 import { Card } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
@@ -22,16 +23,15 @@ import { useAuthStore, type Role } from "@/store/authStore";
 import { toast } from "sonner";
 import { exportCsv } from "@/utils/csv";
 import { usersCreateRequest, usersDeleteRequest, usersFaceDataRequest, usersListRequest, usersRegisterFaceRequest, usersUpdateRequest, type ApiEmployee } from "@/lib/api";
+import { captureFaceDataUrl, drawFaceFrame, MIRROR_CAMERA_PREVIEW } from "@/utils/faceCapture";
 
 const emptyForm: Omit<Employee, "id"> = {
   name: "", email: "", empId: "", role: "employee", department: "Tech",
-  reportsTo: "—", joiningDate: new Date().toISOString().slice(0, 10),
+  reportsTo: "—", managerEmployeeIds: [], joiningDate: new Date().toISOString().slice(0, 10),
   faceStatus: "pending", status: "active",
 };
 
 export default function UserManagement() {
-  // Some browsers auto-mirror front camera previews. Keep this true to normalize.
-  const NORMALIZE_FRONT_CAMERA = true;
   const { employees, deleteEmployee, setEmployeesFromApi } = useDataStore();
   const accessToken = useAuthStore((s) => s.accessToken);
   const [searchParams] = useSearchParams();
@@ -163,28 +163,10 @@ export default function UserManagement() {
     return options;
   }, [employees]);
 
-  const resolveManagerSelection = (value?: string | number, fallbackName?: string) => {
-    const strVal = value != null && value !== "—" ? String(value).trim() : "";
-    if (strVal && /^\d+$/.test(strVal)) {
-      const opt = reportToOptions.find((o) => o.value === strVal);
-      return {
-        managerEmployeeId: Number(strVal),
-        managerUserId: opt?.userId ?? null,
-        managerName: opt?.name ?? fallbackName ?? null,
-      };
-    }
-
-    const name = (fallbackName || strVal || "").trim();
-    if (!name || name === "—") {
-      return { managerEmployeeId: null, managerUserId: null, managerName: null };
-    }
-    const matched = employees.find((e) => e.name === name && (e.role === "admin" || e.role === "manager"));
-    return {
-      managerEmployeeId: matched ? Number(matched.id) : null,
-      managerUserId: matched?.userId ? Number(matched.userId) : null,
-      managerName: matched?.name ?? name,
-    };
-  };
+  const toManagerEmployeeIds = (ids?: string[]) =>
+    (ids ?? [])
+      .map((id) => Number(id))
+      .filter((id) => Number.isFinite(id) && id > 0);
 
   const filtered = employees.filter((e) =>
     (dept === "all" || e.department === dept) &&
@@ -226,15 +208,14 @@ export default function UserManagement() {
       toast.error("Session expired. Please login again.");
       return;
     }
-    const managerSelection = resolveManagerSelection(form.reportsTo);
+    const managerEmployeeIds = toManagerEmployeeIds(form.managerEmployeeIds);
     try {
       const res = await usersCreateRequest(accessToken, {
         name,
         email,
         role: form.role,
         department,
-        manager_employee_id: managerSelection.managerEmployeeId,
-        manager_id: managerSelection.managerUserId,
+        manager_employee_ids: managerEmployeeIds,
         password: password || undefined,
       });
       const body = (await res.json().catch(() => ({}))) as {
@@ -305,15 +286,14 @@ export default function UserManagement() {
   const handleEditSave = async () => {
     if (!selectedEmployee || !accessToken) return;
     setSavingEdit(true);
-    const managerSelection = resolveManagerSelection(selectedEmployee.managerEmployeeId, selectedEmployee.reportsTo);
+    const managerEmployeeIds = toManagerEmployeeIds(selectedEmployee.managerEmployeeIds);
     try {
       const res = await usersUpdateRequest(accessToken, selectedEmployee.id, {
         name: selectedEmployee.name,
         email: selectedEmployee.email,
         role: selectedEmployee.role,
         department: selectedEmployee.department,
-        manager_employee_id: managerSelection.managerEmployeeId,
-        manager_id: managerSelection.managerUserId,
+        manager_employee_ids: managerEmployeeIds,
         password: editPassword.trim() || undefined,
       });
       const body = (await res.json().catch(() => ({}))) as { error?: string };
@@ -368,17 +348,8 @@ export default function UserManagement() {
       toast.error("Could not capture face frame");
       return;
     }
-    if (NORMALIZE_FRONT_CAMERA) {
-      // Un-mirror capture so stored face image matches natural orientation.
-      ctx.save();
-      ctx.scale(-1, 1);
-      ctx.drawImage(video, -width, 0, width, height);
-      ctx.restore();
-    } else {
-      ctx.drawImage(video, 0, 0, width, height);
-    }
-    // Prefer PNG for maximum compatibility with backend decoders
-    const capturedBase64 = canvas.toDataURL("image/png");
+    drawFaceFrame(ctx, video, width, height);
+    const capturedBase64 = captureFaceDataUrl(canvas);
     setFaceBase64(capturedBase64);
 
     setSavingFace(true);
@@ -490,15 +461,12 @@ export default function UserManagement() {
                 <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
                   <div className="space-y-1.5">
                     <Label>Reports to</Label>
-                    <Select value={form.reportsTo} onValueChange={(v) => setForm({ ...form, reportsTo: v })}>
-                      <SelectTrigger><SelectValue placeholder="Select reporting manager" /></SelectTrigger>
-                      <SelectContent>
-                        <SelectItem value="—">None</SelectItem>
-                        {reportToOptions.map((opt) => (
-                          <SelectItem key={opt.value} value={opt.value}>{opt.label}</SelectItem>
-                        ))}
-                      </SelectContent>
-                    </Select>
+                    <ManagerMultiSelect
+                      value={form.managerEmployeeIds ?? []}
+                      onChange={(ids) => setForm({ ...form, managerEmployeeIds: ids })}
+                      options={reportToOptions.map((opt) => ({ value: opt.value, label: opt.label }))}
+                      placeholder="Select reporting managers"
+                    />
                   </div>
                   <div className="space-y-1.5">
                     <Label>Joining date</Label>
@@ -809,24 +777,27 @@ export default function UserManagement() {
 
               <div className="space-y-1.5">
                 <Label>Reports to</Label>
-                <Select
-                  value={selectedEmployee.managerEmployeeId || "—"}
-                  onValueChange={(v) =>
+                <ManagerMultiSelect
+                  value={selectedEmployee.managerEmployeeIds ?? []}
+                  onChange={(ids) =>
                     setSelectedEmployee({
                       ...selectedEmployee,
-                      managerEmployeeId: v === "—" ? undefined : v,
-                      reportsTo: v === "—" ? "—" : (reportToOptions.find((opt) => opt.value === v)?.label.split(" (")[0] || selectedEmployee.reportsTo),
+                      managerEmployeeIds: ids,
+                      managerEmployeeId: ids[0],
+                      reportsTo:
+                        ids.length === 0
+                          ? "—"
+                          : reportToOptions
+                              .filter((opt) => ids.includes(opt.value))
+                              .map((opt) => opt.label.split(" (")[0])
+                              .join(", "),
                     })
                   }
-                >
-                  <SelectTrigger><SelectValue placeholder="Select reporting manager" /></SelectTrigger>
-                  <SelectContent>
-                    <SelectItem value="—">None</SelectItem>
-                    {reportToOptions.map((opt) => (
-                      <SelectItem key={opt.value} value={opt.value}>{opt.label}</SelectItem>
-                    ))}
-                  </SelectContent>
-                </Select>
+                  options={reportToOptions
+                    .filter((opt) => opt.value !== selectedEmployee.id)
+                    .map((opt) => ({ value: opt.value, label: opt.label }))}
+                  placeholder="Select reporting managers"
+                />
               </div>
 
               <div className="space-y-1.5">
@@ -869,7 +840,7 @@ export default function UserManagement() {
                 playsInline
                 muted
                 className="w-full h-56 object-cover"
-                style={{ transform: NORMALIZE_FRONT_CAMERA ? "scaleX(-1)" : "none" }}
+                style={{ transform: MIRROR_CAMERA_PREVIEW ? "scaleX(-1)" : "none" }}
               />
             </div>
             {faceBase64 && (

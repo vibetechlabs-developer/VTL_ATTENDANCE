@@ -6,6 +6,7 @@ from .views import (
     AuditLogsView, SecurityOverviewView, EmployeeFaceDataView,
     PushPublicKeyView, PushSubscribeView, PushUnsubscribeView, PushLunchReminderView,
     MyNotificationsView, MarkNotificationsReadView,
+    AppraisalCreateView, MyAppraisalsView,
 )
 
 urlpatterns = [
@@ -30,4 +31,6 @@ urlpatterns = [
     path('push/send-lunch/', PushLunchReminderView.as_view(), name='push-send-lunch'),
     path('notifications/', MyNotificationsView.as_view(), name='my-notifications'),
     path('notifications/mark-read/', MarkNotificationsReadView.as_view(), name='mark-notifications-read'),
+    path('appraisals/create/', AppraisalCreateView.as_view(), name='appraisal-create'),
+    path('appraisals/mine/', MyAppraisalsView.as_view(), name='my-appraisals'),
 ]
