@@ -6,6 +6,7 @@ import { Textarea } from "@/components/ui/textarea";
 import { Avatar, AvatarFallback } from "@/components/ui/avatar";
 import { StatusPill } from "@/components/StatusPill";
 import { useAuthStore } from "@/store/authStore";
+import { userInitials } from "@/lib/utils";
 import { toast } from "sonner";
 import { safeFormatDistanceToNow } from "@/utils/safeDate";
 import { updatesPostRequest, updatesRequest } from "@/lib/api";
@@ -51,7 +52,7 @@ export default function EmployeeUpdates() {
           <div className="flex gap-3">
             <Avatar className="h-10 w-10">
               <AvatarFallback className="bg-gradient-primary text-primary-foreground text-sm font-semibold">
-                {user?.name.split(" ").map((n) => n[0]).join("").slice(0, 2)}
+                {userInitials(user?.name)}
               </AvatarFallback>
             </Avatar>
             <div className="flex-1 space-y-3">

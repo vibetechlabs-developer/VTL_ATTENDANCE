@@ -3,6 +3,7 @@ import { motion } from "framer-motion";
 import { Save, Mail, Phone, MapPin, Briefcase, IdCard, Camera, ScanFace, Eye, EyeOff } from "lucide-react";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
+import { userInitials } from "@/lib/utils";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Textarea } from "@/components/ui/textarea";
@@ -33,7 +34,7 @@ export default function Profile() {
     department: user?.department ?? "",
   });
 
-  const initials = user?.name.split(" ").map((n) => n[0]).join("").slice(0, 2) ?? "??";
+  const initials = userInitials(user?.name);
 
   const set = (k: keyof typeof form) => (e: React.ChangeEvent<HTMLInputElement | HTMLTextAreaElement>) =>
     setForm((f) => ({ ...f, [k]: e.target.value }));

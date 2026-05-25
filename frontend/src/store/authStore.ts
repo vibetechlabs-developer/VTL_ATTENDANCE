@@ -132,7 +132,17 @@ export const useAuthStore = create<AuthState>()(
     {
       name: "vtl-auth",
       storage: createJSONStorage(() => ({
-        getItem: (name) => safeGetItem(localStorage, name),
+        getItem: (name) => {
+          const raw = safeGetItem(localStorage, name);
+          if (raw == null) return null;
+          try {
+            JSON.parse(raw);
+            return raw;
+          } catch {
+            safeRemoveItem(localStorage, name);
+            return null;
+          }
+        },
         setItem: (name, value) => safeSetItem(localStorage, name, value),
         removeItem: (name) => safeRemoveItem(localStorage, name),
       })),

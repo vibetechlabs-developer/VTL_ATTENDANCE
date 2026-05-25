@@ -3,6 +3,7 @@ import { SidebarProvider } from "@/components/ui/sidebar";
 import { AppSidebar } from "@/components/AppSidebar";
 import { AppHeader } from "@/components/AppHeader";
 import { GlobalCommandPalette } from "@/components/GlobalCommandPalette";
+import { SectionErrorBoundary } from "@/components/SectionErrorBoundary";
 import { motion } from "framer-motion";
 
 export default function DashboardLayout() {
@@ -32,9 +33,13 @@ export default function DashboardLayout() {
     <SidebarProvider defaultOpen>
       <GlobalCommandPalette />
       <div className="min-h-screen flex w-full bg-background">
-        <AppSidebar />
+        <SectionErrorBoundary section="Menu">
+          <AppSidebar />
+        </SectionErrorBoundary>
         <div className="flex-1 flex flex-col min-w-0">
-          <AppHeader />
+          <SectionErrorBoundary section="Header">
+            <AppHeader />
+          </SectionErrorBoundary>
           <div className="px-4 sm:px-6 lg:px-8 -mt-4 mb-4">
             <nav aria-label="Breadcrumb" className="text-xs text-muted-foreground">
               <ol className="flex flex-wrap items-center gap-2">
@@ -72,7 +77,9 @@ export default function DashboardLayout() {
               transition={{ type: "spring", stiffness: 260, damping: 22 }}
               className="container max-w-none px-4 sm:px-6 lg:px-8 py-6"
             >
-              <Outlet />
+              <SectionErrorBoundary section="Page">
+                <Outlet />
+              </SectionErrorBoundary>
             </motion.div>
           </main>
         </div>

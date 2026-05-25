@@ -15,7 +15,9 @@ import {
 import { ThemeToggle } from "@/components/ThemeToggle";
 import { useAuthStore } from "@/store/authStore";
 import { useDataStore } from "@/store/dataStore";
-import { cn } from "@/lib/utils";
+import { cn, userInitials } from "@/lib/utils";
+import { safeGetItem, safeSetItem } from "@/utils/storageSafe";
+import { canUseWebPush } from "@/utils/platform";
 import { StatusPill } from "@/components/StatusPill";
 import { toast } from "sonner";
 import { pushPublicKeyRequest, pushSubscribeRequest, pushUnsubscribeRequest } from "@/lib/api";
@@ -28,28 +30,28 @@ export function AppHeader() {
   const navigate = useNavigate();
   const reminderInitRef = useRef(false);
   const [headerSearch, setHeaderSearch] = useState("");
-  const unread = notifications.filter((n) => !n.read).length;
+  const unread = (notifications ?? []).filter((n) => !n.read).length;
 
   useEffect(() => {
     if (!accessToken) return;
     const run = async () => {
-      const res = await myNotificationsRequest(accessToken);
-      if (!res.ok) return;
-      const body = (await res.json().catch(() => [])) as any[];
-      // Store in zustand via addNotification so UI updates consistently.
-      // Clear existing by marking read state only; list is primarily for latest items.
-      // Note: We keep in-app scheduled reminders via addNotification too.
-      // Replace local list with backend list:
-      const mapped = body.map((n: any) => ({
-        id: String(n.id),
-        title: String(n.title || ""),
-        body: String(n.body || ""),
-        type: (String(n.type || "info") as "info" | "success" | "warning"),
-        read: !!n.read,
-        time: n.created_at ? new Date(n.created_at).toLocaleString() : "just now",
-      }));
-      // @ts-expect-error setState exists in zustand internals; use explicit setter instead in future refactor
-      useDataStore.setState({ notifications: mapped });
+      try {
+        const res = await myNotificationsRequest(accessToken);
+        if (!res.ok) return;
+        const body = await res.json().catch(() => []);
+        const list = Array.isArray(body) ? body : [];
+        const mapped = list.map((n: any) => ({
+          id: String(n.id),
+          title: String(n.title || ""),
+          body: String(n.body || ""),
+          type: (String(n.type || "info") as "info" | "success" | "warning"),
+          read: !!n.read,
+          time: n.created_at ? new Date(n.created_at).toLocaleString() : "just now",
+        }));
+        useDataStore.setState({ notifications: mapped });
+      } catch {
+        /* keep in-app notifications only */
+      }
     };
     void run();
   }, [accessToken]);
@@ -77,32 +79,32 @@ export function AppHeader() {
 
       // On first run in a new browser/profile, do not fire stale reminders immediately.
       // If scheduled time has already passed, mark them handled for today.
-      if (isInitialRun && now >= lunchAt && localStorage.getItem(lunchKey) !== "1") {
-        localStorage.setItem(lunchKey, "1");
+      if (isInitialRun && now >= lunchAt && safeGetItem(localStorage, lunchKey) !== "1") {
+        safeSetItem(localStorage, lunchKey, "1");
       }
-      if (isInitialRun && now >= lunchDoneAt && localStorage.getItem(followKey) !== "1") {
-        localStorage.setItem(followKey, "1");
+      if (isInitialRun && now >= lunchDoneAt && safeGetItem(localStorage, followKey) !== "1") {
+        safeSetItem(localStorage, followKey, "1");
       }
       reminderInitRef.current = true;
 
-      if (now >= lunchAt && localStorage.getItem(lunchKey) !== "1") {
+      if (now >= lunchAt && safeGetItem(localStorage, lunchKey) !== "1") {
         addNotification({
           title: "Lunch Break Reminder",
           body: "It's 1:00 PM. Please take your lunch break.",
           type: "info",
         });
         toast.info("It's 1:00 PM. Please take your lunch break.");
-        localStorage.setItem(lunchKey, "1");
+        safeSetItem(localStorage, lunchKey, "1");
       }
 
-      if (now >= lunchDoneAt && localStorage.getItem(followKey) !== "1") {
+      if (now >= lunchDoneAt && safeGetItem(localStorage, followKey) !== "1") {
         addNotification({
           title: "Break Duration Alert",
           body: "You have completed a 30-minute break.",
           type: "warning",
         });
         toast.warning("You have completed a 30-minute break.");
-        localStorage.setItem(followKey, "1");
+        safeSetItem(localStorage, followKey, "1");
       }
     };
 
@@ -116,7 +118,7 @@ export function AppHeader() {
     navigate("/login", { replace: true });
   };
 
-  const initials = user?.name.split(" ").map((n) => n[0]).join("").slice(0, 2) ?? "??";
+  const initials = userInitials(user?.name);
 
   const urlBase64ToUint8Array = (base64String: string) => {
     const padding = "=".repeat((4 - (base64String.length % 4)) % 4);
@@ -129,7 +131,7 @@ export function AppHeader() {
 
   const ensurePushSubscription = async (askPermission: boolean) => {
     if (!user || !accessToken) return false;
-    if (!("serviceWorker" in navigator) || !("PushManager" in window)) return false;
+    if (!canUseWebPush()) return false;
     try {
       const keyRes = await pushPublicKeyRequest(accessToken);
       if (!keyRes.ok) return false;
@@ -172,9 +174,13 @@ export function AppHeader() {
   };
 
   useEffect(() => {
-    // Auto-register only when permission already granted.
-    if (Notification.permission === "granted") {
-      void ensurePushSubscription(false);
+    if (!canUseWebPush()) return;
+    try {
+      if (Notification.permission === "granted") {
+        void ensurePushSubscription(false);
+      }
+    } catch {
+      /* iOS / private mode */
     }
   }, [user, accessToken]);
 
@@ -183,9 +189,14 @@ export function AppHeader() {
     if (accessToken) {
       await markNotificationsReadRequest(accessToken).catch(() => undefined);
     }
+    if (!canUseWebPush()) return;
     const ok = await ensurePushSubscription(true);
-    if (!ok && Notification.permission !== "granted") {
-      toast.warning("Please allow browser notifications to receive reminders.");
+    try {
+      if (!ok && Notification.permission !== "granted") {
+        toast.warning("Please allow browser notifications to receive reminders.");
+      }
+    } catch {
+      /* ignore */
     }
   };
 

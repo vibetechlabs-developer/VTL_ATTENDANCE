@@ -16,7 +16,8 @@ import { useAttendanceStore } from "@/store/attendanceStore";
 import { CheckInModal } from "@/components/CheckInModal";
 import { useAuthStore } from "@/store/authStore";
 import { useDataStore } from "@/store/dataStore";
-import { cn } from "@/lib/utils";
+import { cn, userFirstName } from "@/lib/utils";
+import { safeGetItem, safeSetItem } from "@/utils/storageSafe";
 import { toast } from "sonner";
 import { format, subDays, startOfWeek, endOfWeek, isWithinInterval, parseISO } from "date-fns";
 import { formatTimestampMs, parseApiDate } from "@/utils/safeDate";
@@ -165,9 +166,9 @@ export default function EmployeeDashboard() {
     // First-time hint per employee.
     if (!user?.empId) return;
     const key = `vtl_hint_employee_${user.empId}`;
-    if (localStorage.getItem(key) === "1") return;
+    if (safeGetItem(localStorage, key) === "1") return;
     setShowHowToUse(true);
-    localStorage.setItem(key, "1");
+    safeSetItem(localStorage, key, "1");
   }, [user?.empId]);
 
   const refreshSession = useCallback(async () => {
@@ -314,8 +315,8 @@ export default function EmployeeDashboard() {
     if (!hasOvertime || status === "idle") return;
     const dayKey = format(new Date(), "yyyy-MM-dd");
     const storageKey = `vtl_ot_notify_${user.empId}_${dayKey}`;
-    if (localStorage.getItem(storageKey) === "1") return;
-    localStorage.setItem(storageKey, "1");
+    if (safeGetItem(localStorage, storageKey) === "1") return;
+    safeSetItem(localStorage, storageKey, "1");
     void attendanceOvertimeNotifyRequest(accessToken).then(async (res) => {
       if (!res.ok) return;
       const body = (await res.json().catch(() => ({}))) as { notified?: boolean; overtime_hours?: number };
@@ -445,7 +446,7 @@ export default function EmployeeDashboard() {
       <div className="flex flex-wrap items-end justify-between gap-3">
         <div className="space-y-1.5 min-w-0">
           <h1 className="text-2xl sm:text-3xl font-bold tracking-tight" style={{ letterSpacing: "-0.5px" }}>
-            {greetingLine}, {user?.name.split(" ")[0]}
+            {greetingLine}, {userFirstName(user?.name)}
           </h1>
           <p className="text-sm text-muted-foreground">{format(new Date(), "EEEE, MMMM d, yyyy")}</p>
           <p className="text-xs text-muted-foreground/90 max-w-xl leading-relaxed border-l-2 border-primary/30 pl-3 italic">
