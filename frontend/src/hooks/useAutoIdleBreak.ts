@@ -1,12 +1,19 @@
 import { useEffect, useRef } from "react";
 import { toast } from "sonner";
 import { attendanceBreakEndRequest, attendanceBreakStartRequest } from "@/lib/api";
-import { IDLE_ACTIVITY_EVENT, IDLE_CLEAR_AUTO_FLAG_EVENT } from "@/utils/idleActivity";
+import {
+  IDLE_ACTIVITY_EVENT,
+  IDLE_CLEAR_AUTO_FLAG_EVENT,
+  REQUEST_SYSTEM_IDLE_EVENT,
+} from "@/utils/idleActivity";
 import { ensureNotificationPermission, showDesktopNotification } from "@/utils/desktopNotify";
 import {
   getIdleDetectorClass,
+  isWorkingInAnotherApp,
+  querySystemIdlePermission,
   requestSystemIdlePermission,
   supportsSystemIdleDetection,
+  type SystemIdleDetector,
 } from "@/utils/systemIdle";
 
 /** No keyboard/mouse activity anywhere on the PC → auto break after this duration. */
@@ -15,10 +22,11 @@ const IDLE_POLL_MS = 15_000;
 
 type AttendanceStatus = "idle" | "checked-in" | "on-break" | "checked-out";
 
+type IdleTrackingMode = "system" | "focus-safe" | "off";
+
 type UseAutoIdleBreakOptions = {
   accessToken: string | null;
   status: AttendanceStatus;
-  /** Sales: on a phone call — PC may be idle; do not start auto-break. */
   onCallMode: boolean;
   startBreak: (breakStartAt?: number) => void;
   endBreak: () => void;
@@ -35,16 +43,12 @@ export function useAutoIdleBreak({
   const autoIdleBreakActiveRef = useRef(false);
   const onCallModeRef = useRef(onCallMode);
   const statusRef = useRef(status);
-  const accessTokenRef = useRef(accessToken);
-  const systemIdleActiveRef = useRef(false);
+  const trackingModeRef = useRef<IdleTrackingMode>("off");
+  const systemDetectorRef = useRef<SystemIdleDetector | null>(null);
+  const systemAbortRef = useRef<AbortController | null>(null);
 
   onCallModeRef.current = onCallMode;
   statusRef.current = status;
-  accessTokenRef.current = accessToken;
-
-  const clearAutoIdleFlag = () => {
-    autoIdleBreakActiveRef.current = false;
-  };
 
   const bumpActivity = () => {
     lastActivityAtRef.current = Date.now();
@@ -64,19 +68,18 @@ export function useAutoIdleBreak({
       if (statusRef.current !== "checked-in") return;
       if (onCallModeRef.current) return;
       if (autoIdleBreakActiveRef.current) return;
+      if (trackingModeRef.current === "focus-safe" && isWorkingInAnotherApp()) return;
 
       const res = await attendanceBreakStartRequest(token);
       if (!res.ok) return;
       autoIdleBreakActiveRef.current = true;
       startBreak(Date.now());
       void ensureNotificationPermission(true);
-      showDesktopNotification(
-        "You are on break",
-        systemIdleActiveRef.current
+      const body =
+        trackingModeRef.current === "system"
           ? "No keyboard or mouse activity on your PC for 10 minutes. Break started automatically."
-          : "No activity detected for 10 minutes. Break started automatically.",
-        "vtl-attendance-idle-break",
-      );
+          : "No activity on the attendance tab for 10 minutes while it was in focus. Break started automatically.";
+      showDesktopNotification("You are on break", body, "vtl-attendance-idle-break");
       toast.info("You are on break — no PC activity for 10 minutes.", { duration: 8000 });
     };
 
@@ -103,72 +106,32 @@ export function useAutoIdleBreak({
       }
     };
 
+    const pauseIdleWhileAway = () => {
+      bumpActivity();
+    };
+
     const onGlobalActivity = () => markActive();
     const onClearAutoFlag = () => {
       autoIdleBreakActiveRef.current = false;
     };
-    window.addEventListener(IDLE_ACTIVITY_EVENT, onGlobalActivity);
-    window.addEventListener(IDLE_CLEAR_AUTO_FLAG_EVENT, onClearAutoFlag);
 
-    const tabEvents: (keyof WindowEventMap)[] = [
-      "mousemove",
-      "mousedown",
-      "keydown",
-      "wheel",
-      "touchstart",
-      "scroll",
-      "focus",
-    ];
-    tabEvents.forEach((ev) => window.addEventListener(ev, markActive, { passive: true }));
-
-    let tabHiddenAt: number | null = null;
-    const onVisibility = () => {
-      if (document.hidden) {
-        tabHiddenAt = Date.now();
-        return;
-      }
-      if (tabHiddenAt !== null) {
-        const hiddenMs = Date.now() - tabHiddenAt;
-        lastActivityAtRef.current += hiddenMs;
-        tabHiddenAt = null;
-      }
-      markActive();
-    };
-    document.addEventListener("visibilitychange", onVisibility);
-
-    const pollTabIdle = () => {
-      if (systemIdleActiveRef.current) return;
-      if (statusRef.current !== "checked-in") return;
-      if (onCallModeRef.current) return;
-      if (autoIdleBreakActiveRef.current) return;
-      if (document.hidden) return;
-
-      const idleMs = Date.now() - lastActivityAtRef.current;
-      if (idleMs >= AUTO_IDLE_BREAK_MS) {
-        void triggerAutoBreak();
-      }
+    const stopSystemDetector = () => {
+      systemAbortRef.current?.abort();
+      systemAbortRef.current = null;
+      systemDetectorRef.current = null;
     };
 
-    const pollInterval = window.setInterval(pollTabIdle, IDLE_POLL_MS);
-
-    const systemAbort = new AbortController();
-    let systemListener: (() => void) | null = null;
-
-    const startSystemIdle = async () => {
+    const attachSystemDetector = async (): Promise<boolean> => {
       const IdleDetector = getIdleDetectorClass();
       if (!IdleDetector || disposed) return false;
 
-      let permission: PermissionState = "prompt";
-      try {
-        permission = await IdleDetector.requestPermission();
-      } catch {
-        permission = "denied";
-      }
-      if (permission !== "granted" || disposed) return false;
+      const permission = await querySystemIdlePermission();
+      if (permission !== "granted") return false;
 
+      stopSystemDetector();
       try {
         const detector = new IdleDetector();
-        systemListener = () => {
+        const onChange = () => {
           if (onCallModeRef.current) {
             if (detector.userState === "active") bumpActivity();
             return;
@@ -177,51 +140,117 @@ export function useAutoIdleBreak({
             void triggerAutoBreak();
           } else if (detector.userState === "active") {
             bumpActivity();
-            if (autoIdleBreakActiveRef.current) {
-              void triggerAutoResume();
-            }
+            if (autoIdleBreakActiveRef.current) void triggerAutoResume();
           }
         };
-        detector.addEventListener("change", systemListener);
-        await detector.start({
-          threshold: AUTO_IDLE_BREAK_MS,
-          signal: systemAbort.signal,
-        });
-        systemIdleActiveRef.current = true;
+        detector.addEventListener("change", onChange);
+        const ac = new AbortController();
+        systemAbortRef.current = ac;
+        systemDetectorRef.current = detector;
+        await detector.start({ threshold: AUTO_IDLE_BREAK_MS, signal: ac.signal });
+        trackingModeRef.current = "system";
         return true;
       } catch {
-        systemIdleActiveRef.current = false;
+        stopSystemDetector();
         return false;
       }
     };
 
-    void startSystemIdle();
+    const tryActivateSystemIdle = async (fromUserGesture: boolean) => {
+      if (disposed || trackingModeRef.current === "system") return;
+
+      let permission = await querySystemIdlePermission();
+      if (permission === "prompt" && fromUserGesture) {
+        permission = await requestSystemIdlePermission();
+      }
+      if (permission !== "granted") {
+        trackingModeRef.current = supportsSystemIdleDetection() ? "focus-safe" : "focus-safe";
+        return;
+      }
+
+      const ok = await attachSystemDetector();
+      if (!ok) trackingModeRef.current = "focus-safe";
+    };
+
+    const onRequestSystemIdle = () => {
+      void tryActivateSystemIdle(true);
+    };
+
+    window.addEventListener(IDLE_ACTIVITY_EVENT, onGlobalActivity);
+    window.addEventListener(IDLE_CLEAR_AUTO_FLAG_EVENT, onClearAutoFlag);
+    window.addEventListener(REQUEST_SYSTEM_IDLE_EVENT, onRequestSystemIdle);
+
+    const tabEvents: (keyof WindowEventMap)[] = [
+      "mousemove",
+      "mousedown",
+      "keydown",
+      "wheel",
+      "touchstart",
+      "scroll",
+    ];
+    tabEvents.forEach((ev) => window.addEventListener(ev, markActive, { passive: true }));
+
+    window.addEventListener("focus", markActive);
+    window.addEventListener("blur", pauseIdleWhileAway);
+    document.addEventListener("visibilitychange", () => {
+      if (document.hidden) pauseIdleWhileAway();
+      else markActive();
+    });
+
+    /** Without OS permission we never auto-break (avoids false breaks while using VS Code / other apps). */
+    const pollFocusSafeIdle = () => {
+      if (trackingModeRef.current !== "focus-safe") return;
+      if (isWorkingInAnotherApp()) pauseIdleWhileAway();
+    };
+
+    const pollInterval = window.setInterval(pollFocusSafeIdle, IDLE_POLL_MS);
+
+    void (async () => {
+      const granted = await attachSystemDetector();
+      if (!granted && !disposed) {
+        trackingModeRef.current = "focus-safe";
+      }
+    })();
 
     return () => {
       disposed = true;
-      systemIdleActiveRef.current = false;
-      systemAbort.abort();
+      trackingModeRef.current = "off";
+      stopSystemDetector();
       window.removeEventListener(IDLE_ACTIVITY_EVENT, onGlobalActivity);
       window.removeEventListener(IDLE_CLEAR_AUTO_FLAG_EVENT, onClearAutoFlag);
+      window.removeEventListener(REQUEST_SYSTEM_IDLE_EVENT, onRequestSystemIdle);
       tabEvents.forEach((ev) => window.removeEventListener(ev, markActive));
-      document.removeEventListener("visibilitychange", onVisibility);
+      window.removeEventListener("focus", markActive);
+      window.removeEventListener("blur", pauseIdleWhileAway);
       window.clearInterval(pollInterval);
-      if (systemListener) {
-        /* detector is aborted via signal; listener removed with GC */
-      }
     };
   }, [accessToken, status, onCallMode, startBreak, endBreak]);
 
-  return { clearAutoIdleFlag, bumpActivity, autoIdleBreakActiveRef };
+  return { bumpActivity, autoIdleBreakActiveRef };
 }
 
-/** Call from UI (e.g. after check-in) to request OS-wide idle permission. */
 export async function ensureSystemIdlePermission(prompt = false): Promise<boolean> {
-  if (!supportsSystemIdleDetection()) return false;
-  const state = await requestSystemIdlePermission();
-  if (state === "granted") return true;
-  if (prompt && state === "denied") {
-    toast.error("Allow “idle detection” in the browser site settings for PC-wide auto-break.");
+  if (!supportsSystemIdleDetection()) {
+    if (prompt) {
+      toast.error(
+        "Use Chrome or Edge for PC-wide auto-break. Other browsers cannot detect activity in VS Code or other apps.",
+      );
+    }
+    return false;
+  }
+  let state = await querySystemIdlePermission();
+  if (state === "prompt") {
+    state = await requestSystemIdlePermission();
+  }
+  if (state === "granted") {
+    window.dispatchEvent(new CustomEvent(REQUEST_SYSTEM_IDLE_EVENT));
+    return true;
+  }
+  if (prompt) {
+    toast.error(
+      'Click "Allow" for idle detection so auto-break only runs when you are truly away from the PC (not while using VS Code or other apps).',
+      { duration: 12000 },
+    );
   }
   return false;
 }

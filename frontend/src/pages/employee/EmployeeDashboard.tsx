@@ -22,7 +22,12 @@ import { safeGetItem, safeSetItem } from "@/utils/storageSafe";
 import { toast } from "sonner";
 import { format, subDays, startOfWeek, endOfWeek, isWithinInterval, parseISO } from "date-fns";
 import { formatTimestampMs, parseApiDate } from "@/utils/safeDate";
-import { bumpGlobalIdleActivity, clearGlobalAutoIdleFlag } from "@/utils/idleActivity";
+import {
+  bumpGlobalIdleActivity,
+  clearGlobalAutoIdleFlag,
+  requestGlobalSystemIdleDetection,
+} from "@/utils/idleActivity";
+import { ensureSystemIdlePermission } from "@/hooks/useAutoIdleBreak";
 import {
   applyAttendanceSession,
   isOnCallFromSession,
@@ -748,6 +753,8 @@ export default function EmployeeDashboard() {
     const serverMs = data?.checkInAt ? new Date(data.checkInAt).getTime() : Date.now();
     setCheckInAt(serverMs);
     bumpGlobalIdleActivity();
+    requestGlobalSystemIdleDetection();
+    void ensureSystemIdlePermission(true);
     void ensureNotificationPermission(true);
   };
 

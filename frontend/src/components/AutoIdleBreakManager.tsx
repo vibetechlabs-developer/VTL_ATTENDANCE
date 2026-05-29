@@ -1,6 +1,8 @@
 import { useCallback, useEffect, useState } from "react";
 import { toast } from "sonner";
 import { useAutoIdleBreak, ensureSystemIdlePermission } from "@/hooks/useAutoIdleBreak";
+import { requestGlobalSystemIdleDetection } from "@/utils/idleActivity";
+import { querySystemIdlePermission } from "@/utils/systemIdle";
 import { attendanceSessionRequest } from "@/lib/api";
 import { useAttendanceStore } from "@/store/attendanceStore";
 import { useAuthStore } from "@/store/authStore";
@@ -60,18 +62,31 @@ export function AutoIdleBreakManager() {
   useEffect(() => {
     if (status !== "checked-in" || !user?.empId) return;
 
+    void querySystemIdlePermission().then((perm) => {
+      if (perm === "granted") requestGlobalSystemIdleDetection();
+    });
+
     const idleKey = `vtl_system_idle_hint_${user.empId}`;
     if (supportsSystemIdleDetection() && safeGetItem(localStorage, idleKey) !== "1") {
       safeSetItem(localStorage, idleKey, "1");
-      toast("Enable PC-wide idle detection for auto-break (works while you use other apps).", {
-        duration: 10000,
-        action: {
-          label: "Enable",
-          onClick: () => {
-            void ensureSystemIdlePermission(true);
+      toast(
+        "Allow PC activity tracking so auto-break does NOT run while you work in VS Code, other browsers, or any app.",
+        {
+          duration: 12000,
+          action: {
+            label: "Allow",
+            onClick: () => {
+              void ensureSystemIdlePermission(true);
+            },
           },
         },
-      });
+      );
+    } else if (!supportsSystemIdleDetection() && safeGetItem(localStorage, idleKey) !== "1") {
+      safeSetItem(localStorage, idleKey, "1");
+      toast.warning(
+        "Use Chrome or Edge for auto-break. Without it, false breaks are disabled while you work in other apps.",
+        { duration: 12000 },
+      );
     }
 
     if (!canUseDesktopNotifications() || Notification.permission !== "default") return;
