@@ -237,35 +237,24 @@ export const useDataStore = create<DataState>((set) => ({
     })),
   setEmployeesFromApi: (items) =>
     set(() => ({
-      employees: items.map((item) => ({
+      employees: items.map((item) => {
+        const mapRole = (r: string): Employee["role"] => {
+          if (r === "manager") return "manager";
+          if (r === "employee") return "employee";
+          if (r === "hr") return "hr";
+          if (r === "sales") return "sales";
+          return "admin";
+        };
+        const primary = mapRole(item.role);
+        const roles = (item.roles?.length ? item.roles : [item.role]).map(mapRole);
+        return {
         id: String(item.id),
         userId: item.userId ? String(item.userId) : undefined,
         name: item.name,
         email: item.email,
         empId: item.empId,
-        role:
-          item.role === "manager"
-            ? "manager"
-            : item.role === "employee"
-              ? "employee"
-              : item.role === "hr"
-                ? "hr"
-                : item.role === "sales"
-                  ? "sales"
-                  : "admin",
-        roles: item.roles?.length
-          ? item.roles
-          : [
-              item.role === "manager"
-                ? "manager"
-                : item.role === "employee"
-                  ? "employee"
-                  : item.role === "hr"
-                    ? "hr"
-                    : item.role === "sales"
-                      ? "sales"
-                      : "admin",
-            ],
+        role: primary,
+        roles: [...new Set(roles)],
         department: item.department || "General",
         managerUserId: item.managerUserId ? String(item.managerUserId) : undefined,
         managerEmployeeId: item.managerEmployeeId ? String(item.managerEmployeeId) : undefined,
@@ -282,6 +271,7 @@ export const useDataStore = create<DataState>((set) => ({
         status: item.status || "active",
         hasEmployeeProfile: item.hasEmployeeProfile ?? true,
         isWfh: Boolean(item.isWfh),
-      })),
+        };
+      }),
     })),
 }));

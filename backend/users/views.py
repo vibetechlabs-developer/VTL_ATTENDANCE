@@ -181,6 +181,7 @@ class EmployeesListView(APIView):
                 'email': user.email,
                 'empId': f'VTL-{str(employee.id if employee else user.id).zfill(3)}',
                 'role': user.role,
+                'roles': all_roles(user),
                 'department': employee.department if employee else ('Administration' if user.role == 'admin' else 'General'),
                 'managerUserId': str(employee.manager_id) if employee and employee.manager_id else None,
                 'managerEmployeeId': (
@@ -247,6 +248,7 @@ class EmployeesUpdateView(APIView):
                 status=status.HTTP_400_BAD_REQUEST
             )
         serializer.update(employee, serializer.validated_data)
+        employee.user.refresh_from_db(fields=['role', 'extra_roles', 'email'])
         row = EmployeeListSerializer(employee, context={'request': request}).data
         return Response({'employee': row})
 
