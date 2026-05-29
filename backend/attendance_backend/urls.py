@@ -3,6 +3,7 @@ from django.conf.urls.static import static
 import os
 from django.contrib import admin
 from django.urls import path, include
+from attendance.views import AdminAttendanceOverviewView
 
 urlpatterns = [
     path('admin/', admin.site.urls),
@@ -10,6 +11,9 @@ urlpatterns = [
     path('api/attendance/', include('attendance.urls')),
     path('api/leaves/', include('leaves.urls')),
     path('api/updates/', include('updates.urls')),
+    # Legacy / misconfigured production frontends may call these paths directly.
+    path('overview/', AdminAttendanceOverviewView.as_view(), name='attendance-overview-root-alias'),
+    path('api/overview/', AdminAttendanceOverviewView.as_view(), name='attendance-overview-api-root-alias'),
 ]
 
 # Serve uploaded media in local/dev environments.

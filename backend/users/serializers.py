@@ -2,6 +2,7 @@ from rest_framework import serializers
 from django.db import transaction
 from django.utils.crypto import get_random_string
 from .models import User, Employee
+from .role_utils import apply_roles_to_user, all_roles, normalize_roles
 
 
 def _manager_users_from_employee_ids(employee_ids):
@@ -80,6 +81,7 @@ class EmployeeSerializer(serializers.ModelSerializer):
 class EmployeeListSerializer(serializers.ModelSerializer):
     email = serializers.EmailField(source='user.email', read_only=True)
     role = serializers.CharField(source='user.role', read_only=True)
+    roles = serializers.SerializerMethodField()
     empId = serializers.SerializerMethodField()
     avatar = serializers.SerializerMethodField()
     faceStatus = serializers.SerializerMethodField()
@@ -96,6 +98,7 @@ class EmployeeListSerializer(serializers.ModelSerializer):
             'email',
             'empId',
             'role',
+            'roles',
             'department',
             'reportsTo',
             'joiningDate',
@@ -104,6 +107,9 @@ class EmployeeListSerializer(serializers.ModelSerializer):
             'status',
             'isWfh',
         ]
+
+    def get_roles(self, obj):
+        return all_roles(obj.user)
 
     def get_empId(self, obj):
         return f"VTL-{str(obj.pk).zfill(3)}"
@@ -127,7 +133,12 @@ class EmployeeListSerializer(serializers.ModelSerializer):
 class EmployeeCreateSerializer(serializers.Serializer):
     name = serializers.CharField(max_length=100)
     email = serializers.EmailField()
-    role = serializers.ChoiceField(choices=['admin', 'manager', 'employee', 'hr', 'sales'])
+    role = serializers.ChoiceField(choices=['admin', 'manager', 'employee', 'hr', 'sales'], required=False)
+    roles = serializers.ListField(
+        child=serializers.ChoiceField(choices=['admin', 'manager', 'employee', 'hr', 'sales']),
+        required=False,
+        allow_empty=False,
+    )
     department = serializers.CharField(max_length=100)
     phone = serializers.CharField(max_length=15, required=False, allow_blank=True, default='')
     password = serializers.CharField(required=False, allow_blank=True, write_only=True)
@@ -167,6 +178,17 @@ class EmployeeCreateSerializer(serializers.Serializer):
             raise serializers.ValidationError("Password must be at least 8 characters.")
         return pwd
 
+    def validate(self, attrs):
+        roles = attrs.get('roles') or []
+        if not roles and attrs.get('role'):
+            roles = [attrs['role']]
+        if not roles:
+            raise serializers.ValidationError({'roles': 'Select at least one role.'})
+        primary, extras = normalize_roles(roles)
+        attrs['roles'] = [primary, *extras]
+        attrs['role'] = primary
+        return attrs
+
     @transaction.atomic
     def create(self, validated_data):
         email = validated_data['email']
@@ -184,6 +206,7 @@ class EmployeeCreateSerializer(serializers.Serializer):
             email=email,
             password=temp_password,
             role=validated_data['role'],
+            extra_roles=[r for r in validated_data['roles'] if r != validated_data['role']],
         )
         employee = Employee.objects.create(
             user=user,
@@ -206,6 +229,11 @@ class EmployeeUpdateSerializer(serializers.Serializer):
     name = serializers.CharField(max_length=100, required=False)
     email = serializers.EmailField(required=False)
     role = serializers.ChoiceField(choices=['admin', 'manager', 'employee', 'hr', 'sales'], required=False)
+    roles = serializers.ListField(
+        child=serializers.ChoiceField(choices=['admin', 'manager', 'employee', 'hr', 'sales']),
+        required=False,
+        allow_empty=False,
+    )
     department = serializers.CharField(max_length=100, required=False)
     phone = serializers.CharField(max_length=15, required=False, allow_blank=True)
     password = serializers.CharField(required=False, allow_blank=True, write_only=True)
@@ -218,12 +246,27 @@ class EmployeeUpdateSerializer(serializers.Serializer):
     )
     is_wfh = serializers.BooleanField(required=False)
 
+    def validate(self, attrs):
+        if 'roles' in attrs or 'role' in attrs:
+            roles = attrs.get('roles') or []
+            if not roles and attrs.get('role'):
+                roles = [attrs['role']]
+            if not roles:
+                raise serializers.ValidationError({'roles': 'Select at least one role.'})
+            primary, extras = normalize_roles(roles)
+            attrs['roles'] = [primary, *extras]
+            attrs['role'] = primary
+        return attrs
+
     def update(self, instance, validated_data):
         user = instance.user
         if 'email' in validated_data:
             user.email = validated_data['email'].strip().lower()
-        if 'role' in validated_data:
+        if 'roles' in validated_data:
+            apply_roles_to_user(user, validated_data['roles'])
+        elif 'role' in validated_data:
             user.role = validated_data['role']
+            user.extra_roles = []
         if 'password' in validated_data:
             new_password = (validated_data.get('password') or '').strip()
             if new_password:

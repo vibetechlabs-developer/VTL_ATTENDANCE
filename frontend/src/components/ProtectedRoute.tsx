@@ -1,6 +1,6 @@
 import { useEffect, useState } from "react";
 import { Navigate, Outlet } from "react-router-dom";
-import { roleUsesEmployeePortal, useAuthStore, Role } from "@/store/authStore";
+import { defaultPortalPath, userHasRole, useAuthStore, Role } from "@/store/authStore";
 
 export function ProtectedRoute({ allow }: { allow?: Role[] }) {
   const user = useAuthStore((s) => s.user);
@@ -21,8 +21,8 @@ export function ProtectedRoute({ allow }: { allow?: Role[] }) {
   }
 
   if (!user || !accessToken) return <Navigate to="/login" replace />;
-  if (allow && !allow.includes(user.role)) {
-    return <Navigate to={roleUsesEmployeePortal(user.role) ? "/employee" : "/admin"} replace />;
+  if (allow && !userHasRole(user, ...allow)) {
+    return <Navigate to={defaultPortalPath(user)} replace />;
   }
   return <Outlet />;
 }

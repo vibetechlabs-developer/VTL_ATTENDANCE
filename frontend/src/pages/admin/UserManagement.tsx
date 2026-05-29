@@ -2,6 +2,7 @@ import { useEffect, useMemo, useRef, useState } from "react";
 import { useSearchParams } from "react-router-dom";
 import { Plus, Search, Download, Trash2, Camera, Pencil, Copy, Eye, EyeOff } from "lucide-react";
 import { ManagerMultiSelect } from "@/components/ManagerMultiSelect";
+import { RoleMultiSelect, employeeRoles, roleLabel } from "@/components/RoleMultiSelect";
 import { Card } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
@@ -26,7 +27,7 @@ import { usersCreateRequest, usersDeleteRequest, usersFaceDataRequest, usersList
 import { captureFaceDataUrl, drawFaceFrame, MIRROR_CAMERA_PREVIEW } from "@/utils/faceCapture";
 
 const emptyForm: Omit<Employee, "id"> = {
-  name: "", email: "", empId: "", role: "employee", department: "Tech",
+  name: "", email: "", empId: "", role: "employee", roles: ["employee"], department: "Tech",
   reportsTo: "—", managerEmployeeIds: [], joiningDate: new Date().toISOString().slice(0, 10),
   faceStatus: "pending", status: "active", isWfh: false,
 };
@@ -151,13 +152,13 @@ export default function UserManagement() {
 
   const reportToOptions = useMemo(() => {
     const options = employees
-      .filter((e) => e.role === "admin" || e.role === "manager")
+      .filter((e) => employeeRoles(e).some((r) => r === "admin" || r === "manager"))
       .map((e) => ({
         value: String(e.id),
         employeeId: Number(e.id),
         userId: e.userId ? Number(e.userId) : null,
         name: e.name,
-        label: `${e.name} (${e.role === "admin" ? "Super Admin" : "Manager"})`,
+        label: `${e.name} (${employeeRoles(e).includes("admin") ? "Super Admin" : "Manager"})`,
       }));
 
     return options;
@@ -210,10 +211,11 @@ export default function UserManagement() {
     }
     const managerEmployeeIds = toManagerEmployeeIds(form.managerEmployeeIds);
     try {
+      const roles = form.roles?.length ? form.roles : [form.role];
       const res = await usersCreateRequest(accessToken, {
         name,
         email,
-        role: form.role,
+        roles,
         department,
         manager_employee_ids: managerEmployeeIds,
         password: password || undefined,
@@ -289,10 +291,13 @@ export default function UserManagement() {
     setSavingEdit(true);
     const managerEmployeeIds = toManagerEmployeeIds(selectedEmployee.managerEmployeeIds);
     try {
+      const roles = selectedEmployee.roles?.length
+        ? selectedEmployee.roles
+        : [selectedEmployee.role];
       const res = await usersUpdateRequest(accessToken, selectedEmployee.id, {
         name: selectedEmployee.name,
         email: selectedEmployee.email,
-        role: selectedEmployee.role,
+        roles,
         department: selectedEmployee.department,
         manager_employee_ids: managerEmployeeIds,
         password: editPassword.trim() || undefined,
@@ -435,18 +440,12 @@ export default function UserManagement() {
                   <Input type="email" value={form.email} onChange={(e) => setForm({ ...form, email: e.target.value })} />
                 </div>
                 <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
-                  <div className="space-y-1.5">
-                    <Label>Role</Label>
-                    <Select value={form.role} onValueChange={(v: Role) => setForm({ ...form, role: v })}>
-                      <SelectTrigger><SelectValue /></SelectTrigger>
-                      <SelectContent>
-                        <SelectItem value="admin">Admin</SelectItem>
-                        <SelectItem value="hr">HR</SelectItem>
-                        <SelectItem value="manager">Manager</SelectItem>
-                        <SelectItem value="sales">Sales</SelectItem>
-                        <SelectItem value="employee">Employee</SelectItem>
-                      </SelectContent>
-                    </Select>
+                  <div className="space-y-1.5 sm:col-span-2">
+                    <Label>Roles</Label>
+                    <RoleMultiSelect
+                      value={form.roles ?? [form.role]}
+                      onChange={(roles) => setForm({ ...form, roles, role: roles[0] })}
+                    />
                   </div>
                   <div className="space-y-1.5">
                     <Label>Department</Label>
@@ -573,20 +572,25 @@ export default function UserManagement() {
                         <p className="text-[11px] text-muted-foreground font-mono mt-0.5">{e.empId}</p>
                       </div>
                     </div>
-                    <StatusPill
-                      label={e.role}
-                      variant={
-                        e.role === "admin"
-                          ? "info"
-                          : e.role === "manager"
-                            ? "warning"
-                            : e.role === "hr"
-                              ? "success"
-                              : e.role === "sales"
+                    <div className="flex flex-wrap gap-1 justify-end">
+                      {employeeRoles(e).map((r) => (
+                        <StatusPill
+                          key={r}
+                          label={roleLabel(r)}
+                          variant={
+                            r === "admin"
+                              ? "info"
+                              : r === "manager"
                                 ? "warning"
-                                : "muted"
-                      }
-                    />
+                                : r === "hr"
+                                  ? "success"
+                                  : r === "sales"
+                                    ? "warning"
+                                    : "muted"
+                          }
+                        />
+                      ))}
+                    </div>
                   </div>
 
                   <div className="grid grid-cols-2 gap-2 mt-3 text-xs">
@@ -685,20 +689,25 @@ export default function UserManagement() {
                     </TableCell>
                     <TableCell className="font-mono text-xs">{e.empId}</TableCell>
                     <TableCell>
-                      <StatusPill
-                        label={e.role}
-                        variant={
-                        e.role === "admin"
-                          ? "info"
-                          : e.role === "manager"
-                            ? "warning"
-                            : e.role === "hr"
-                              ? "success"
-                              : e.role === "sales"
-                                ? "warning"
-                                : "muted"
-                      }
-                      />
+                      <div className="flex flex-wrap gap-1">
+                        {employeeRoles(e).map((r) => (
+                          <StatusPill
+                            key={r}
+                            label={roleLabel(r)}
+                            variant={
+                              r === "admin"
+                                ? "info"
+                                : r === "manager"
+                                  ? "warning"
+                                  : r === "hr"
+                                    ? "success"
+                                    : r === "sales"
+                                      ? "warning"
+                                      : "muted"
+                            }
+                          />
+                        ))}
+                      </div>
                     </TableCell>
                     <TableCell className="text-sm">{e.department}</TableCell>
                     <TableCell className="text-sm text-muted-foreground">{e.reportsTo}</TableCell>
@@ -772,18 +781,14 @@ export default function UserManagement() {
                 <Input type="email" value={selectedEmployee.email} onChange={(e) => setSelectedEmployee({ ...selectedEmployee, email: e.target.value })} />
               </div>
               <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
-                <div className="space-y-1.5">
-                  <Label>Role</Label>
-                  <Select value={selectedEmployee.role} onValueChange={(v: Role) => setSelectedEmployee({ ...selectedEmployee, role: v })}>
-                    <SelectTrigger><SelectValue /></SelectTrigger>
-                    <SelectContent>
-                      <SelectItem value="admin">Admin</SelectItem>
-                      <SelectItem value="hr">HR</SelectItem>
-                      <SelectItem value="manager">Manager</SelectItem>
-                      <SelectItem value="sales">Sales</SelectItem>
-                      <SelectItem value="employee">Employee</SelectItem>
-                    </SelectContent>
-                  </Select>
+                <div className="space-y-1.5 sm:col-span-2">
+                  <Label>Roles</Label>
+                  <RoleMultiSelect
+                    value={selectedEmployee.roles ?? [selectedEmployee.role]}
+                    onChange={(roles) =>
+                      setSelectedEmployee({ ...selectedEmployee, roles, role: roles[0] })
+                    }
+                  />
                 </div>
                 <div className="space-y-1.5">
                   <Label>Department</Label>

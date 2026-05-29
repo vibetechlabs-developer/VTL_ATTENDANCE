@@ -9,6 +9,26 @@ export function roleUsesEmployeePortal(role: Role): boolean {
   return role === "employee" || role === "hr" || role === "manager" || role === "sales";
 }
 
+export function userRoles(user: AuthUser | null): Role[] {
+  if (!user) return [];
+  if (user.roles?.length) return user.roles;
+  return user.role ? [user.role] : [];
+}
+
+export function userHasRole(user: AuthUser | null, ...roles: Role[]): boolean {
+  const list = userRoles(user);
+  return roles.some((r) => list.includes(r));
+}
+
+export function defaultPortalPath(user: AuthUser): string {
+  if (userHasRole(user, "admin", "manager")) return "/admin";
+  return "/employee";
+}
+
+export function roleUsesEmployeePortalForUser(user: AuthUser): boolean {
+  return defaultPortalPath(user) === "/employee";
+}
+
 export interface UserPreferences {
   theme: "light" | "dark" | "system";
   emailNotifications: boolean;
@@ -24,6 +44,7 @@ export interface AuthUser {
   email: string;
   empId: string;
   role: Role;
+  roles?: Role[];
   department: string;
   phone: string;
   bio: string;
@@ -44,6 +65,7 @@ export interface MeProfilePayload {
   id: string;
   email: string;
   role: string;
+  roles?: string[];
   name: string;
   department?: string;
   phone?: string;
@@ -54,13 +76,22 @@ export interface MeProfilePayload {
   isWfh?: boolean;
 }
 
+function mapBackendRoles(roles?: string[], fallbackRole?: string): Role[] {
+  const raw = roles?.length ? roles : fallbackRole ? [fallbackRole] : ["employee"];
+  const mapped = raw.map((r) => mapBackendRole(r));
+  return [...new Set(mapped)];
+}
+
 export function profileToAuthUser(body: MeProfilePayload): AuthUser {
+  const roles = mapBackendRoles(body.roles, body.role);
+  const primary = mapBackendRole(body.role);
   return {
     id: body.id,
     name: body.name,
     email: body.email,
     empId: body.empId ?? `VTL-${body.id}`,
-    role: mapBackendRole(body.role),
+    role: roles.includes(primary) ? primary : roles[0],
+    roles,
     department: body.department ?? "",
     phone: body.phone ?? "",
     bio: body.bio ?? "",

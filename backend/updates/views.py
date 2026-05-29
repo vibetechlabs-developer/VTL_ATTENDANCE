@@ -87,7 +87,9 @@ class DailyUpdateView(APIView):
         if report_data is not None and not isinstance(report_data, dict):
             return Response({'error': 'report_data must be an object.'}, status=400)
 
-        if request.user.role == 'sales':
+        from users.role_utils import user_has_role
+
+        if user_has_role(request.user, 'sales'):
             if not isinstance(report_data, dict):
                 return Response({'error': 'Sales daily report is compulsory before check-out.'}, status=400)
 

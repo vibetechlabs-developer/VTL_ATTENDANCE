@@ -32,6 +32,18 @@ class LeaveApplyView(APIView):
             delta = data['end_date'] - data['start_date']
             days = Decimal(delta.days + 1)
 
+        overlapping_leaves = LeaveRequest.objects.filter(
+            employee=employee,
+            status__in=['pending', 'approved'],
+            start_date__lte=data['end_date'],
+            end_date__gte=data['start_date'],
+        )
+        if overlapping_leaves.exists():
+            return Response(
+                {'error': 'You already have a pending or approved leave request for this period.'},
+                status=400,
+            )
+
         # Balance check karo
         balance = LeaveBalance.objects.get(employee=employee)
         leave_type = data['leave_type']

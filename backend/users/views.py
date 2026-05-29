@@ -10,6 +10,9 @@ from django.utils import timezone
 from django.core.files.base import ContentFile
 import base64
 import uuid
+import threading
+
+from .role_utils import all_roles
 from .serializers import (
     LoginSerializer,
     EmployeeListSerializer,
@@ -80,10 +83,12 @@ class LoginView(APIView):
         user.last_login = timezone.now()
         user.save(update_fields=['last_login'])
 
+        roles = all_roles(user)
         return Response({
             'access': str(refresh.access_token),
             'refresh': str(refresh),
             'role': user.role,
+            'roles': roles,
             'email': user.email,
             'name': name,
             'notice': login_notice,
@@ -134,6 +139,7 @@ class MeView(APIView):
             'id': str(user.pk),
             'email': user.email,
             'role': user.role,
+            'roles': all_roles(user),
             'name': name,
             'department': emp.department if emp else '',
             'phone': (emp.phone or '') if emp else '',
@@ -640,9 +646,13 @@ class PushLunchReminderView(APIView):
             '{"title":"%s","body":"%s","type":"%s","icon":"/vtl-logo.svg","url":"/employee"}'
             % (title.replace('"', '\\"'), body.replace('"', '\\"'), ntype)
         )
-        subscriptions = PushSubscription.objects.select_related('user').all()
-        sent = send_push_message(subscriptions, payload)
-        return Response({'message': 'Push sent.', 'sent': sent, 'phase': phase})
+        subscriptions = list(PushSubscription.objects.select_related('user').all())
+
+        def _send_push():
+            send_push_message(subscriptions, payload)
+
+        threading.Thread(target=_send_push, daemon=True).start()
+        return Response({'message': 'Push queued.', 'phase': phase})
 
 
 class MyNotificationsView(APIView):

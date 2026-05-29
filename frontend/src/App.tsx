@@ -16,7 +16,7 @@ import Preferences from "./pages/Preferences";
 
 import DashboardLayout from "./layouts/DashboardLayout";
 import { ProtectedRoute } from "./components/ProtectedRoute";
-import { useAuthStore } from "./store/authStore";
+import { useAuthStore, userHasRole } from "./store/authStore";
 
 // Admin pages
 import AdminDashboard from "./pages/admin/Dashboard";
@@ -40,7 +40,9 @@ const queryClient = new QueryClient();
 
 const RoleBasedAdminDashboard = () => {
   const { user } = useAuthStore();
-  return user?.role === "manager" ? <ManagerDashboard /> : <AdminDashboard />;
+  return user && userHasRole(user, "manager") && !userHasRole(user, "admin")
+    ? <ManagerDashboard />
+    : <AdminDashboard />;
 };
 
 const App = () => {

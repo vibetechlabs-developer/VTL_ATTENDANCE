@@ -234,8 +234,7 @@ export function AppHeader() {
       return;
     }
     const q = encodeURIComponent(term);
-    const role = user?.role;
-    if (role === "admin") {
+    if (user && (user.roles?.includes("admin") || user.role === "admin")) {
       navigate(`/admin/users?q=${q}`);
       return;
     }

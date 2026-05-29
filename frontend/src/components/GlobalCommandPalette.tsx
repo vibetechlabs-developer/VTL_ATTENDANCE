@@ -9,7 +9,7 @@ import {
   CommandList,
   CommandSeparator,
 } from "@/components/ui/command";
-import { useAuthStore } from "@/store/authStore";
+import { useAuthStore, userHasRole } from "@/store/authStore";
 import { usersListRequest } from "@/lib/api";
 import {
   LayoutDashboard,
@@ -32,7 +32,7 @@ export function GlobalCommandPalette() {
   const [open, setOpen] = useState(false);
   const navigate = useNavigate();
   const accessToken = useAuthStore((s) => s.accessToken);
-  const role = useAuthStore((s) => s.user?.role);
+  const user = useAuthStore((s) => s.user);
   const [employees, setEmployees] = useState<EmpRow[]>([]);
 
   useEffect(() => {
@@ -48,7 +48,7 @@ export function GlobalCommandPalette() {
 
   useEffect(() => {
     if (!open || !accessToken) return;
-    if (role !== "admin" && role !== "hr" && role !== "manager") return;
+    if (!userHasRole(user, "admin", "hr", "manager")) return;
     let cancelled = false;
     void usersListRequest(accessToken).then(async (res) => {
       if (!res.ok || cancelled) return;
@@ -65,7 +65,7 @@ export function GlobalCommandPalette() {
     return () => {
       cancelled = true;
     };
-  }, [open, accessToken, role]);
+  }, [open, accessToken, user]);
 
   const go = useCallback(
     (path: string) => {
@@ -75,10 +75,10 @@ export function GlobalCommandPalette() {
     [navigate]
   );
 
-  const isAdmin = role === "admin";
-  const isHR = role === "hr";
-  const isManager = role === "manager";
-  const isSales = role === "sales";
+  const isAdmin = userHasRole(user, "admin");
+  const isHR = userHasRole(user, "hr");
+  const isManager = userHasRole(user, "manager");
+  const isSales = userHasRole(user, "sales");
 
   return (
     <CommandDialog open={open} onOpenChange={setOpen}>

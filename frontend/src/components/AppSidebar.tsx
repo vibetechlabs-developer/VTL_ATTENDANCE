@@ -9,7 +9,7 @@ import {
   SidebarMenu, SidebarMenuButton, SidebarMenuItem, SidebarHeader, SidebarFooter, useSidebar,
 } from "@/components/ui/sidebar";
 import { Logo } from "@/components/Logo";
-import { useAuthStore } from "@/store/authStore";
+import { useAuthStore, userHasRole } from "@/store/authStore";
 import { cn } from "@/lib/utils";
 
 /** External Enterprise CRM. */
@@ -121,18 +121,17 @@ export function AppSidebar() {
     navigate("/login", { replace: true });
   };
 
-  const role = user?.role;
   let nav: SidebarNavSection[];
-  if (role === "employee") {
-    nav = employeeNav;
-  } else if (role === "sales") {
-    nav = appendCrmNav(employeeNav);
-  } else if (role === "manager") {
-    nav = managerNav;
-  } else if (role === "hr") {
-    nav = appendCrmNav(hrNav);
-  } else {
+  if (userHasRole(user, "admin")) {
     nav = appendCrmNav(adminNav);
+  } else if (userHasRole(user, "manager")) {
+    nav = managerNav;
+  } else if (userHasRole(user, "hr")) {
+    nav = appendCrmNav(hrNav);
+  } else if (userHasRole(user, "sales")) {
+    nav = appendCrmNav(employeeNav);
+  } else {
+    nav = employeeNav;
   }
 
   const isActive = (url: string, end?: boolean) =>

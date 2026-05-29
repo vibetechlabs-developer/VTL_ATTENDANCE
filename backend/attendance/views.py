@@ -759,6 +759,12 @@ class AdminEmployeeAttendanceHistoryView(APIView):
                 day_status = 'Late' if log.check_in > late_cutoff else 'Present'
 
             call_minutes, call_count, active_call_start = _call_stats_for_log(log)
+            call_sessions = []
+            for c in CallLog.objects.filter(attendance=log).order_by("call_start"):
+                call_sessions.append({
+                    "start": c.call_start.isoformat(),
+                    "end": c.call_end.isoformat() if c.call_end else None,
+                })
             rows.append({
                 'id': str(log.id),
                 'date': log.date.isoformat(),
@@ -773,6 +779,7 @@ class AdminEmployeeAttendanceHistoryView(APIView):
                 'callMinutes': call_minutes,
                 'callCount': call_count,
                 'onCallNow': active_call_start is not None,
+                'callSessions': call_sessions,
                 'hours': float(log.total_hours or 0),
                 'overtimeHours': float(log.overtime_hours or 0),
                 'checkoutMode': log.checkout_mode,
@@ -880,7 +887,9 @@ class CallStartView(APIView):
     permission_classes = [IsAuthenticated]
 
     def post(self, request):
-        if request.user.role != "sales":
+        from users.role_utils import user_has_role
+
+        if not user_has_role(request.user, "sales"):
             return Response({"error": "On-call mode is only for sales team."}, status=403)
 
         today = timezone.now().date()
@@ -915,7 +924,9 @@ class CallEndView(APIView):
     permission_classes = [IsAuthenticated]
 
     def post(self, request):
-        if request.user.role != "sales":
+        from users.role_utils import user_has_role
+
+        if not user_has_role(request.user, "sales"):
             return Response({"error": "On-call mode is only for sales team."}, status=403)
 
         today = timezone.now().date()

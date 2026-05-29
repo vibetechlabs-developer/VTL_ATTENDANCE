@@ -8,7 +8,7 @@ import {
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
-import { useAuthStore, Role, profileToAuthUser, roleUsesEmployeePortal, type MeProfilePayload } from "@/store/authStore";
+import { useAuthStore, Role, profileToAuthUser, defaultPortalPath, type MeProfilePayload } from "@/store/authStore";
 import { loginRequest, meRequest } from "@/lib/api";
 import { toast } from "sonner";
 import { cn } from "@/lib/utils";
@@ -183,7 +183,7 @@ export default function Login() {
       if (data.notice) {
         toast.warning(data.notice);
       }
-      setRedirectTo(roleUsesEmployeePortal(authUser.role) ? "/employee" : "/admin");
+      setRedirectTo(defaultPortalPath(authUser));
       setStep("face");
       runFaceScan();
     } finally {
@@ -244,7 +244,7 @@ export default function Login() {
   }
 
   if (user) {
-    return <Navigate to={roleUsesEmployeePortal(user.role) ? "/employee" : "/admin"} replace />;
+    return <Navigate to={defaultPortalPath(user)} replace />;
   }
 
   return (

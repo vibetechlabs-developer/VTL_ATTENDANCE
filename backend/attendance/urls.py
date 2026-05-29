@@ -21,6 +21,7 @@ urlpatterns = [
     path('history/', MyAttendanceHistoryView.as_view(), name='attendance-history'),
     path('admin/', AdminAttendanceView.as_view(), name='attendance-admin'),
     path('admin/overview/', AdminAttendanceOverviewView.as_view(), name='attendance-admin-overview'),
+    path('overview/', AdminAttendanceOverviewView.as_view(), name='attendance-overview-short'),
     path('admin/force-checkout/', AdminForceCheckOutView.as_view(), name='attendance-admin-force-checkout'),
     path('admin/history/', AdminEmployeeAttendanceHistoryView.as_view(), name='attendance-admin-history'),
     path('break/start/', BreakStartView.as_view(), name='break-start'),

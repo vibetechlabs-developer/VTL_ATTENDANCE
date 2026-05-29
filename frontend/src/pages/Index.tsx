@@ -1,5 +1,5 @@
 import { Navigate } from "react-router-dom";
-import { roleUsesEmployeePortal, useAuthStore } from "@/store/authStore";
+import { defaultPortalPath, useAuthStore } from "@/store/authStore";
 import { useAuthHydrated } from "@/hooks/useAuthHydrated";
 
 export default function Index() {
@@ -15,5 +15,5 @@ export default function Index() {
   }
 
   if (!user) return <Navigate to="/login" replace />;
-  return <Navigate to={roleUsesEmployeePortal(user.role) ? "/employee" : "/admin"} replace />;
+  return <Navigate to={defaultPortalPath(user)} replace />;
 }

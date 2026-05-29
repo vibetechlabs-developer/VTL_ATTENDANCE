@@ -10,6 +10,7 @@ export interface Employee {
   email: string;
   empId: string;
   role: "admin" | "manager" | "employee" | "hr" | "sales";
+  roles?: ("admin" | "manager" | "employee" | "hr" | "sales")[];
   department: string;
   managerUserId?: string;
   reportsTo: string;
@@ -252,6 +253,19 @@ export const useDataStore = create<DataState>((set) => ({
                 : item.role === "sales"
                   ? "sales"
                   : "admin",
+        roles: item.roles?.length
+          ? item.roles
+          : [
+              item.role === "manager"
+                ? "manager"
+                : item.role === "employee"
+                  ? "employee"
+                  : item.role === "hr"
+                    ? "hr"
+                    : item.role === "sales"
+                      ? "sales"
+                      : "admin",
+            ],
         department: item.department || "General",
         managerUserId: item.managerUserId ? String(item.managerUserId) : undefined,
         managerEmployeeId: item.managerEmployeeId ? String(item.managerEmployeeId) : undefined,

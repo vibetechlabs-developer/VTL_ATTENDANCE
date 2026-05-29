@@ -300,7 +300,28 @@ export default function AttendanceManagement() {
 
         <button
           type="button"
-          onClick={() => exportCsv("team_attendance.csv", rows)}
+          onClick={() =>
+            exportCsv(
+              "team_attendance.csv",
+              rows.map((r) => ({
+                name: r.name,
+                empId: r.empId,
+                department: r.department,
+                role: r.role,
+                status: r.status,
+                checkIn: r.checkIn,
+                checkOut: r.checkOut,
+                hours: r.hours,
+                overtimeHours: r.overtimeHours ?? 0,
+                breakMinutes: r.breakMinutes ?? 0,
+                breakCount: r.breakCount ?? 0,
+                callMinutes: r.callMinutes ?? 0,
+                callCount: r.callCount ?? 0,
+                checkoutMode: r.checkoutMode ?? "office",
+                checkoutNote: r.checkoutNote ?? "",
+              })),
+            )
+          }
           className="flex items-center gap-2 text-sm font-medium hover:text-primary transition-colors shrink-0 touch-manipulation"
         >
           <Download className="h-4 w-4" /> <span className="hidden sm:inline">Export CSV</span><span className="sm:hidden">Export</span>
@@ -345,6 +366,14 @@ export default function AttendanceManagement() {
                     <p className="font-semibold truncate">{r.name}</p>
                     <p className="text-xs text-muted-foreground font-mono break-all">{r.empId} · {r.department}</p>
                     <p className="text-xs text-muted-foreground capitalize mt-0.5">{role}</p>
+                    {r.checkoutMode === "outside_client" && (
+                      <p
+                        className="mt-1 inline-flex max-w-full items-center rounded-full bg-blue-500/10 px-2 py-0.5 text-[11px] font-semibold text-blue-600 dark:text-blue-300 border border-blue-500/20"
+                        title={r.checkoutNote ? String(r.checkoutNote) : "Outside client meeting checkout"}
+                      >
+                        Outside meeting{r.checkoutNote ? " · note added" : ""}
+                      </p>
+                    )}
                   </div>
                   <div className={`inline-flex items-center gap-1.5 px-2 py-0.5 rounded text-xs font-semibold shrink-0 ${statusClass}`}>
                     {isPresent ? <UserCheck className="h-3 w-3" /> : r.status === "On Leave" ? <Plane className="h-3 w-3" /> : <UserX className="h-3 w-3" />}
@@ -475,6 +504,14 @@ export default function AttendanceManagement() {
                       {r.status === "Present" || r.status === "Late" ? <UserCheck className="h-3 w-3" /> : <UserX className="h-3 w-3" />}
                       {r.status}
                     </div>
+                    {r.checkoutMode === "outside_client" && (
+                      <div
+                        className="mt-1 inline-flex items-center rounded-full bg-blue-500/10 px-2 py-0.5 text-[10px] font-bold text-blue-600 dark:text-blue-300 border border-blue-500/20"
+                        title={r.checkoutNote ? String(r.checkoutNote) : "Outside client meeting checkout"}
+                      >
+                        Outside meeting
+                      </div>
+                    )}
                   </td>
                   <td className="py-3 px-6 font-medium text-sm">{formatApiDate(r.checkIn, "h:mm a")}</td>
                   <td className="py-3 px-6">
@@ -499,6 +536,11 @@ export default function AttendanceManagement() {
                   </td>
                   <td className="py-3 px-6">
                     <span className="text-sm font-medium">{formatApiDate(r.checkOut, "h:mm a")}</span>
+                    {r.checkoutMode === "outside_client" && r.checkoutNote ? (
+                      <p className="mt-0.5 text-[11px] text-muted-foreground line-clamp-1" title={String(r.checkoutNote)}>
+                        Note: {String(r.checkoutNote)}
+                      </p>
+                    ) : null}
                   </td>
                   <td className="py-3 px-6 text-sm font-medium">
                     {r.hours > 0 ? `${Math.floor(r.hours)}h ${Math.round((r.hours * 60) % 60)}m` : "—"}
@@ -535,6 +577,15 @@ export default function AttendanceManagement() {
 }
 
 function HistoryTable({ loading, rows }: { loading: boolean; rows: any[] }) {
+  const callSessionsLabel = (r: any): string | null => {
+    const sessions = Array.isArray(r.callSessions) ? r.callSessions : [];
+    if (!sessions.length) return null;
+    const parts = sessions
+      .slice(0, 3)
+      .map((s: any) => `${formatApiDate(s?.start, "h:mm a")}–${formatApiDate(s?.end, "h:mm a")}`);
+    return parts.join(", ") + (sessions.length > 3 ? ` (+${sessions.length - 3} more)` : "");
+  };
+
   return (
     <div className="w-full min-w-0 rounded-2xl border border-border/40 overflow-hidden">
       <div className="max-h-[52vh] overflow-y-auto touch-scroll-x">
@@ -588,9 +639,17 @@ function HistoryTable({ loading, rows }: { loading: boolean; rows: any[] }) {
                 </td>
                 <td className="py-3 px-4 tabular-nums text-xs">
                   {r.role === "sales" ? (
-                    <span className={cn(r.onCallNow && "font-semibold text-amber-700 dark:text-amber-300")}>
-                      {salesCallTimeLabel(r)}
-                    </span>
+                    <div
+                      className={cn("space-y-0.5", r.onCallNow && "text-amber-700 dark:text-amber-300")}
+                      title={callSessionsLabel(r) ?? undefined}
+                    >
+                      <div className={cn(r.onCallNow && "font-semibold")}>{salesCallTimeLabel(r)}</div>
+                      {callSessionsLabel(r) ? (
+                        <div className="text-[10px] text-muted-foreground line-clamp-1">
+                          {callSessionsLabel(r)}
+                        </div>
+                      ) : null}
+                    </div>
                   ) : (
                     "—"
                   )}

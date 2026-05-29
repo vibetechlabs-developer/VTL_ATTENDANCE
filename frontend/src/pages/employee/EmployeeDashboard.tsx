@@ -15,7 +15,7 @@ import {
 import { Link } from "react-router-dom";
 import { useAttendanceStore } from "@/store/attendanceStore";
 import { CheckInModal } from "@/components/CheckInModal";
-import { useAuthStore } from "@/store/authStore";
+import { useAuthStore, userHasRole } from "@/store/authStore";
 import { useDataStore } from "@/store/dataStore";
 import { cn, userFirstName } from "@/lib/utils";
 import { safeGetItem, safeSetItem } from "@/utils/storageSafe";
@@ -900,7 +900,7 @@ export default function EmployeeDashboard() {
   };
 
   const confirmCheckout = async () => {
-    const isSales = user?.role === "sales";
+    const isSales = userHasRole(user, "sales");
     const validationErrors = collectCheckoutErrors(workNote, salesReport, earlyReason, isSales, isEarly);
     if (validationErrors.length > 0) {
       setCheckoutErrors(validationErrors);
@@ -1201,7 +1201,7 @@ export default function EmployeeDashboard() {
                           </>
                         )}
                       </Button>
-                      {user?.role === "sales" && status === "checked-in" && (
+                      {userHasRole(user, "sales") && status === "checked-in" && (
                         <Button
                           size="lg"
                           type="button"
@@ -1541,7 +1541,7 @@ export default function EmployeeDashboard() {
               ) : null}
             </div>
 
-            {user?.role === "sales" && (
+            {userHasRole(user, "sales") && (
               <div className="min-w-0 space-y-3 rounded-2xl border border-border/80 bg-muted/20 p-3 sm:p-4">
                 <p className="text-xs font-semibold text-foreground">
                   Sales/BDE compulsory daily report (all fields required)
@@ -1629,7 +1629,7 @@ export default function EmployeeDashboard() {
               </div>
             )}
 
-            {user?.role === "sales" && (
+            {userHasRole(user, "sales") && (
               <div className="min-w-0 space-y-3 rounded-2xl border border-border/80 bg-muted/20 p-3 sm:p-4">
                 <p className="text-xs font-semibold text-foreground">LinkedIn report</p>
 
@@ -1722,7 +1722,7 @@ export default function EmployeeDashboard() {
               </div>
             )}
 
-            {user?.role === "sales" && (
+            {userHasRole(user, "sales") && (
               <div className="min-w-0 space-y-3 rounded-2xl border border-border/80 bg-muted/20 p-3 sm:p-4">
                 <p className="text-xs font-semibold text-foreground">Newspaper task</p>
 
@@ -1776,7 +1776,7 @@ export default function EmployeeDashboard() {
               </div>
             )}
 
-            {user?.role === "sales" && (
+            {userHasRole(user, "sales") && (
               <div
                 className={cn(
                   "min-w-0 space-y-2 rounded-2xl border border-border/80 bg-muted/20 p-3 sm:p-4",

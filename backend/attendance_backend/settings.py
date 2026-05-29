@@ -23,7 +23,11 @@ BASE_DIR = Path(__file__).resolve().parent.parent
 # See https://docs.djangoproject.com/en/6.0/howto/deployment/checklist/
 
 # SECURITY WARNING: keep the secret key used in production secret!
-SECRET_KEY = 'django-insecure-rlv)j$g+ic#&43$4c7jy$)ax!p&n=e*%jnn2xqlrr2-ldigxwl'
+# Use env in production; fall back to a dev-only key for local.
+SECRET_KEY = os.getenv(
+    "SECRET_KEY",
+    "django-insecure-dev-only-change-me",
+)
 
 # SECURITY WARNING: don't run with debug turned on in production!
 DEBUG = (os.getenv("DEBUG", "false").strip().lower() in ["1", "true", "yes", "y"])
@@ -99,14 +103,19 @@ if 'test' in sys.argv:
         }
     }
 else:
+    _db_name = os.getenv("DB_NAME", "attendance_db")
+    _db_user = os.getenv("DB_USER", "attendance_user")
+    _db_password = os.getenv("DB_PASSWORD", "Attendance@123")
+    _db_host = os.getenv("DB_HOST", "localhost")
+    _db_port = os.getenv("DB_PORT", "5432")
     DATABASES = {
         'default': {
             'ENGINE': 'django.db.backends.postgresql',
-            'NAME': 'attendance_db',
-            'USER': 'attendance_user',   
-            'PASSWORD': 'Attendance@123', 
-            'HOST': 'localhost',
-            'PORT': '5432',
+            'NAME': _db_name,
+            'USER': _db_user,
+            'PASSWORD': _db_password,
+            'HOST': _db_host,
+            'PORT': _db_port,
         }
     }
 

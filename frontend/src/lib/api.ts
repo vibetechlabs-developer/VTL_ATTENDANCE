@@ -80,6 +80,7 @@ export interface ApiEmployee {
   email: string;
   empId: string;
   role: "admin" | "manager" | "employee" | "hr" | "sales";
+  roles?: ("admin" | "manager" | "employee" | "hr" | "sales")[];
   department: string;
   managerUserId?: number | string | null;
   reportsTo?: string;
@@ -98,7 +99,8 @@ export async function usersListRequest(accessToken: string): Promise<Response> {
 export interface CreateEmployeePayload {
   name: string;
   email: string;
-  role: "admin" | "manager" | "employee" | "hr" | "sales";
+  role?: "admin" | "manager" | "employee" | "hr" | "sales";
+  roles?: ("admin" | "manager" | "employee" | "hr" | "sales")[];
   department: string;
   manager_id?: number | null;
   manager_employee_id?: number | null;
@@ -120,6 +122,7 @@ export interface UpdateEmployeePayload {
   name?: string;
   email?: string;
   role?: "admin" | "manager" | "employee" | "hr" | "sales";
+  roles?: ("admin" | "manager" | "employee" | "hr" | "sales")[];
   department?: string;
   manager_id?: number | null;
   manager_employee_id?: number | null;
@@ -242,10 +245,21 @@ export async function attendanceAdminOverviewRequest(
   accessToken: string,
   days = 7,
 ): Promise<Response> {
-  return fetchWithAutoRefresh(
-    accessToken,
-    `/api/attendance/admin/overview/?days=${encodeURIComponent(String(days))}`,
-  );
+  const q = `days=${encodeURIComponent(String(days))}`;
+  const paths = [
+    `/api/attendance/admin/overview/?${q}`,
+    `/api/attendance/overview/?${q}`,
+    `/api/overview/?${q}`,
+    `/overview/?${q}`,
+  ];
+  let last: Response | null = null;
+  for (const path of paths) {
+    const res = await fetchWithAutoRefresh(accessToken, path);
+    if (res.ok) return res;
+    if (res.status !== 404) return res;
+    last = res;
+  }
+  return last!;
 }
 
 export async function attendanceAdminHistoryRequest(
