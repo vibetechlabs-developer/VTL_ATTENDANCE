@@ -141,6 +141,7 @@ class MeView(APIView):
             'bio': '',
             'location': '',
             'avatar': avatar,
+            'isWfh': bool(emp.is_wfh) if emp else False,
         })
 
 
@@ -192,6 +193,7 @@ class EmployeesListView(APIView):
                 'avatar': avatar,
                 'status': 'active' if user.is_active else 'inactive',
                 'hasEmployeeProfile': bool(employee),
+                'isWfh': bool(employee.is_wfh) if employee else False,
             })
         return Response(rows)
 

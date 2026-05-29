@@ -2,6 +2,11 @@ from django.db import models
 from users.models import Employee  # ← users app thi import
 
 class AttendanceLog(models.Model):
+    CHECKOUT_MODE_CHOICES = [
+        ("office", "Office"),
+        ("outside_client", "Outside Client Meeting"),
+    ]
+
     employee = models.ForeignKey(Employee, on_delete=models.CASCADE)
     date = models.DateField(auto_now_add=True)
     check_in = models.DateTimeField(null=True, blank=True)
@@ -12,6 +17,8 @@ class AttendanceLog(models.Model):
     total_hours = models.FloatField(default=0)
     overtime_hours = models.FloatField(default=0)
     status = models.CharField(max_length=20, default='present')
+    checkout_mode = models.CharField(max_length=30, choices=CHECKOUT_MODE_CHOICES, default="office")
+    checkout_note = models.TextField(blank=True, default="")
 
     def __str__(self):
         return f"{self.employee.name} - {self.date}"
@@ -24,3 +31,13 @@ class BreakLog(models.Model):
 
     def __str__(self):
         return f"Break - {self.attendance.employee.name}"
+
+
+class CallLog(models.Model):
+    """Sales on-phone time (pauses idle auto-break while active)."""
+    attendance = models.ForeignKey(AttendanceLog, on_delete=models.CASCADE, related_name="call_logs")
+    call_start = models.DateTimeField()
+    call_end = models.DateTimeField(null=True, blank=True)
+
+    def __str__(self):
+        return f"Call - {self.attendance.employee.name}"

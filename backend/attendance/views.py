@@ -16,7 +16,7 @@ import uuid
 
 from users.models import Employee, OfficeLocation, AppNotification
 from leaves.models import LeaveRequest
-from .models import AttendanceLog, BreakLog
+from .models import AttendanceLog, BreakLog, CallLog
 from .serializers import CheckInSerializer, CheckOutSerializer, AttendanceLogSerializer
 from .face_utils import (
     decode_base64_image,
@@ -28,24 +28,30 @@ from .face_utils import (
 
 # ─── Helper: Location check ────────────────────────────
 def validate_office_radius(user_lat, user_lng):
-    office = OfficeLocation.objects.first()
-    if not office:
+    offices = OfficeLocation.objects.all()
+    if not offices.exists():
         return False, None, "Office location is not configured. Please contact admin."
 
-    distance = geodesic(
-        (user_lat, user_lng),
-        (office.latitude, office.longitude)
-    ).meters
+    closest_distance = None
+    for office in offices:
+        distance = geodesic(
+            (user_lat, user_lng),
+            (office.latitude, office.longitude)
+        ).meters
 
-    # Strict policy: only 500m radius allowed.
-    radius = 500
-    if distance > radius:
-        return (
-            False,
-            distance,
-            "You are outside the allowed check-in area. Move closer to the office and try again.",
-        )
-    return True, distance, None
+        # Use office's configured radius, or fallback to standard 500m
+        office_radius = getattr(office, "radius_meters", 500) or 500
+        if distance <= office_radius:
+            return True, distance, None
+
+        if closest_distance is None or distance < closest_distance:
+            closest_distance = distance
+
+    return (
+        False,
+        closest_distance,
+        "You are outside the allowed check-in area. Move closer to the office and try again.",
+    )
 
 
 def _face_mismatch_payload(distance):
@@ -211,8 +217,33 @@ def _notify_overtime_if_needed(user, overtime_hours, worked_hours, title_suffix=
     )
 
 
+def _end_active_call(log):
+    active_call = CallLog.objects.filter(attendance=log, call_end__isnull=True).first()
+    if not active_call:
+        return
+    active_call.call_end = timezone.now()
+    active_call.save(update_fields=["call_end"])
+
+
+def _call_stats_for_log(log, now=None):
+    if not log:
+        return 0, 0, None
+    now = now or timezone.now()
+    calls = CallLog.objects.filter(attendance=log).order_by("call_start")
+    total_minutes = 0
+    active_call_start = None
+    for c in calls:
+        if c.call_end:
+            total_minutes += int((c.call_end - c.call_start).total_seconds() // 60)
+        else:
+            active_call_start = c.call_start
+            total_minutes += int((now - c.call_start).total_seconds() // 60)
+    return total_minutes, calls.count(), active_call_start
+
+
 def _close_open_attendance_session(log, lat, lng):
     """Set check-out and hours on an open log; end any active breaks."""
+    _end_active_call(log)
     _auto_resume_expired_breaks(log)
     log.refresh_from_db(fields=["break_minutes"])
     now = timezone.now()
@@ -248,8 +279,9 @@ class CheckInView(APIView):
 
         relaxed = getattr(settings, "ATTENDANCE_RELAXED_VERIFY", False)
 
+        is_wfh = bool(getattr(request.user.employee, "is_wfh", False))
         in_range, distance_m, location_error = validate_office_radius(lat, lng)
-        if (not relaxed) and (not in_range):
+        if (not relaxed) and (not is_wfh) and (not in_range):
             return Response(
                 {'error': location_error, 'distance_meters': int(distance_m) if distance_m is not None else None},
                 status=400
@@ -316,13 +348,22 @@ class CheckOutView(APIView):
 
         lat = serializer.validated_data['latitude']
         lng = serializer.validated_data['longitude']
+        allow_outside_meeting = serializer.validated_data.get('allow_outside_meeting', False)
+        outside_note = (serializer.validated_data.get('outside_note') or "").strip()
 
         relaxed = getattr(settings, "ATTENDANCE_RELAXED_VERIFY", False)
 
+        is_wfh = bool(getattr(request.user.employee, "is_wfh", False))
         in_range, distance_m, location_error = validate_office_radius(lat, lng)
-        if (not relaxed) and (not in_range):
+        # Default policy: office radius mandatory. Exception: outside client meeting with note.
+        if (not relaxed) and (not is_wfh) and (not allow_outside_meeting) and (not in_range):
             return Response(
                 {'error': location_error, 'distance_meters': int(distance_m) if distance_m is not None else None},
+                status=400
+            )
+        if allow_outside_meeting and not outside_note:
+            return Response(
+                {'error': 'Please add a client meeting note for outside checkout.'},
                 status=400
             )
 
@@ -354,6 +395,10 @@ class CheckOutView(APIView):
                 return face_result
             matched_employee, distance = face_result
 
+        _end_active_call(log)
+        _auto_resume_expired_breaks(log)
+        log.refresh_from_db(fields=["break_minutes"])
+
         log.check_out = timezone.now()
         log.check_out_lat = lat
         log.check_out_lng = lng
@@ -366,6 +411,8 @@ class CheckOutView(APIView):
         log.total_hours = worked_hours
 
         log.overtime_hours = round(max(0, worked_hours - 8), 2)
+        log.checkout_mode = "outside_client" if allow_outside_meeting else "office"
+        log.checkout_note = outside_note if allow_outside_meeting else ""
 
         log.save()
         _notify_overtime_if_needed(
@@ -381,6 +428,8 @@ class CheckOutView(APIView):
             'overtime_hours': log.overtime_hours,
             'check_out': log.check_out,
             'distance_meters': int(distance_m) if distance_m is not None else None,
+            'checkout_mode': log.checkout_mode,
+            'checkout_note': log.checkout_note,
         })
 
 
@@ -428,6 +477,7 @@ class MyAttendanceSessionView(APIView):
                 active_break_start = b.break_start.isoformat()
 
         live_work_minutes, worked_hours, overtime_hours = _live_session_stats(log)
+        call_minutes, call_count, active_call_start = _call_stats_for_log(log)
 
         return Response({
             'active': log.check_out is None,
@@ -441,6 +491,10 @@ class MyAttendanceSessionView(APIView):
             'breaks': breaks,
             'break_auto_resumed': auto_resumed,
             'max_break_minutes': int(_max_break_duration().total_seconds() // 60),
+            'call_minutes': call_minutes,
+            'call_count': call_count,
+            'active_call_start': active_call_start.isoformat() if active_call_start else None,
+            'on_call': active_call_start is not None,
         })
 
 
@@ -511,6 +565,7 @@ class AdminAttendanceView(APIView):
             for b in breaks:
                 if b.break_end:
                     break_minutes += int((b.break_end - b.break_start).total_seconds() // 60)
+            call_minutes, call_count, active_call_start = _call_stats_for_log(log) if log else (0, 0, None)
             status = 'Absent'
             if emp.id in leave_emp_ids:
                 status = 'On Leave'
@@ -531,9 +586,76 @@ class AdminAttendanceView(APIView):
                 'overtimeHours': float(log.overtime_hours) if log else 0,
                 'breakCount': breaks.count() if log else 0,
                 'breakMinutes': break_minutes,
+                'callMinutes': call_minutes,
+                'callCount': call_count,
+                'onCallNow': active_call_start is not None,
+                'checkoutMode': log.checkout_mode if log else "office",
+                'checkoutNote': log.checkout_note if log else "",
             })
 
         return Response(rows)
+
+
+class AdminAttendanceOverviewView(APIView):
+    """Present vs absent counts per day for the last N days (admin dashboard chart)."""
+    permission_classes = [IsAuthenticated]
+
+    def get(self, request):
+        if request.user.role not in ['admin', 'manager', 'hr']:
+            return Response({'error': 'Permission denied.'}, status=403)
+
+        try:
+            days = int(request.query_params.get('days', 7))
+        except (TypeError, ValueError):
+            days = 7
+        days = max(1, min(days, 31))
+
+        today = timezone.now().date()
+        employees = Employee.objects.all()
+        if request.user.role == 'manager':
+            employees = employees.filter(managers=request.user).distinct()
+        employee_ids = list(employees.values_list('id', flat=True))
+        total_staff = len(employee_ids)
+
+        rows = []
+        for offset in range(days - 1, -1, -1):
+            target_date = today - timedelta(days=offset)
+            logs = AttendanceLog.objects.filter(
+                date=target_date,
+                employee_id__in=employee_ids,
+            )
+            log_map = {l.employee_id: l for l in logs}
+            leave_emp_ids = set(
+                LeaveRequest.objects.filter(
+                    status='approved',
+                    start_date__lte=target_date,
+                    end_date__gte=target_date,
+                    employee_id__in=employee_ids,
+                ).values_list('employee_id', flat=True)
+            )
+
+            present = 0
+            absent = 0
+            for emp_id in employee_ids:
+                if emp_id in leave_emp_ids:
+                    continue
+                log = log_map.get(emp_id)
+                if log and log.check_in:
+                    present += 1
+                else:
+                    absent += 1
+
+            rows.append({
+                'day': target_date.strftime('%a'),
+                'date': target_date.isoformat(),
+                'present': present,
+                'absent': absent,
+            })
+
+        return Response({
+            'days': rows,
+            'totalStaff': total_staff,
+        })
 
 
 class AdminForceCheckOutView(APIView):
@@ -564,6 +686,10 @@ class AdminForceCheckOutView(APIView):
             return Response({'error': 'No check-in record found for this employee/date.'}, status=404)
         if log.check_out:
             return Response({'error': 'Employee is already checked out.'}, status=400)
+
+        _end_active_call(log)
+        _auto_resume_expired_breaks(log)
+        log.refresh_from_db(fields=["break_minutes"])
 
         now = timezone.now()
         if log.check_in and now < log.check_in:
@@ -632,18 +758,25 @@ class AdminEmployeeAttendanceHistoryView(APIView):
             if log.check_in:
                 day_status = 'Late' if log.check_in > late_cutoff else 'Present'
 
+            call_minutes, call_count, active_call_start = _call_stats_for_log(log)
             rows.append({
                 'id': str(log.id),
                 'date': log.date.isoformat(),
                 'name': log.employee.name,
                 'empId': f"VTL-{str(log.employee_id).zfill(3)}",
                 'department': log.employee.department,
+                'role': log.employee.user.role,
                 'status': day_status,
                 'checkIn': log.check_in.isoformat() if log.check_in else None,
                 'checkOut': log.check_out.isoformat() if log.check_out else None,
                 'breakMinutes': int(log.break_minutes or 0),
+                'callMinutes': call_minutes,
+                'callCount': call_count,
+                'onCallNow': active_call_start is not None,
                 'hours': float(log.total_hours or 0),
                 'overtimeHours': float(log.overtime_hours or 0),
+                'checkoutMode': log.checkout_mode,
+                'checkoutNote': log.checkout_note,
             })
 
         return Response(rows)
@@ -739,6 +872,76 @@ class BreakEndView(APIView):
             'message': 'Break ended.',
             'break_minutes': break_minutes,
             'auto_resumed': False,
+        })
+
+
+# ─── Sales: On a call (idle auto-break pause) ───────────
+class CallStartView(APIView):
+    permission_classes = [IsAuthenticated]
+
+    def post(self, request):
+        if request.user.role != "sales":
+            return Response({"error": "On-call mode is only for sales team."}, status=403)
+
+        today = timezone.now().date()
+        log = (
+            AttendanceLog.objects.filter(
+                employee=request.user.employee,
+                date=today,
+                check_out__isnull=True,
+                check_in__isnull=False,
+            )
+            .order_by("-check_in")
+            .first()
+        )
+        if not log:
+            return Response({"error": "Please check in first."}, status=400)
+
+        active_call = CallLog.objects.filter(attendance=log, call_end__isnull=True).first()
+        if active_call:
+            return Response({
+                "message": "Already on a call.",
+                "call_start": active_call.call_start,
+            })
+
+        call_log = CallLog.objects.create(attendance=log, call_start=timezone.now())
+        return Response({
+            "message": "On-call mode started.",
+            "call_start": call_log.call_start,
+        })
+
+
+class CallEndView(APIView):
+    permission_classes = [IsAuthenticated]
+
+    def post(self, request):
+        if request.user.role != "sales":
+            return Response({"error": "On-call mode is only for sales team."}, status=403)
+
+        today = timezone.now().date()
+        log = (
+            AttendanceLog.objects.filter(
+                employee=request.user.employee,
+                date=today,
+                check_out__isnull=True,
+                check_in__isnull=False,
+            )
+            .order_by("-check_in")
+            .first()
+        )
+        if not log:
+            return Response({"error": "Attendance record not found."}, status=400)
+
+        active_call = CallLog.objects.filter(attendance=log, call_end__isnull=True).first()
+        if not active_call:
+            return Response({"message": "No active call session."})
+
+        active_call.call_end = timezone.now()
+        active_call.save(update_fields=["call_end"])
+        call_minutes = int((active_call.call_end - active_call.call_start).total_seconds() // 60)
+        return Response({
+            "message": "On-call mode ended.",
+            "call_minutes": call_minutes,
         })
 
 

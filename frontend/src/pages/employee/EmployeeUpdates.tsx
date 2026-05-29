@@ -25,6 +25,7 @@ export default function EmployeeUpdates() {
 
   useEffect(() => {
     void load();
+    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [accessToken]);
 
   const handlePost = async () => {

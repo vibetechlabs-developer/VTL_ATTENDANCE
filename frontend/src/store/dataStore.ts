@@ -18,6 +18,7 @@ export interface Employee {
   avatar?: string;
   status: "active" | "inactive";
   hasEmployeeProfile?: boolean;
+  isWfh?: boolean;
 }
 
 export interface AttendanceRow {
@@ -266,6 +267,7 @@ export const useDataStore = create<DataState>((set) => ({
         avatar: item.avatar || undefined,
         status: item.status || "active",
         hasEmployeeProfile: item.hasEmployeeProfile ?? true,
+        isWfh: Boolean(item.isWfh),
       })),
     })),
 }));

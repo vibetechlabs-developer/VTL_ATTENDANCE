@@ -7,4 +7,4 @@ class DailyUpdateSerializer(serializers.ModelSerializer):
 
     class Meta:
         model = DailyUpdate
-        fields = ['id', 'date', 'update_text', 'created_at', 'employee_name', 'role']
+        fields = ['id', 'date', 'update_text', 'report_data', 'created_at', 'employee_name', 'role']

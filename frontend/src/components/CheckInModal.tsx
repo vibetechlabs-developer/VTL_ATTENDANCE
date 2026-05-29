@@ -20,9 +20,10 @@ interface CheckInModalProps {
     onOpenChange: (open: boolean) => void;
     onVerified: (data?: { checkInAt?: string; checkOutAt?: string; totalHours?: number; overtimeHours?: number }) => void;
     mode?: "check-in" | "check-out";
+    checkoutMeta?: { allowOutsideMeeting?: boolean; outsideNote?: string };
 }
 
-export function CheckInModal({ open, onOpenChange, onVerified, mode = "check-in" }: CheckInModalProps) {
+export function CheckInModal({ open, onOpenChange, onVerified, mode = "check-in", checkoutMeta }: CheckInModalProps) {
     // Mirror preview only; captured frames stay unflipped (matches Profile face registration).
     const [step, setStep] = useState<"face" | "location" | "done" | null>(null);
     const [faceProgress, setFaceProgress] = useState(0);
@@ -225,6 +226,7 @@ export function CheckInModal({ open, onOpenChange, onVerified, mode = "check-in"
             }
         };
         void startCamera();
+        // eslint-disable-next-line react-hooks/exhaustive-deps
     }, [open]);
 
     useEffect(() => {
@@ -232,6 +234,7 @@ export function CheckInModal({ open, onOpenChange, onVerified, mode = "check-in"
         if (startedRef.current) return;
         const t = window.setTimeout(() => void handleVerifyAndSubmit(), 450);
         return () => window.clearTimeout(t);
+        // eslint-disable-next-line react-hooks/exhaustive-deps
     }, [open, step, cameraReady, submitting, verificationError]);
 
     const runFaceScanProgress = (): Promise<void> =>
@@ -348,7 +351,13 @@ export function CheckInModal({ open, onOpenChange, onVerified, mode = "check-in"
             setLocProgress(55);
             const res = mode === "check-in"
                 ? await attendanceCheckInRequest(accessToken, { image, latitude, longitude })
-                : await attendanceCheckOutRequest(accessToken, { image, latitude, longitude });
+                : await attendanceCheckOutRequest(accessToken, {
+                    image,
+                    latitude,
+                    longitude,
+                    allow_outside_meeting: Boolean(checkoutMeta?.allowOutsideMeeting),
+                    outside_note: checkoutMeta?.outsideNote || "",
+                });
             const rawText = await res.clone().text().catch(() => "");
             const body = (await res.json().catch(() => {
                 try {

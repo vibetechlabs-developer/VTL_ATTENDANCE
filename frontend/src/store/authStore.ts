@@ -29,6 +29,7 @@ export interface AuthUser {
   bio: string;
   location: string;
   avatar?: string;
+  isWfh?: boolean;
 }
 
 function mapBackendRole(role: string): Role {
@@ -50,6 +51,7 @@ export interface MeProfilePayload {
   bio?: string;
   location?: string;
   avatar?: string | null;
+  isWfh?: boolean;
 }
 
 export function profileToAuthUser(body: MeProfilePayload): AuthUser {
@@ -64,6 +66,7 @@ export function profileToAuthUser(body: MeProfilePayload): AuthUser {
     bio: body.bio ?? "",
     location: body.location ?? "",
     avatar: body.avatar ?? undefined,
+    isWfh: Boolean(body.isWfh),
   };
 }
 

@@ -11,6 +11,8 @@ class CheckOutSerializer(serializers.Serializer):
     image = serializers.CharField()   # base64 image
     latitude = serializers.FloatField()
     longitude = serializers.FloatField()
+    allow_outside_meeting = serializers.BooleanField(required=False, default=False)
+    outside_note = serializers.CharField(required=False, allow_blank=True, default="")
 
 class AttendanceLogSerializer(serializers.ModelSerializer):
     employee_name = serializers.CharField(
@@ -23,7 +25,7 @@ class AttendanceLogSerializer(serializers.ModelSerializer):
             'id', 'employee_name', 'date',
             'check_in', 'check_out',
             'total_hours', 'overtime_hours',
-            'status'
+            'status', 'checkout_mode', 'checkout_note'
         ]
 
 class BreakLogSerializer(serializers.ModelSerializer):

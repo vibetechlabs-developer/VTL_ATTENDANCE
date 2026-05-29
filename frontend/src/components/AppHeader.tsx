@@ -14,7 +14,9 @@ import {
 } from "@/components/ui/popover";
 import { ThemeToggle } from "@/components/ThemeToggle";
 import { useAuthStore } from "@/store/authStore";
+import { useAttendanceStore } from "@/store/attendanceStore";
 import { useDataStore } from "@/store/dataStore";
+import { shouldShowBreakDurationAlert, shouldSkipLunchReminder } from "@/utils/lunchReminders";
 import { cn, userInitials } from "@/lib/utils";
 import { safeGetItem, safeSetItem } from "@/utils/storageSafe";
 import { canUseWebPush } from "@/utils/platform";
@@ -25,6 +27,9 @@ import { markNotificationsReadRequest, myNotificationsRequest } from "@/lib/api"
 
 export function AppHeader() {
   const { user, logout, accessToken } = useAuthStore();
+  const attendanceStatus = useAttendanceStore((s) => s.status);
+  const attendanceBreaks = useAttendanceStore((s) => s.breaks);
+  const breakStartAt = useAttendanceStore((s) => s.breakStartAt);
   const { notifications, markNotificationsRead, addNotification } = useDataStore();
   const location = useLocation();
   const navigate = useNavigate();
@@ -87,7 +92,21 @@ export function AppHeader() {
       }
       reminderInitRef.current = true;
 
-      if (now >= lunchAt && safeGetItem(localStorage, lunchKey) !== "1") {
+      const skipLunch = shouldSkipLunchReminder(
+        attendanceStatus,
+        attendanceBreaks,
+        breakStartAt,
+        now,
+      );
+      if (skipLunch) {
+        safeSetItem(localStorage, lunchKey, "1");
+      }
+
+      if (
+        now >= lunchAt &&
+        safeGetItem(localStorage, lunchKey) !== "1" &&
+        !skipLunch
+      ) {
         addNotification({
           title: "Lunch Break Reminder",
           body: "It's 1:00 PM. Please take your lunch break.",
@@ -97,13 +116,20 @@ export function AppHeader() {
         safeSetItem(localStorage, lunchKey, "1");
       }
 
-      if (now >= lunchDoneAt && safeGetItem(localStorage, followKey) !== "1") {
+      const showBreakDone = shouldShowBreakDurationAlert(
+        attendanceStatus,
+        attendanceBreaks,
+        breakStartAt,
+        now,
+      );
+
+      if (now >= lunchDoneAt && safeGetItem(localStorage, followKey) !== "1" && showBreakDone) {
         addNotification({
           title: "Break Duration Alert",
-          body: "You have completed a 30-minute break.",
+          body: "You have completed a 30-minute break. You can resume work when ready.",
           type: "warning",
         });
-        toast.warning("You have completed a 30-minute break.");
+        toast.warning("You have completed a 30-minute break. Resume when ready.");
         safeSetItem(localStorage, followKey, "1");
       }
     };
@@ -111,7 +137,7 @@ export function AppHeader() {
     checkSchedule();
     const t = window.setInterval(checkSchedule, 60 * 1000); // check every minute
     return () => window.clearInterval(t);
-  }, [user, addNotification]);
+  }, [user, addNotification, attendanceStatus, attendanceBreaks, breakStartAt]);
 
   const handleLogout = async () => {
     await logout();
@@ -182,6 +208,7 @@ export function AppHeader() {
     } catch {
       /* iOS / private mode */
     }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [user, accessToken]);
 
   const handleBellClick = async () => {

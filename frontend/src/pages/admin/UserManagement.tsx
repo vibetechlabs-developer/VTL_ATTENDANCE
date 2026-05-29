@@ -28,7 +28,7 @@ import { captureFaceDataUrl, drawFaceFrame, MIRROR_CAMERA_PREVIEW } from "@/util
 const emptyForm: Omit<Employee, "id"> = {
   name: "", email: "", empId: "", role: "employee", department: "Tech",
   reportsTo: "—", managerEmployeeIds: [], joiningDate: new Date().toISOString().slice(0, 10),
-  faceStatus: "pending", status: "active",
+  faceStatus: "pending", status: "active", isWfh: false,
 };
 
 export default function UserManagement() {
@@ -217,6 +217,7 @@ export default function UserManagement() {
         department,
         manager_employee_ids: managerEmployeeIds,
         password: password || undefined,
+        is_wfh: Boolean(form.isWfh),
       });
       const body = (await res.json().catch(() => ({}))) as {
         error?: string;
@@ -295,6 +296,7 @@ export default function UserManagement() {
         department: selectedEmployee.department,
         manager_employee_ids: managerEmployeeIds,
         password: editPassword.trim() || undefined,
+        is_wfh: Boolean(selectedEmployee.isWfh),
       });
       const body = (await res.json().catch(() => ({}))) as { error?: string };
       if (!res.ok) {
@@ -471,6 +473,20 @@ export default function UserManagement() {
                   <div className="space-y-1.5">
                     <Label>Joining date</Label>
                     <Input type="date" value={form.joiningDate} onChange={(e) => setForm({ ...form, joiningDate: e.target.value })} />
+                  </div>
+                </div>
+                <div className="space-y-1.5">
+                  <Label>Work mode</Label>
+                  <div className="flex items-center gap-2">
+                    <input
+                      id="create-is-wfh"
+                      type="checkbox"
+                      checked={Boolean(form.isWfh)}
+                      onChange={(e) => setForm({ ...form, isWfh: e.target.checked })}
+                    />
+                    <label htmlFor="create-is-wfh" className="text-sm">
+                      Mark this employee as WFH eligible (location radius skipped for check-in/out)
+                    </label>
                   </div>
                 </div>
 
@@ -798,6 +814,20 @@ export default function UserManagement() {
                     .map((opt) => ({ value: opt.value, label: opt.label }))}
                   placeholder="Select reporting managers"
                 />
+              </div>
+              <div className="space-y-1.5">
+                <Label>Work mode</Label>
+                <div className="flex items-center gap-2">
+                  <input
+                    id="edit-is-wfh"
+                    type="checkbox"
+                    checked={Boolean(selectedEmployee.isWfh)}
+                    onChange={(e) => setSelectedEmployee({ ...selectedEmployee, isWfh: e.target.checked })}
+                  />
+                  <label htmlFor="edit-is-wfh" className="text-sm">
+                    WFH eligible employee
+                  </label>
+                </div>
               </div>
 
               <div className="space-y-1.5">

@@ -1,5 +1,5 @@
 import { useCallback, useEffect, useState } from "react";
-import { Download, Search, ChevronLeft, ChevronRight, Calendar as CalendarIcon, Users, UserCheck, UserX, Plane, Eye, UserPlus, UserMinus } from "lucide-react";
+import { Download, Search, ChevronLeft, ChevronRight, Calendar as CalendarIcon, Users, UserCheck, UserX, Plane, Eye, UserPlus, UserMinus, Phone } from "lucide-react";
 import { format, addDays, subDays, startOfWeek, endOfWeek, startOfMonth, endOfMonth, startOfDay, isAfter } from "date-fns";
 import { toast } from "sonner";
 import { exportCsv } from "@/utils/csv";
@@ -10,6 +10,28 @@ import { useAuthStore } from "@/store/authStore";
 import { attendanceAdminHistoryRequest, attendanceAdminRequest, attendanceForceCheckoutRequest } from "@/lib/api";
 import { Dialog, DialogContent, DialogDescription, DialogHeader, DialogTitle } from "@/components/ui/dialog";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
+import { cn } from "@/lib/utils";
+
+function formatMinutesHM(mins: number): string {
+  const m = Math.max(0, Math.floor(mins));
+  return `${Math.floor(m / 60)}h ${m % 60}m`;
+}
+
+function salesCallTimeLabel(row: {
+  role?: string;
+  callMinutes?: number;
+  callCount?: number;
+  onCallNow?: boolean;
+}): string | null {
+  if (row.role !== "sales") return null;
+  if (row.onCallNow) {
+    return `On call · ${formatMinutesHM(row.callMinutes || 0)} total`;
+  }
+  if ((row.callMinutes || 0) > 0) {
+    return `${formatMinutesHM(row.callMinutes || 0)} × ${row.callCount || 0}`;
+  }
+  return "—";
+}
 
 export default function AttendanceManagement() {
   const accessToken = useAuthStore((s) => s.accessToken);
@@ -356,6 +378,16 @@ export default function AttendanceManagement() {
                       </p>
                     )}
                   </div>
+                  {r.role === "sales" && (
+                    <div className="rounded-lg bg-amber-500/10 border border-amber-500/20 px-3 py-2 col-span-2">
+                      <p className="text-muted-foreground flex items-center gap-1">
+                        <Phone className="h-3 w-3" /> Call time
+                      </p>
+                      <p className={cn("font-medium text-sm", r.onCallNow && "text-amber-700 dark:text-amber-300")}>
+                        {salesCallTimeLabel(r)}
+                      </p>
+                    </div>
+                  )}
                 </div>
 
                 <div className="mt-3 flex flex-col gap-2 sm:flex-row">
@@ -392,7 +424,7 @@ export default function AttendanceManagement() {
       </div>
 
       <div className="hidden lg:block w-full touch-scroll-x text-sm rounded-2xl bg-card shadow-sm pb-2 border-glow-shine">
-        <table className="w-full min-w-[980px]">
+        <table className="w-full min-w-[1080px]">
           <thead>
             <tr className="border-b border-border/50">
               <th className="text-left py-4 px-6 text-[10px] font-bold text-muted-foreground uppercase tracking-widest">Employee</th>
@@ -401,6 +433,7 @@ export default function AttendanceManagement() {
               <th className="text-left py-4 px-6 text-[10px] font-bold text-muted-foreground uppercase tracking-widest">Status</th>
               <th className="text-left py-4 px-6 text-[10px] font-bold text-muted-foreground uppercase tracking-widest">Check In</th>
               <th className="text-left py-4 px-6 text-[10px] font-bold text-muted-foreground uppercase tracking-widest">Breaks</th>
+              <th className="text-left py-4 px-6 text-[10px] font-bold text-muted-foreground uppercase tracking-widest">Call time</th>
               <th className="text-left py-4 px-6 text-[10px] font-bold text-muted-foreground uppercase tracking-widest">Check Out</th>
               <th className="text-left py-4 px-6 text-[10px] font-bold text-muted-foreground uppercase tracking-widest">Hours</th>
               {canForceCheckout && <th className="text-left py-4 px-6 text-[10px] font-bold text-muted-foreground uppercase tracking-widest">Action</th>}
@@ -455,6 +488,16 @@ export default function AttendanceManagement() {
                     ) : <span className="text-muted-foreground">—</span>}
                   </td>
                   <td className="py-3 px-6">
+                    {r.role === "sales" ? (
+                      <div className={cn("flex items-center gap-2 text-xs font-medium", r.onCallNow && "text-amber-700 dark:text-amber-300")}>
+                        <Phone className="h-3.5 w-3.5 shrink-0 opacity-80" />
+                        <span>{salesCallTimeLabel(r)}</span>
+                      </div>
+                    ) : (
+                      <span className="text-muted-foreground text-xs">—</span>
+                    )}
+                  </td>
+                  <td className="py-3 px-6">
                     <span className="text-sm font-medium">{formatApiDate(r.checkOut, "h:mm a")}</span>
                   </td>
                   <td className="py-3 px-6 text-sm font-medium">
@@ -503,6 +546,7 @@ function HistoryTable({ loading, rows }: { loading: boolean; rows: any[] }) {
             <th className="text-left py-3 px-4 text-[11px] font-semibold text-muted-foreground uppercase tracking-wider">Check In</th>
             <th className="text-left py-3 px-4 text-[11px] font-semibold text-muted-foreground uppercase tracking-wider">Check Out</th>
             <th className="text-left py-3 px-4 text-[11px] font-semibold text-muted-foreground uppercase tracking-wider">Break</th>
+            <th className="text-left py-3 px-4 text-[11px] font-semibold text-muted-foreground uppercase tracking-wider">Call</th>
             <th className="text-left py-3 px-4 text-[11px] font-semibold text-muted-foreground uppercase tracking-wider">Hours</th>
             <th className="text-left py-3 px-4 text-[11px] font-semibold text-muted-foreground uppercase tracking-wider">Overtime</th>
           </tr>
@@ -510,13 +554,13 @@ function HistoryTable({ loading, rows }: { loading: boolean; rows: any[] }) {
         <tbody>
           {loading ? (
             <tr>
-              <td colSpan={7} className="py-6 px-4 text-center text-muted-foreground">
+              <td colSpan={8} className="py-6 px-4 text-center text-muted-foreground">
                 Loading...
               </td>
             </tr>
           ) : rows.length === 0 ? (
             <tr>
-              <td colSpan={7} className="py-6 px-4 text-center text-muted-foreground">
+              <td colSpan={8} className="py-6 px-4 text-center text-muted-foreground">
                 No records found for this range.
               </td>
             </tr>
@@ -541,6 +585,15 @@ function HistoryTable({ loading, rows }: { loading: boolean; rows: any[] }) {
                   {typeof r.breakMinutes === "number"
                     ? `${Math.floor(r.breakMinutes / 60)}h ${r.breakMinutes % 60}m`
                     : "—"}
+                </td>
+                <td className="py-3 px-4 tabular-nums text-xs">
+                  {r.role === "sales" ? (
+                    <span className={cn(r.onCallNow && "font-semibold text-amber-700 dark:text-amber-300")}>
+                      {salesCallTimeLabel(r)}
+                    </span>
+                  ) : (
+                    "—"
+                  )}
                 </td>
                 <td className="py-3 px-4 tabular-nums font-semibold">{r.hours > 0 ? Number(r.hours).toFixed(2) : "—"}</td>
                 <td className="py-3 px-4 tabular-nums font-semibold text-warning">{Number(r.overtimeHours || 0) > 0 ? Number(r.overtimeHours).toFixed(2) : "—"}</td>

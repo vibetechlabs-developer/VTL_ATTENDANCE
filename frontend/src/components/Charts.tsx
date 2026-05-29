@@ -1,14 +1,9 @@
+import { useCallback, useEffect, useState } from "react";
+import { format, parseISO } from "date-fns";
 import { Area, AreaChart, CartesianGrid, ResponsiveContainer, Tooltip, XAxis, YAxis, Bar, BarChart } from "recharts";
-
-const attendanceData = [
-  { day: "Mon", present: 168, absent: 12 },
-  { day: "Tue", present: 172, absent: 8 },
-  { day: "Wed", present: 165, absent: 15 },
-  { day: "Thu", present: 178, absent: 6 },
-  { day: "Fri", present: 170, absent: 10 },
-  { day: "Sat", present: 82, absent: 98 },
-  { day: "Sun", present: 20, absent: 160 },
-];
+import { useAuthStore } from "@/store/authStore";
+import { attendanceAdminOverviewRequest } from "@/lib/api";
+import { Skeleton } from "@/components/ui/skeleton";
 
 const weeklyData = [
   { week: "W1", score: 72 },
@@ -30,11 +25,126 @@ const tooltipStyle = {
   padding: "10px 14px",
 };
 
-export function AttendanceChart() {
+type OverviewDay = {
+  day: string;
+  date: string;
+  present: number;
+  absent: number;
+};
+
+type OverviewTooltipProps = {
+  active?: boolean;
+  payload?: { value: number; dataKey: string; payload: OverviewDay }[];
+};
+
+function OverviewTooltip({ active, payload }: OverviewTooltipProps) {
+  if (!active || !payload?.length) return null;
+  const row = payload[0].payload;
+  let dateLabel = row.date;
+  try {
+    dateLabel = format(parseISO(row.date), "EEE, d MMM yyyy");
+  } catch {
+    /* keep raw */
+  }
+  const present = row.present ?? 0;
+  const absent = row.absent ?? 0;
+  return (
+    <div style={tooltipStyle}>
+      <p className="font-semibold mb-1.5">{dateLabel}</p>
+      <p className="text-emerald-600 dark:text-emerald-400">Present: {present}</p>
+      <p className="text-destructive">Absent: {absent}</p>
+    </div>
+  );
+}
+
+export function AttendanceChart({ days = 7 }: { days?: number }) {
+  const accessToken = useAuthStore((s) => s.accessToken);
+  const [data, setData] = useState<OverviewDay[]>([]);
+  const [loading, setLoading] = useState(true);
+  const [error, setError] = useState<string | null>(null);
+
+  const load = useCallback(async () => {
+    if (!accessToken) {
+      setLoading(false);
+      return;
+    }
+    setLoading(true);
+    setError(null);
+    try {
+      const res = await attendanceAdminOverviewRequest(accessToken, days);
+      const body = (await res.json().catch(() => ({}))) as {
+        days?: OverviewDay[];
+        error?: string;
+      };
+      if (!res.ok) {
+        setError(body.error || "Could not load attendance overview");
+        setData([]);
+        return;
+      }
+      setData(Array.isArray(body.days) ? body.days : []);
+    } catch {
+      setError("Network error loading chart");
+      setData([]);
+    } finally {
+      setLoading(false);
+    }
+  }, [accessToken, days]);
+
+  useEffect(() => {
+    void load();
+  }, [load]);
+
+  useEffect(() => {
+    if (!accessToken) return;
+    const id = window.setInterval(() => void load(), 60_000);
+    return () => window.clearInterval(id);
+  }, [accessToken, load]);
+
+  const yMax = Math.max(
+    5,
+    ...data.flatMap((d) => [d.present, d.absent]),
+  );
+
+  if (loading) {
+    return (
+      <div className="h-[280px] w-full flex flex-col justify-end gap-2 px-2">
+        <Skeleton className="h-[220px] w-full rounded-xl" />
+        <div className="flex justify-between">
+          {Array.from({ length: days }).map((_, i) => (
+            <Skeleton key={i} className="h-3 w-8" />
+          ))}
+        </div>
+      </div>
+    );
+  }
+
+  if (error) {
+    return (
+      <div className="h-[280px] w-full flex flex-col items-center justify-center text-center px-4">
+        <p className="text-sm text-muted-foreground">{error}</p>
+        <button
+          type="button"
+          className="mt-2 text-xs font-medium text-primary underline"
+          onClick={() => void load()}
+        >
+          Retry
+        </button>
+      </div>
+    );
+  }
+
+  if (data.length === 0) {
+    return (
+      <div className="h-[280px] w-full flex items-center justify-center text-sm text-muted-foreground">
+        No attendance data for the last {days} days.
+      </div>
+    );
+  }
+
   return (
     <div className="h-[280px] w-full">
       <ResponsiveContainer width="100%" height="100%">
-        <AreaChart data={attendanceData} margin={{ top: 10, right: 8, left: -20, bottom: 0 }}>
+        <AreaChart data={data} margin={{ top: 10, right: 8, left: -20, bottom: 0 }}>
           <defs>
             <linearGradient id="present" x1="0" y1="0" x2="0" y2="1">
               <stop offset="0%" stopColor="#1D9E75" stopOpacity={0.35} />
@@ -53,10 +163,33 @@ export function AttendanceChart() {
           </defs>
           <CartesianGrid strokeDasharray="3 3" stroke="hsl(var(--border) / 0.2)" vertical={false} />
           <XAxis dataKey="day" stroke="hsl(var(--muted-foreground))" fontSize={11} tickLine={false} axisLine={false} />
-          <YAxis stroke="hsl(var(--muted-foreground))" fontSize={11} tickLine={false} axisLine={false} />
-          <Tooltip contentStyle={tooltipStyle} />
-          <Area type="monotone" dataKey="present" stroke="url(#presentStroke)" strokeWidth={2.5} fill="url(#present)" animationDuration={1500} />
-          <Area type="monotone" dataKey="absent" stroke="hsl(var(--destructive))" strokeWidth={2} fill="url(#absent)" animationDuration={1500} />
+          <YAxis
+            stroke="hsl(var(--muted-foreground))"
+            fontSize={11}
+            tickLine={false}
+            axisLine={false}
+            allowDecimals={false}
+            domain={[0, yMax]}
+          />
+          <Tooltip content={<OverviewTooltip />} />
+          <Area
+            type="monotone"
+            dataKey="present"
+            name="Present"
+            stroke="url(#presentStroke)"
+            strokeWidth={2.5}
+            fill="url(#present)"
+            animationDuration={800}
+          />
+          <Area
+            type="monotone"
+            dataKey="absent"
+            name="Absent"
+            stroke="hsl(var(--destructive))"
+            strokeWidth={2}
+            fill="url(#absent)"
+            animationDuration={800}
+          />
         </AreaChart>
       </ResponsiveContainer>
     </div>

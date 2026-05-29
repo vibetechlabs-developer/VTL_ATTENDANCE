@@ -88,6 +88,7 @@ export interface ApiEmployee {
   avatar?: string | null;
   status?: "active" | "inactive";
   hasEmployeeProfile?: boolean;
+  isWfh?: boolean;
 }
 
 export async function usersListRequest(accessToken: string): Promise<Response> {
@@ -104,6 +105,7 @@ export interface CreateEmployeePayload {
   manager_employee_ids?: number[];
   phone?: string;
   password?: string;
+  is_wfh?: boolean;
 }
 
 export async function usersCreateRequest(accessToken: string, payload: CreateEmployeePayload): Promise<Response> {
@@ -124,6 +126,7 @@ export interface UpdateEmployeePayload {
   manager_employee_ids?: number[];
   phone?: string;
   password?: string;
+  is_wfh?: boolean;
 }
 
 export async function usersUpdateRequest(accessToken: string, employeeId: string, payload: UpdateEmployeePayload): Promise<Response> {
@@ -173,7 +176,13 @@ export async function attendanceCheckInRequest(
 
 export async function attendanceCheckOutRequest(
   accessToken: string,
-  payload: { image: string; latitude: number; longitude: number }
+  payload: {
+    image: string;
+    latitude: number;
+    longitude: number;
+    allow_outside_meeting?: boolean;
+    outside_note?: string;
+  }
 ): Promise<Response> {
   return fetchWithAutoRefresh(accessToken, "/api/attendance/check-out/", {
     method: "POST",
@@ -188,6 +197,14 @@ export async function attendanceBreakStartRequest(accessToken: string): Promise<
 
 export async function attendanceBreakEndRequest(accessToken: string): Promise<Response> {
   return fetchWithAutoRefresh(accessToken, "/api/attendance/break/end/", { method: "POST" });
+}
+
+export async function attendanceCallStartRequest(accessToken: string): Promise<Response> {
+  return fetchWithAutoRefresh(accessToken, "/api/attendance/call/start/", { method: "POST" });
+}
+
+export async function attendanceCallEndRequest(accessToken: string): Promise<Response> {
+  return fetchWithAutoRefresh(accessToken, "/api/attendance/call/end/", { method: "POST" });
 }
 
 export async function attendanceHistoryRequest(accessToken: string): Promise<Response> {
@@ -219,6 +236,16 @@ export async function myAppraisalsRequest(accessToken: string): Promise<Response
 
 export async function attendanceAdminRequest(accessToken: string, date: string): Promise<Response> {
   return fetchWithAutoRefresh(accessToken, `/api/attendance/admin/?date=${encodeURIComponent(date)}`);
+}
+
+export async function attendanceAdminOverviewRequest(
+  accessToken: string,
+  days = 7,
+): Promise<Response> {
+  return fetchWithAutoRefresh(
+    accessToken,
+    `/api/attendance/admin/overview/?days=${encodeURIComponent(String(days))}`,
+  );
 }
 
 export async function attendanceAdminHistoryRequest(
@@ -349,11 +376,15 @@ export async function updatesRequest(accessToken: string, params?: { all?: boole
   return fetchWithAutoRefresh(accessToken, `/api/updates/${suffix}`);
 }
 
-export async function updatesPostRequest(accessToken: string, updateText: string): Promise<Response> {
+export async function updatesPostRequest(
+  accessToken: string,
+  updateText: string,
+  reportData?: Record<string, string | number | boolean>
+): Promise<Response> {
   return fetchWithAutoRefresh(accessToken, "/api/updates/", {
     method: "POST",
     headers: { "Content-Type": "application/json" },
-    body: JSON.stringify({ update_text: updateText }),
+    body: JSON.stringify({ update_text: updateText, report_data: reportData }),
   });
 }
 

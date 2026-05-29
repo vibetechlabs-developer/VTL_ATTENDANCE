@@ -86,6 +86,7 @@ class EmployeeListSerializer(serializers.ModelSerializer):
     status = serializers.SerializerMethodField()
     reportsTo = serializers.SerializerMethodField()
     joiningDate = serializers.DateTimeField(source='created_at', format='%Y-%m-%d', read_only=True)
+    isWfh = serializers.BooleanField(source='is_wfh', read_only=True)
 
     class Meta:
         model = Employee
@@ -101,6 +102,7 @@ class EmployeeListSerializer(serializers.ModelSerializer):
             'faceStatus',
             'avatar',
             'status',
+            'isWfh',
         ]
 
     def get_empId(self, obj):
@@ -136,6 +138,7 @@ class EmployeeCreateSerializer(serializers.Serializer):
         required=False,
         allow_empty=True,
     )
+    is_wfh = serializers.BooleanField(required=False, default=False)
 
     def validate_name(self, value):
         name = (value or "").strip()
@@ -187,6 +190,7 @@ class EmployeeCreateSerializer(serializers.Serializer):
             name=validated_data['name'],
             department=validated_data['department'],
             phone=validated_data.get('phone', '').strip(),
+            is_wfh=bool(validated_data.get('is_wfh', False)),
         )
         _apply_managers(
             employee,
@@ -212,6 +216,7 @@ class EmployeeUpdateSerializer(serializers.Serializer):
         required=False,
         allow_empty=True,
     )
+    is_wfh = serializers.BooleanField(required=False)
 
     def update(self, instance, validated_data):
         user = instance.user
@@ -231,6 +236,8 @@ class EmployeeUpdateSerializer(serializers.Serializer):
             instance.department = validated_data['department'].strip()
         if 'phone' in validated_data:
             instance.phone = validated_data['phone'].strip()
+        if 'is_wfh' in validated_data:
+            instance.is_wfh = bool(validated_data['is_wfh'])
 
         has_me_ids = 'manager_employee_ids' in validated_data
         has_me = 'manager_employee_id' in validated_data

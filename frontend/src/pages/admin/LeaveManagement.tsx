@@ -21,7 +21,10 @@ export default function LeaveManagement() {
     if (res.ok) setItems(await res.json());
   };
 
-  useEffect(() => { void load(); }, [accessToken]);
+  useEffect(() => {
+    void load();
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [accessToken]);
 
   const grouped = useMemo(() => {
     const g: Record<string, any[]> = { pending: [], approved: [], rejected: [] };
