@@ -22,7 +22,12 @@ import { safeGetItem, safeSetItem } from "@/utils/storageSafe";
 import { toast } from "sonner";
 import { format, subDays, startOfWeek, endOfWeek, isWithinInterval, parseISO } from "date-fns";
 import { formatTimestampMs, parseApiDate } from "@/utils/safeDate";
-import { useAutoIdleBreak } from "@/hooks/useAutoIdleBreak";
+import { bumpGlobalIdleActivity, clearGlobalAutoIdleFlag } from "@/utils/idleActivity";
+import {
+  applyAttendanceSession,
+  isOnCallFromSession,
+  type AttendanceSessionBody,
+} from "@/utils/attendanceSession";
 import { canUseDesktopNotifications, ensureNotificationPermission } from "@/utils/desktopNotify";
 import {
   attendanceBreakEndRequest,
@@ -519,53 +524,6 @@ function punctualityStreakFromLogs(logs: { date: string; check_in: string | null
   return streak;
 }
 
-type AttendanceSessionBody = {
-  active?: boolean;
-  checked_in_at?: string;
-  checked_out_at?: string | null;
-  total_work_minutes?: number;
-  worked_hours?: number;
-  overtime_hours?: number;
-  total_break_minutes?: number;
-  active_break_start?: string | null;
-  breaks?: { start: string; end: string }[];
-  break_auto_resumed?: boolean;
-  active_call_start?: string | null;
-  on_call?: boolean;
-};
-
-function applyAttendanceSession(
-  body: AttendanceSessionBody,
-  hydrateSession: ReturnType<typeof useAttendanceStore.getState>["hydrateSession"],
-  reset: ReturnType<typeof useAttendanceStore.getState>["reset"],
-) {
-  if (!body.checked_in_at) {
-    reset();
-    return;
-  }
-  const breakList = (body.breaks || [])
-    .map((b) => ({ start: parseApiDate(b.start)?.getTime() ?? NaN, end: parseApiDate(b.end)?.getTime() ?? NaN }))
-    .filter((b) => Number.isFinite(b.start) && Number.isFinite(b.end));
-  const breakStartAtMs = body.active_break_start ? parseApiDate(body.active_break_start)?.getTime() ?? null : null;
-  const totalBreakMsFromApi = Math.max(0, (body.total_break_minutes || 0) * 60 * 1000);
-  const checkedOutAtMs = body.checked_out_at ? parseApiDate(body.checked_out_at)?.getTime() ?? null : null;
-  const workedMs = Math.max(
-    0,
-    typeof body.worked_hours === "number"
-      ? body.worked_hours * 60 * 60 * 1000
-      : (body.total_work_minutes || 0) * 60 * 1000,
-  );
-  hydrateSession({
-    status: body.active ? (breakStartAtMs ? "on-break" : "checked-in") : "checked-out",
-    checkInAt: parseApiDate(body.checked_in_at)?.getTime() ?? Date.now(),
-    checkOutAt: checkedOutAtMs,
-    workedMsToday: workedMs,
-    totalBreakMs: totalBreakMsFromApi,
-    breakStartAt: breakStartAtMs,
-    breaks: breakList,
-  });
-}
-
 export default function EmployeeDashboard() {
   const { user, accessToken } = useAuthStore();
   const { addNotification } = useDataStore();
@@ -597,14 +555,6 @@ export default function EmployeeDashboard() {
   const [quickNoteSending, setQuickNoteSending] = useState(false);
   const [onCallMode, setOnCallMode] = useState(false);
 
-  const { clearAutoIdleFlag, bumpActivity } = useAutoIdleBreak({
-    accessToken,
-    status,
-    onCallMode,
-    startBreak,
-    endBreak,
-  });
-
   useEffect(() => {
     const t = setInterval(() => setNow(Date.now()), 1000);
     return () => clearInterval(t);
@@ -621,23 +571,6 @@ export default function EmployeeDashboard() {
   }, [status]);
 
   useEffect(() => {
-    if (status !== "checked-in" || !user?.empId) return;
-    if (!canUseDesktopNotifications() || Notification.permission !== "default") return;
-    const key = `vtl_idle_notify_hint_${user.empId}`;
-    if (safeGetItem(localStorage, key) === "1") return;
-    safeSetItem(localStorage, key, "1");
-    toast("Enable desktop notifications for auto-break alerts (10 min idle).", {
-      duration: 8000,
-      action: {
-        label: "Enable",
-        onClick: () => {
-          void ensureNotificationPermission(true);
-        },
-      },
-    });
-  }, [status, user?.empId]);
-
-  useEffect(() => {
     // First-time hint per employee.
     if (!user?.empId) return;
     const key = `vtl_hint_employee_${user.empId}`;
@@ -652,7 +585,7 @@ export default function EmployeeDashboard() {
     if (!res.ok) return null;
     const body = (await res.json().catch(() => ({}))) as AttendanceSessionBody;
     applyAttendanceSession(body, hydrateSession, reset);
-    setOnCallMode(Boolean(body.on_call || body.active_call_start));
+    setOnCallMode(isOnCallFromSession(body));
     return body;
   }, [accessToken, hydrateSession, reset]);
 
@@ -814,7 +747,7 @@ export default function EmployeeDashboard() {
     setShowVerifyModal(false);
     const serverMs = data?.checkInAt ? new Date(data.checkInAt).getTime() : Date.now();
     setCheckInAt(serverMs);
-    bumpActivity();
+    bumpGlobalIdleActivity();
     void ensureNotificationPermission(true);
   };
 
@@ -830,9 +763,9 @@ export default function EmployeeDashboard() {
         toast.error(body.error || "Could not end break");
         return;
       }
-      clearAutoIdleFlag();
+      clearGlobalAutoIdleFlag();
       endBreak();
-      bumpActivity();
+      bumpGlobalIdleActivity();
       toast.success(body.message || "Break ended");
       return;
     }
@@ -844,7 +777,7 @@ export default function EmployeeDashboard() {
       return;
     }
     const serverStartMs = body.break_start ? new Date(body.break_start).getTime() : Date.now();
-    clearAutoIdleFlag();
+    clearGlobalAutoIdleFlag();
     startBreak(serverStartMs);
     toast.success(body.message || "Break started");
   };
@@ -862,7 +795,7 @@ export default function EmployeeDashboard() {
         return;
       }
       setOnCallMode(false);
-      bumpActivity();
+      bumpGlobalIdleActivity();
       toast.info(body.message || "Call mode ended — idle tracking resumed.");
       return;
     }
@@ -873,7 +806,7 @@ export default function EmployeeDashboard() {
       return;
     }
     setOnCallMode(true);
-    bumpActivity();
+    bumpGlobalIdleActivity();
     toast.success(body.message || "On a call — auto-break paused while you are on the phone.");
   };
 
@@ -1153,12 +1086,12 @@ export default function EmployeeDashboard() {
                 {status === "checked-in" && onCallMode && (
                   <p className="mt-2 text-sm font-medium text-primary-foreground flex items-center gap-1.5">
                     <Phone className="h-4 w-4 shrink-0" />
-                    On a call — auto-break paused (no PC activity needed)
+                    On a call — auto-break paused (PC idle is ignored)
                   </p>
                 )}
                 {status === "on-break" && (
                   <p className="mt-2 text-sm font-medium text-primary-foreground/90">
-                    You are on break — move mouse or keyboard to resume after an auto-break, or tap Resume.
+                    You are on break — use keyboard or mouse anywhere on your PC to resume after an auto-break, or tap Resume.
                   </p>
                 )}
                 {status === "checked-out" && (

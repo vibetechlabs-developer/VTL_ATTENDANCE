@@ -3,6 +3,7 @@ import { SidebarProvider } from "@/components/ui/sidebar";
 import { AppSidebar } from "@/components/AppSidebar";
 import { AppHeader } from "@/components/AppHeader";
 import { GlobalCommandPalette } from "@/components/GlobalCommandPalette";
+import { AutoIdleBreakManager } from "@/components/AutoIdleBreakManager";
 import { SectionErrorBoundary } from "@/components/SectionErrorBoundary";
 import { motion } from "framer-motion";
 
@@ -31,6 +32,7 @@ export default function DashboardLayout() {
 
   return (
     <SidebarProvider defaultOpen>
+      <AutoIdleBreakManager />
       <GlobalCommandPalette />
       <div className="min-h-screen flex w-full bg-background">
         <SectionErrorBoundary section="Menu">
