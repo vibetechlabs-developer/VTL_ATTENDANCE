@@ -1,3 +1,5 @@
+import { geolocationDeniedTips } from "@/utils/geolocation";
+
 export type VerificationError = {
   title: string;
   message: string;
@@ -121,8 +123,22 @@ export function toVerificationError(
   if (/permission denied|geolocation|location permission/i.test(hay)) {
     return {
       title: "Location blocked",
-      message: "This app needs permission to use your location.",
-      tips: ["Allow location access when the browser asks", "Check site permissions in browser settings"],
+      message:
+        "Check-in needs GPS on your phone. This is set per device — not your employee account. Other staff may have already allowed it.",
+      tips: geolocationDeniedTips(),
+    };
+  }
+
+  if (/position unavailable|unavailable/i.test(hay) && context === "location") {
+    return {
+      title: "GPS unavailable",
+      message: "Your phone could not get a GPS fix. Turn on location services and try again.",
+      tips: [
+        "Enable Location/GPS in phone settings",
+        "Move near a window or step outside briefly",
+        "Disable battery saver for Chrome/Safari",
+        "Tap Retry scan",
+      ],
     };
   }
 
@@ -192,6 +208,7 @@ export function inferApiErrorContext(
   rawText?: string
 ): "face" | "location" {
   const code = (body.code || "").toLowerCase();
+  if (code === "outside_office") return "location";
   if (code.startsWith("face_")) return "face";
   const hay = `${body.error || ""} ${rawText || ""}`.toLowerCase();
   if (/face|match|detect|verify|registered profile|registered face/.test(hay)) return "face";
@@ -213,6 +230,9 @@ export function parseVerificationApiError(
   step: "face" | "location"
 ): VerificationError {
   const code = (body.code || "").toLowerCase();
+  if (code === "face_not_registered") {
+    return toVerificationError("register face first", mode, "face");
+  }
   if (code === "face_mismatch") {
     return {
       title: "Face not recognized",
@@ -237,6 +257,17 @@ export function parseVerificationApiError(
         "Do not stop the Django server between attempts",
         "If this repeats, restart runserver once and re-register your face",
       ],
+    };
+  }
+  if (code === "outside_office") {
+    const dist =
+      body.distance_meters != null && Number.isFinite(body.distance_meters)
+        ? ` You are about ${Math.round(body.distance_meters)} m from the office.`
+        : "";
+    return {
+      title: "Outside office area",
+      message: `You need to be within the allowed check-in radius to continue.${dist}`,
+      tips: ["Move closer to the office location", "Wait a moment for GPS to update, then tap Retry scan"],
     };
   }
   if (code === "invalid_image") {

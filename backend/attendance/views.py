@@ -283,8 +283,12 @@ class CheckInView(APIView):
         in_range, distance_m, location_error = validate_office_radius(lat, lng)
         if (not relaxed) and (not is_wfh) and (not in_range):
             return Response(
-                {'error': location_error, 'distance_meters': int(distance_m) if distance_m is not None else None},
-                status=400
+                {
+                    'error': location_error,
+                    'code': 'outside_office',
+                    'distance_meters': int(distance_m) if distance_m is not None else None,
+                },
+                status=400,
             )
 
         # 2. Aaje active check-in che? (open session = check_in set, check_out empty)
@@ -358,8 +362,12 @@ class CheckOutView(APIView):
         # Default policy: office radius mandatory. Exception: outside client meeting with note.
         if (not relaxed) and (not is_wfh) and (not allow_outside_meeting) and (not in_range):
             return Response(
-                {'error': location_error, 'distance_meters': int(distance_m) if distance_m is not None else None},
-                status=400
+                {
+                    'error': location_error,
+                    'code': 'outside_office',
+                    'distance_meters': int(distance_m) if distance_m is not None else None,
+                },
+                status=400,
             )
         if allow_outside_meeting and not outside_note:
             return Response(

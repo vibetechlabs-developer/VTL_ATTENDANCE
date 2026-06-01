@@ -14,6 +14,18 @@ import {
     type VerificationError,
 } from "@/utils/verificationErrors";
 import { captureFaceDataUrl, drawFaceFrame, MIRROR_CAMERA_PREVIEW } from "@/utils/faceCapture";
+import {
+    geolocationErrorMessage,
+    getCurrentLocation,
+    queryGeolocationPermission,
+    validateCoordinates,
+    warmupGeolocation,
+} from "@/utils/geolocation";
+import {
+    AttendanceSubmitError,
+    isFaceVerificationError,
+    isLocationVerificationError,
+} from "@/utils/checkInErrors";
 
 interface CheckInModalProps {
     open: boolean;
@@ -32,6 +44,9 @@ export function CheckInModal({ open, onOpenChange, onVerified, mode = "check-in"
     const [submitting, setSubmitting] = useState(false);
     const [verificationError, setVerificationError] = useState<VerificationError | null>(null);
     const startedRef = useRef(false);
+    const lastImageRef = useRef<string | null>(null);
+    const [locationHint, setLocationHint] = useState<string | null>(null);
+    const [coordsPreview, setCoordsPreview] = useState<string | null>(null);
     /** Face scan hold duration (ms) — keeps camera steady before capture. */
     const SCAN_DURATION_MS = 4000;
 
@@ -40,6 +55,7 @@ export function CheckInModal({ open, onOpenChange, onVerified, mode = "check-in"
     const streamRef = useRef<MediaStream | null>(null);
 
     const accessToken = useAuthStore((s) => s.accessToken);
+    const isWfh = useAuthStore((s) => s.user?.isWfh);
     const logout = useAuthStore((s) => s.logout);
 
     const cameraInitError = (err: unknown): VerificationError => {
@@ -198,10 +214,16 @@ export function CheckInModal({ open, onOpenChange, onVerified, mode = "check-in"
             setCameraReady(false);
             setSubmitting(false);
             setVerificationError(null);
+            setLocationHint(null);
+            setCoordsPreview(null);
+            lastImageRef.current = null;
             startedRef.current = false;
         } else {
             setStep(null);
             setCameraReady(false);
+            setLocationHint(null);
+            setCoordsPreview(null);
+            lastImageRef.current = null;
             if (streamRef.current) {
                 streamRef.current.getTracks().forEach((t) => t.stop());
                 streamRef.current = null;
@@ -211,6 +233,18 @@ export function CheckInModal({ open, onOpenChange, onVerified, mode = "check-in"
 
     useEffect(() => {
         if (!open) return;
+        warmupGeolocation();
+        void queryGeolocationPermission().then((perm) => {
+            if (perm === "denied") {
+                setLocationHint(
+                    "Location is blocked on this phone. Allow it in Chrome/Safari site settings, then tap Retry scan.",
+                );
+            } else if (perm === "prompt") {
+                setLocationHint("When the browser asks, tap Allow for location — required for check-in.");
+            } else {
+                setLocationHint(null);
+            }
+        });
         const startCamera = async () => {
             // Auto-retry startup a few times to avoid manual "Retry scan" on first open.
             let ok = false;
@@ -254,15 +288,95 @@ export function CheckInModal({ open, onOpenChange, onVerified, mode = "check-in"
             requestAnimationFrame(tick);
         });
 
-    const getLocation = (): Promise<{ latitude: number; longitude: number }> =>
-        new Promise((resolve, reject) => {
-            if (!navigator.geolocation) return reject(new Error("Geolocation not supported"));
-            navigator.geolocation.getCurrentPosition(
-                (pos) => resolve({ latitude: pos.coords.latitude, longitude: pos.coords.longitude }),
-                (err) => reject(err),
-                { enableHighAccuracy: true, timeout: 15000 }
-            );
+    const fetchLocationWithFallback = async (): Promise<{ latitude: number; longitude: number }> => {
+        try {
+            return await getCurrentLocation({ highAccuracy: true });
+        } catch (first) {
+            const geo = first as GeolocationPositionError;
+            if (geo?.code === 2 || geo?.code === 3) {
+                return await getCurrentLocation({ highAccuracy: false });
+            }
+            throw first;
+        }
+    };
+
+    const submitAttendance = async (
+        image: string,
+        latitude: number,
+        longitude: number,
+    ) => {
+        if (!accessToken) throw new Error("Session expired");
+        setLocProgress(72);
+        const res = mode === "check-in"
+            ? await attendanceCheckInRequest(accessToken, { image, latitude, longitude })
+            : await attendanceCheckOutRequest(accessToken, {
+                image,
+                latitude,
+                longitude,
+                allow_outside_meeting: Boolean(checkoutMeta?.allowOutsideMeeting),
+                outside_note: checkoutMeta?.outsideNote || "",
+            });
+        const rawText = await res.clone().text().catch(() => "");
+        const body = (await res.json().catch(() => {
+            try {
+                return rawText ? JSON.parse(rawText) : {};
+            } catch {
+                return {};
+            }
+        })) as {
+            error?: string;
+            message?: string;
+            check_in?: string;
+            check_out?: string;
+            total_hours?: number;
+            overtime_hours?: number;
+            detail?: string;
+            distance_meters?: number | null;
+            face_distance?: number | null;
+            threshold?: number | null;
+            code?: string;
+        };
+        if (!res.ok) {
+            const errStep = inferApiErrorContext(body, rawText);
+            const errInfo = parseVerificationApiError(res.status, body, rawText, mode, errStep);
+            const sessionGone = errInfo.title === "Session expired";
+            if (sessionGone) {
+                toast.error(`${errInfo.title}. ${errInfo.message}`);
+                await logout();
+                onOpenChange(false);
+                window.location.href = "/login";
+                throw new AttendanceSubmitError(errInfo);
+            }
+            if (isFaceVerificationError(errInfo)) {
+                lastImageRef.current = null;
+            }
+            throw new AttendanceSubmitError(errInfo);
+        }
+        setFaceProgress(100);
+        setLocProgress(100);
+        setStep("done");
+        toast.success(body.message || (mode === "check-in" ? "Check-in successful" : "Check-out successful"), {
+            duration: 2200,
         });
+        setTimeout(() => {
+            onVerified({
+                checkInAt: body.check_in,
+                checkOutAt: body.check_out,
+                totalHours: Number(body.total_hours ?? 0),
+                overtimeHours: Number(body.overtime_hours ?? 0),
+            });
+        }, 1100);
+    };
+
+    const runLocationStep = async (image: string) => {
+        setStep("location");
+        setLocProgress(18);
+        const { latitude, longitude } = await fetchLocationWithFallback();
+        validateCoordinates(latitude, longitude);
+        setCoordsPreview(`${latitude.toFixed(4)}°, ${longitude.toFixed(4)}°`);
+        setLocProgress(48);
+        await submitAttendance(image, latitude, longitude);
+    };
 
     const captureImage = async (): Promise<string> => {
         const video = videoRef.current;
@@ -345,89 +459,25 @@ export function CheckInModal({ open, onOpenChange, onVerified, mode = "check-in"
                 }
             }
             if (!image) throw (lastErr || new Error("Camera stream not ready"));
+            lastImageRef.current = image;
             setFaceProgress(55);
-            setStep("location");
-            const { latitude, longitude } = await getLocation();
-            setLocProgress(55);
-            const res = mode === "check-in"
-                ? await attendanceCheckInRequest(accessToken, { image, latitude, longitude })
-                : await attendanceCheckOutRequest(accessToken, {
-                    image,
-                    latitude,
-                    longitude,
-                    allow_outside_meeting: Boolean(checkoutMeta?.allowOutsideMeeting),
-                    outside_note: checkoutMeta?.outsideNote || "",
-                });
-            const rawText = await res.clone().text().catch(() => "");
-            const body = (await res.json().catch(() => {
-                try {
-                    return rawText ? JSON.parse(rawText) : {};
-                } catch {
-                    return {};
-                }
-            })) as {
-                error?: string;
-                message?: string;
-                check_in?: string;
-                check_out?: string;
-                total_hours?: number;
-                overtime_hours?: number;
-                detail?: string;
-                distance_meters?: number | null;
-                face_distance?: number | null;
-                threshold?: number | null;
-            };
-            if (!res.ok) {
-                const errStep = inferApiErrorContext(
-                    body as { error?: string; code?: string },
-                    rawText
-                );
-                const errInfo = parseVerificationApiError(res.status, body, rawText, mode, errStep);
-                setVerificationError(errInfo);
-                const sessionGone = errInfo.title === "Session expired";
-                if (sessionGone) {
-                    toast.error(`${errInfo.title}. ${errInfo.message}`);
-                    await logout();
-                    onOpenChange(false);
-                    window.location.href = "/login";
-                    return;
-                }
-                const isLocationIssue =
-                    errInfo.title === "Outside office area" || errInfo.title === "Location timed out";
-                setStep(isLocationIssue ? "location" : "face");
-                return;
-            }
-            setFaceProgress(100);
-            setLocProgress(100);
-            setStep("done");
-            toast.success(body.message || (mode === "check-in" ? "Check-in successful" : "Check-out successful"), {
-                duration: 2200,
-            });
-            setTimeout(() => {
-                onVerified({
-                    checkInAt: body.check_in,
-                    checkOutAt: body.check_out,
-                    totalHours: Number(body.total_hours ?? 0),
-                    overtimeHours: Number(body.overtime_hours ?? 0),
-                });
-            }, 1100);
+            await runLocationStep(image);
         } catch (e: unknown) {
-            const geo = e as GeolocationPositionError;
-            const ctx = step === "location" ? "location" : "face";
-            let errInfo: VerificationError;
-            if (geo?.code === 3) {
-                errInfo = toVerificationError("Timeout expired", mode, "location");
-            } else if (geo?.code === 1) {
-                errInfo = toVerificationError("location permission denied", mode, "location");
+            if (e instanceof AttendanceSubmitError) {
+                setVerificationError(e.errInfo);
+                setStep(isLocationVerificationError(e.errInfo) ? "location" : "face");
             } else {
+                const geo = e as GeolocationPositionError;
                 const msg =
-                    typeof (e as { message?: unknown })?.message === "string"
-                        ? (e as { message: string }).message
-                        : "";
-                errInfo = toVerificationError(msg, mode, ctx);
+                    geo?.code != null
+                        ? geolocationErrorMessage(geo.code)
+                        : typeof (e as { message?: unknown })?.message === "string"
+                          ? (e as { message: string }).message
+                          : "";
+                const errInfo = toVerificationError(msg, mode, "location");
+                setVerificationError(errInfo);
+                setStep("location");
             }
-            setVerificationError(errInfo);
-            setStep(ctx === "location" ? "location" : "face");
         } finally {
             setSubmitting(false);
             startedRef.current = false;
@@ -436,10 +486,44 @@ export function CheckInModal({ open, onOpenChange, onVerified, mode = "check-in"
 
     const handleRetryScan = async () => {
         if (submitting) return;
+        const retryLocationOnly = Boolean(
+            lastImageRef.current && isLocationVerificationError(verificationError),
+        );
         startedRef.current = false;
         setVerificationError(null);
+        warmupGeolocation();
+
+        if (retryLocationOnly && lastImageRef.current) {
+            setSubmitting(true);
+            setStep("location");
+            setLocProgress(8);
+            try {
+                await runLocationStep(lastImageRef.current);
+            } catch (e: unknown) {
+                if (e instanceof AttendanceSubmitError) {
+                    setVerificationError(e.errInfo);
+                    setStep(isLocationVerificationError(e.errInfo) ? "location" : "face");
+                } else {
+                    const geo = e as GeolocationPositionError;
+                    const msg =
+                        geo?.code != null
+                            ? geolocationErrorMessage(geo.code)
+                            : typeof (e as { message?: unknown })?.message === "string"
+                              ? (e as { message: string }).message
+                              : "location error";
+                    setVerificationError(toVerificationError(msg, mode, "location"));
+                    setStep("location");
+                }
+            } finally {
+                setSubmitting(false);
+                startedRef.current = false;
+            }
+            return;
+        }
+
         setFaceProgress(0);
         setLocProgress(0);
+        setCoordsPreview(null);
         setStep("face");
         const ready = await restartCamera();
         if (!ready) {
@@ -511,6 +595,17 @@ export function CheckInModal({ open, onOpenChange, onVerified, mode = "check-in"
                             </div>
 
                             <AnimatePresence>{verificationAlert}</AnimatePresence>
+
+                            {locationHint && !verificationError ? (
+                                <p className="text-xs text-amber-800 dark:text-amber-200 bg-amber-500/10 border border-amber-500/25 rounded-lg px-3 py-2 mx-auto max-w-sm">
+                                    {locationHint}
+                                </p>
+                            ) : null}
+                            {isWfh ? (
+                                <p className="text-xs text-muted-foreground max-w-sm mx-auto">
+                                    WFH: office radius is not required, but location permission is still needed on your phone.
+                                </p>
+                            ) : null}
 
                             <div className="relative mx-auto w-52 h-52 sm:w-56 sm:h-56">
                                 <div className="absolute inset-0 rounded-full login-verify-ring" />
@@ -588,7 +683,11 @@ export function CheckInModal({ open, onOpenChange, onVerified, mode = "check-in"
                         >
                             <div className="space-y-1">
                                 <h2 className="login-welcome text-2xl">Location Check</h2>
-                                <p className="login-welcome-sub">Ensuring you are inside the active radius.</p>
+                                <p className="login-welcome-sub">
+                                    {isWfh
+                                        ? "Confirming GPS on your device (office radius not required for WFH)."
+                                        : "Ensuring you are inside the active office radius."}
+                                </p>
                             </div>
 
                             <AnimatePresence>{verificationAlert}</AnimatePresence>
@@ -621,11 +720,11 @@ export function CheckInModal({ open, onOpenChange, onVerified, mode = "check-in"
                                         ? "Fetching location & checking office radius..."
                                         : "Waiting for location permission..."}
                                 </p>
-                                {locProgress >= 30 && locProgress < 100 && (
+                                {coordsPreview && locProgress >= 30 && locProgress < 100 ? (
                                     <motion.p initial={{ opacity: 0 }} animate={{ opacity: 1 }} className="text-[11px] font-mono login-welcome-sub">
-                                        23.0225° N, 72.5714° E
+                                        {coordsPreview}
                                     </motion.p>
-                                )}
+                                ) : null}
                             </div>
                         </motion.div>
                     )}

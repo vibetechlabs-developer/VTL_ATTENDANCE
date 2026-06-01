@@ -51,6 +51,8 @@ class GeofencingTests(TestCase):
 
 from unittest.mock import patch
 
+from rest_framework.response import Response
+
 class AttendanceAPITests(TestCase):
     def setUp(self):
         self.client = APIClient()
@@ -167,3 +169,68 @@ class BreakAPITests(TestCase):
         response_end = self.client.post("/api/attendance/call/end/")
         self.assertEqual(response_end.status_code, status.HTTP_200_OK)
         self.assertEqual(CallLog.objects.filter(attendance=self.log, call_end__isnull=True).count(), 0)
+
+
+class CheckInValidationTests(TestCase):
+    def setUp(self):
+        self.client = APIClient()
+        self.user = User.objects.create_user(
+            email="office@vtl.local",
+            username="officeuser",
+            password="securePassword123",
+            role="employee",
+        )
+        self.employee = Employee.objects.create(
+            user=self.user,
+            name="Office User",
+            department="Ops",
+            phone="9876500000",
+            face_encoding=[0.2] * 128,
+        )
+        OfficeLocation.objects.create(
+            name="HQ",
+            latitude=23.0225,
+            longitude=72.5714,
+            radius_meters=500,
+        )
+
+    def test_check_in_missing_fields(self):
+        self.client.force_authenticate(user=self.user)
+        res = self.client.post("/api/attendance/check-in/", {})
+        self.assertEqual(res.status_code, status.HTTP_400_BAD_REQUEST)
+
+    @patch("attendance.views.match_face_from_image")
+    @patch("attendance.views.decode_base64_image")
+    def test_check_in_outside_office_returns_code(self, mock_decode, mock_match):
+        mock_decode.return_value = None
+        mock_match.return_value = (self.employee, 0.1)
+        self.client.force_authenticate(user=self.user)
+        res = self.client.post(
+            "/api/attendance/check-in/",
+            {
+                "latitude": 19.0760,
+                "longitude": 72.8777,
+                "image": "data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAQAAAC1HAwCAAAAC0lEQVR42mNkYAAAAAYAAjCB0C8AAAAASUVORK5CYII=",
+            },
+        )
+        self.assertEqual(res.status_code, status.HTTP_400_BAD_REQUEST)
+        self.assertEqual(res.data.get("code"), "outside_office")
+        self.assertIn("distance_meters", res.data)
+
+    @patch("attendance.views._verify_face_match")
+    def test_check_in_face_not_registered_response(self, mock_verify):
+        mock_verify.return_value = Response(
+            {"error": "Face is not registered", "code": "face_not_registered"},
+            status=status.HTTP_400_BAD_REQUEST,
+        )
+        self.client.force_authenticate(user=self.user)
+        res = self.client.post(
+            "/api/attendance/check-in/",
+            {
+                "latitude": 23.0225,
+                "longitude": 72.5714,
+                "image": "data:image/png;base64,abc",
+            },
+        )
+        self.assertEqual(res.status_code, status.HTTP_400_BAD_REQUEST)
+        self.assertEqual(res.data.get("code"), "face_not_registered")
