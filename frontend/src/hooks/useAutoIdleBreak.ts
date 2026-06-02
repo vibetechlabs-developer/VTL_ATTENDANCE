@@ -19,6 +19,8 @@ import {
 /** No keyboard/mouse activity anywhere on the PC → auto break after this duration. */
 export const AUTO_IDLE_BREAK_MS = 10 * 60 * 1000;
 const IDLE_POLL_MS = 15_000;
+/** Prevent repeated auto-break loops creating tiny break entries. */
+const AUTO_BREAK_REARM_MS = 30 * 60 * 1000;
 
 type AttendanceStatus = "idle" | "checked-in" | "on-break" | "checked-out";
 
@@ -41,6 +43,7 @@ export function useAutoIdleBreak({
 }: UseAutoIdleBreakOptions) {
   const lastActivityAtRef = useRef(Date.now());
   const autoIdleBreakActiveRef = useRef(false);
+  const lastAutoBreakEndAtRef = useRef<number>(0);
   const onCallModeRef = useRef(onCallMode);
   const statusRef = useRef(status);
   const trackingModeRef = useRef<IdleTrackingMode>("off");
@@ -69,6 +72,12 @@ export function useAutoIdleBreak({
       if (onCallModeRef.current) return;
       if (autoIdleBreakActiveRef.current) return;
       if (trackingModeRef.current === "focus-safe" && isWorkingInAnotherApp()) return;
+      const idleMs = Date.now() - lastActivityAtRef.current;
+      if (idleMs < AUTO_IDLE_BREAK_MS) return;
+      if (lastAutoBreakEndAtRef.current) {
+        const sinceLastAutoBreakEnd = Date.now() - lastAutoBreakEndAtRef.current;
+        if (sinceLastAutoBreakEnd < AUTO_BREAK_REARM_MS) return;
+      }
 
       const res = await attendanceBreakStartRequest(token);
       if (!res.ok) return;
@@ -90,6 +99,7 @@ export function useAutoIdleBreak({
       const res = await attendanceBreakEndRequest(token);
       if (!res.ok) return;
       autoIdleBreakActiveRef.current = false;
+      lastAutoBreakEndAtRef.current = Date.now();
       endBreak();
       showDesktopNotification(
         "Back on the clock",
@@ -113,6 +123,7 @@ export function useAutoIdleBreak({
     const onGlobalActivity = () => markActive();
     const onClearAutoFlag = () => {
       autoIdleBreakActiveRef.current = false;
+      lastAutoBreakEndAtRef.current = Date.now();
     };
 
     const stopSystemDetector = () => {
