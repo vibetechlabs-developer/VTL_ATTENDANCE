@@ -11,6 +11,7 @@ from .views import (
     AdminAttendanceOverviewView,
     AdminForceCheckOutView,
     AdminEmployeeAttendanceHistoryView,
+    TaskInterruptionLogViewSet,
 )
 
 urlpatterns = [

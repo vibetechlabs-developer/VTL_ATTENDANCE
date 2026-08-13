@@ -233,12 +233,212 @@ class DailyUpdateView(APIView):
 
     def get(self, request):
         date_filter = request.query_params.get('date')
-        all_flag = request.query_params.get('all') == '1'
+        employee_id = request.query_params.get('employee_id')
+        all_flag = str(request.query_params.get('all', '')).lower() in ['1', 'true', 'yes']
+
         if all_flag and request.user.role in ['admin', 'manager', 'hr']:
             updates = DailyUpdate.objects.select_related('employee__user').all().order_by('-created_at')
         else:
-            updates = DailyUpdate.objects.filter(employee=request.user.employee).select_related('employee__user').order_by('-created_at')
-        if date_filter:
+            employee = get_or_create_employee(request.user)
+            if not employee:
+                return Response([])
+            updates = DailyUpdate.objects.filter(employee=employee).select_related('employee__user').order_by('-created_at')
+
+        if employee_id and request.user.role in ['admin', 'manager', 'hr']:
+            updates = updates.filter(employee_id=employee_id)
+
+        if date_filter and str(date_filter).lower() not in ['all', '']:
             updates = updates.filter(date=date_filter)
+
         serializer = DailyUpdateSerializer(updates, many=True)
         return Response(serializer.data)
+
+
+from datetime import timedelta
+from rest_framework import viewsets, permissions, serializers, exceptions
+from rest_framework.decorators import action
+from .models import Task
+from .serializers import TaskSerializer
+
+from users.utils import get_or_create_employee
+from users.models import Employee
+from django.db.models import Q
+
+
+
+class TaskViewSet(viewsets.ModelViewSet):
+    permission_classes = [permissions.IsAuthenticated]
+    serializer_class = TaskSerializer
+
+    def get_queryset(self):
+        user = self.request.user
+        emp = get_or_create_employee(user)
+        queryset = Task.objects.select_related('assigned_to', 'assigned_by').all()
+
+        scope = self.request.query_params.get('scope')
+        if scope == 'mine' and emp:
+            queryset = queryset.filter(assigned_to=emp)
+        elif scope == 'assigned_by_me':
+            queryset = queryset.filter(assigned_by=user)
+        elif user.role not in ['admin', 'manager', 'hr'] and not user.is_superuser:
+            # Normal employees and interns only see tasks assigned to them
+            if emp:
+                queryset = queryset.filter(assigned_to=emp)
+            else:
+                queryset = Task.objects.none()
+        elif user.role in ['manager', 'hr'] and not user.is_superuser and user.role != 'admin':
+            # Managers see tasks assigned to them, created by them, or assigned to employees reporting to them
+            managed_emps = Employee.objects.filter(Q(manager=user) | Q(managers=user))
+            queryset = queryset.filter(Q(assigned_to=emp) | Q(assigned_by=user) | Q(assigned_to__in=managed_emps))
+
+        # Status filter
+        status_param = self.request.query_params.get('status')
+        if status_param:
+            queryset = queryset.filter(status=status_param)
+
+        # Overdue filter
+        overdue_param = self.request.query_params.get('overdue')
+        if overdue_param == '1':
+            queryset = queryset.filter(due_datetime__lt=timezone.now()).exclude(status__in=['completed', 'reviewed', 'cancelled'])
+
+        return queryset.distinct()
+
+    def perform_create(self, serializer):
+        user = self.request.user
+
+        # Employees and Interns CANNOT assign tasks
+        if user.role in ['employee', 'intern'] and not user.is_staff and not user.is_superuser:
+            raise exceptions.PermissionDenied("Employees and Interns cannot assign tasks.")
+
+        assigned_to_id = self.request.data.get('assigned_to')
+        if not assigned_to_id:
+            raise serializers.ValidationError({'assigned_to': 'Employee ID is required.'})
+
+        target_emp = Employee.objects.filter(id=assigned_to_id).first()
+        if not target_emp:
+            raise serializers.ValidationError({'assigned_to': 'Selected employee does not exist.'})
+
+        # Super Admin / Admin can assign to anyone
+        if user.role == 'admin' or user.is_superuser:
+            pass
+        elif user.role in ['manager', 'hr']:
+            # Managers can only assign to employees or interns reporting to them
+            is_subordinate = (
+                target_emp.manager == user or
+                user in target_emp.managers.all()
+            )
+            if not is_subordinate:
+                raise exceptions.PermissionDenied("Managers can only assign tasks to employees or interns reporting to them.")
+        else:
+            raise exceptions.PermissionDenied("You do not have permission to assign tasks.")
+
+        due_datetime_raw = self.request.data.get('due_datetime')
+        extra_kwargs = {'assigned_by': user}
+        if due_datetime_raw:
+            if isinstance(due_datetime_raw, str):
+                from django.utils.dateparse import parse_datetime
+                parsed_dt = parse_datetime(due_datetime_raw)
+                if parsed_dt:
+                    extra_kwargs['due_datetime'] = parsed_dt
+            else:
+                extra_kwargs['due_datetime'] = due_datetime_raw
+        else:
+            extra_kwargs['due_datetime'] = timezone.now() + timedelta(days=7)
+
+        task = serializer.save(**extra_kwargs)
+
+        # Create notification for assignee
+        try:
+            from users.models import AppNotification
+            AppNotification.objects.create(
+                user=task.assigned_to.user,
+                title="Task Assigned",
+                body=f"You have been assigned a task: {task.title}",
+                type="info"
+            )
+        except Exception:
+            pass
+
+    def perform_update(self, serializer):
+        user = self.request.user
+        instance = serializer.instance
+        status_val = self.request.data.get('status')
+
+        # Employee/Intern permission check
+        if user.role in ['employee', 'intern'] and not user.is_staff and not user.is_superuser:
+            emp = get_or_create_employee(user)
+            if not emp or instance.assigned_to != emp:
+                raise exceptions.PermissionDenied("You can only update tasks assigned to you.")
+            
+            # Employees/Interns can only change status to 'in_progress' or 'completed', and update 'completion_notes'
+            allowed_statuses = ['in_progress', 'completed']
+            if status_val and status_val not in allowed_statuses:
+                raise exceptions.PermissionDenied("Employees and Interns can only accept or complete assigned tasks.")
+
+        # Manager permission check
+        elif user.role in ['manager', 'hr'] and not user.is_superuser and user.role != 'admin':
+            is_creator = (instance.assigned_by == user)
+            is_manager_of_assignee = (
+                instance.assigned_to.manager == user or
+                user in instance.assigned_to.managers.all()
+            )
+            if not is_creator and not is_manager_of_assignee:
+                raise exceptions.PermissionDenied("Managers can only update tasks assigned by them or belonging to their team.")
+
+        extra_kwargs = {}
+        if status_val == 'completed' and not instance.completed_at:
+            extra_kwargs['completed_at'] = timezone.now()
+
+        serializer.save(**extra_kwargs)
+
+    def perform_destroy(self, instance):
+        user = self.request.user
+        if user.role in ['employee', 'intern'] and not user.is_staff and not user.is_superuser:
+            raise exceptions.PermissionDenied("Employees and Interns cannot delete tasks.")
+        
+        if user.role in ['manager', 'hr'] and not user.is_superuser and user.role != 'admin':
+            is_creator = (instance.assigned_by == user)
+            is_manager_of_assignee = (
+                instance.assigned_to.manager == user or
+                user in instance.assigned_to.managers.all()
+            )
+            if not is_creator and not is_manager_of_assignee:
+                raise exceptions.PermissionDenied("Managers can only delete tasks created by them or belonging to their team.")
+
+        instance.delete()
+
+    @action(detail=False, methods=['get'])
+    def assignable_employees(self, request):
+        user = request.user
+
+        if user.role == 'admin' or user.is_superuser:
+            # Super Admin can assign tasks to anyone except themselves
+            emps = (
+                Employee.objects
+                .select_related('user')
+                .exclude(user=user)
+            )
+        elif user.role in ['manager', 'hr']:
+            # Managers can assign only to employees or interns reporting to them
+            emps = (
+                Employee.objects
+                .select_related('user')
+                .filter(Q(manager=user) | Q(managers=user))
+                .exclude(user=user)
+                .distinct()
+            )
+        else:
+            # Regular employees and interns see no assignable users
+            emps = Employee.objects.none()
+
+        data = [
+            {
+                'id': e.id,
+                'name': e.name or e.user.email.split('@')[0],
+                'email': e.user.email,
+                'department': e.department or 'General',
+                'role': e.user.role,
+            }
+            for e in emps
+        ]
+        return Response(data)

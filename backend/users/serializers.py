@@ -60,6 +60,9 @@ def _apply_managers(employee, manager_employee_ids=None, manager_user=None, lega
     employee.managers.set(manager_users)
     employee.manager = manager_users[0] if manager_users else None
 from attendance.face_utils import is_valid_stored_encoding
+from leaves.models import LeaveBalance
+from users.services.email import send_employee_welcome_email
+from users.utils import format_employee_id
 
 class LoginSerializer(serializers.Serializer):
     email = serializers.EmailField()
@@ -112,7 +115,7 @@ class EmployeeListSerializer(serializers.ModelSerializer):
         return all_roles(obj.user)
 
     def get_empId(self, obj):
-        return f"VTL-{str(obj.pk).zfill(3)}"
+        return format_employee_id(obj)
 
     def get_avatar(self, obj):
         request = self.context.get('request')
@@ -165,11 +168,18 @@ class EmployeeCreateSerializer(serializers.Serializer):
             raise serializers.ValidationError("This email is already in use.")
         return email
 
+    def validate_phone(self, value):
+        if not value:
+            return ""
+        phone = ''.join(c for c in (value or '') if c.isdigit())
+        if phone and len(phone) < 10:
+            raise serializers.ValidationError('Phone number must contain at least 10 digits.')
+        return phone
+
     def validate_department(self, value):
         dept = (value or "").strip()
-        allowed = {"Sales", "HR", "Tech"}
-        if dept not in allowed:
-            raise serializers.ValidationError("Department must be Sales, HR, or Tech.")
+        if not dept:
+            raise serializers.ValidationError("Department is required.")
         return dept
 
     def validate_password(self, value):
@@ -222,7 +232,9 @@ class EmployeeCreateSerializer(serializers.Serializer):
             legacy_manager_employee_id=validated_data.get('manager_employee_id'),
         )
         employee.save()
-        return employee, temp_password
+        LeaveBalance.objects.get_or_create(employee=employee)
+        email_sent = send_employee_welcome_email(employee, temp_password)
+        return employee, temp_password, email_sent
 
 
 class EmployeeUpdateSerializer(serializers.Serializer):

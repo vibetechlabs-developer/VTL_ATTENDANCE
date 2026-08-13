@@ -1,8 +1,10 @@
 import { NavLink, useLocation, useNavigate } from "react-router-dom";
 import type { LucideIcon } from "lucide-react";
 import {
-  LayoutDashboard, Users, Clock, CalendarDays, MessageSquare,
-  ShieldCheck, FileClock, LogOut, CheckCircle2, BarChart3, PieChart,
+  LayoutDashboard, Users, Clock, CalendarDays, MessageSquare, CheckSquare,
+  ShieldCheck, FileClock, LogOut, CheckCircle2, BarChart3, PieChart, Briefcase, CalendarCheck, Target,
+  HelpCircle, FileText, FileCode, UserCheck, History, GraduationCap, DoorOpen, Banknote, Settings2,
+
 } from "lucide-react";
 import {
   Sidebar, SidebarContent, SidebarGroup, SidebarGroupContent, SidebarGroupLabel,
@@ -43,7 +45,9 @@ const adminNav: SidebarNavSection[] = [
     items: [
       { title: "User Management", url: "/admin/users", icon: Users },
       { title: "Attendance", url: "/admin/attendance", icon: Clock },
+      { title: "Task Assignments", url: "/tasks", icon: CheckSquare },
       { title: "Leaves", url: "/admin/leaves", icon: CalendarDays },
+      { title: "Change Requests Queue", url: "/admin/change-requests", icon: UserCheck },
       { title: "Leave Usage", url: "/admin/leave-usage", icon: PieChart },
       { title: "Daily Updates", url: "/admin/updates", icon: MessageSquare },
     ],
@@ -63,6 +67,7 @@ const managerNav: SidebarNavSection[] = [
     items: [
       { title: "My Dashboard", url: "/employee", icon: LayoutDashboard, end: true },
       { title: "My Attendance", url: "/employee/attendance", icon: Clock },
+      { title: "Task Assignments", url: "/tasks", icon: CheckSquare },
       { title: "Daily Updates", url: "/employee/updates", icon: MessageSquare },
       { title: "My Leaves", url: "/employee/leaves", icon: CalendarDays },
       { title: "Approvals", url: "/employee/approvals", icon: CheckCircle2 },
@@ -70,7 +75,11 @@ const managerNav: SidebarNavSection[] = [
   },
   {
     group: "Team",
-    items: [{ title: "Team Attendance", url: "/admin/attendance", icon: Users }],
+    items: [
+      { title: "Team Attendance", url: "/admin/attendance", icon: Users },
+      { title: "Task Assignments", url: "/tasks", icon: CheckSquare },
+      { title: "Change Requests Queue", url: "/admin/change-requests", icon: UserCheck },
+    ],
   },
 ];
 
@@ -80,6 +89,7 @@ const hrNav: SidebarNavSection[] = [
     items: [
       { title: "My Dashboard", url: "/employee", icon: LayoutDashboard, end: true },
       { title: "My Attendance", url: "/employee/attendance", icon: Clock },
+      { title: "Task Assignments", url: "/tasks", icon: CheckSquare },
       { title: "Daily Updates", url: "/employee/updates", icon: MessageSquare },
       { title: "My Leaves", url: "/employee/leaves", icon: CalendarDays },
       { title: "Approvals", url: "/employee/approvals", icon: CheckCircle2 },
@@ -87,7 +97,11 @@ const hrNav: SidebarNavSection[] = [
   },
   {
     group: "Team",
-    items: [{ title: "Team Attendance", url: "/admin/attendance", icon: Users }],
+    items: [
+      { title: "Team Attendance", url: "/admin/attendance", icon: Users },
+      { title: "Task Assignments", url: "/tasks", icon: CheckSquare },
+      { title: "Change Requests Queue", url: "/admin/change-requests", icon: UserCheck },
+    ],
   },
 ];
 
@@ -97,6 +111,7 @@ const employeeNav: SidebarNavSection[] = [
     items: [
       { title: "Dashboard", url: "/employee", icon: LayoutDashboard, end: true },
       { title: "Attendance", url: "/employee/attendance", icon: Clock },
+      { title: "Task Assignments", url: "/tasks", icon: CheckSquare },
       { title: "Daily Updates", url: "/employee/updates", icon: MessageSquare },
     ],
   },
@@ -108,6 +123,7 @@ const employeeNav: SidebarNavSection[] = [
     ],
   },
 ];
+
 
 export function AppSidebar() {
   const { state } = useSidebar();
@@ -121,17 +137,118 @@ export function AppSidebar() {
     navigate("/login", { replace: true });
   };
 
+  // New navigation sections
+  const essNav: SidebarNavSection[] = [
+    {
+      group: "Employee Self-Service",
+      items: [
+        { title: "My Change Requests", url: "/my-profile/change-requests", icon: UserCheck },
+        { title: "HR Support Tickets", url: "/tickets", icon: HelpCircle },
+      ],
+    },
+  ];
+
+  const documentNav: SidebarNavSection[] = [
+    {
+      group: "Documents & Letters",
+      items: [
+        { title: "Company Policies", url: "/policies", icon: FileText },
+        { title: "Letter Templates", url: "/letters/templates", icon: FileCode },
+        { title: "Generate Letter", url: "/letters/generate", icon: FileText },
+        { title: "Generated History", url: "/letters/history", icon: History },
+      ],
+    },
+  ];
+
+  const recruitmentNav: SidebarNavSection[] = [
+    {
+      group: "Recruitment",
+      items: [
+        { title: "Jobs", url: "/recruitment/jobs", icon: Briefcase },
+        { title: "Candidates", url: "/recruitment/candidates", icon: Users },
+      ],
+    },
+  ];
+
+  const performanceNav: SidebarNavSection[] = [
+    {
+      group: "Performance",
+      items: [
+        { title: "Cycles", url: "/performance/cycles", icon: CalendarCheck },
+        { title: "Goals", url: "/performance/goals", icon: Target },
+        { title: "Team Appraisals", url: "/performance/team", icon: Users },
+      ],
+    },
+  ];
+
+  const myAppraisalNav: SidebarNavSection[] = [
+    {
+      group: "Performance",
+      items: [
+        { title: "My Appraisal", url: "/performance/my-appraisal", icon: Target },
+      ],
+    },
+  ];
+
+  const trainingNav: SidebarNavSection[] = [
+    {
+      group: "Training & Dev",
+      items: [
+        { title: "Training Programs", url: "/training", icon: GraduationCap },
+      ],
+    },
+  ];
+
+  const exitNav: SidebarNavSection[] = [
+    {
+      group: "Exit",
+      items: [
+        { title: "My Resignation", url: "/resignation", icon: DoorOpen },
+      ],
+    },
+  ];
+
+  const exitAdminNav: SidebarNavSection[] = [
+    {
+      group: "Exit Management",
+      items: [
+        { title: "Exit Admin", url: "/exit/admin", icon: DoorOpen },
+      ],
+    },
+  ];
+
+  // Payroll nav for employees/managers (view-only)
+  const payrollNav: SidebarNavSection[] = [
+    {
+      group: "Payroll",
+      items: [
+        { title: "Salary Slips", url: "/payroll/slips", icon: Banknote },
+      ],
+    },
+  ];
+
+  // Payroll nav for Admin/HR (includes structure management)
+  const payrollHrNav: SidebarNavSection[] = [
+    {
+      group: "Payroll",
+      items: [
+        { title: "Salary Slips", url: "/payroll/slips", icon: Banknote },
+        { title: "Salary Structures", url: "/payroll/salary-structures", icon: Settings2 },
+      ],
+    },
+  ];
+
   let nav: SidebarNavSection[];
   if (userHasRole(user, "admin")) {
-    nav = appendCrmNav(adminNav);
+    nav = appendCrmNav([...adminNav, ...payrollHrNav, ...essNav, ...documentNav, ...recruitmentNav, ...performanceNav, ...trainingNav, ...exitAdminNav]);
   } else if (userHasRole(user, "manager")) {
-    nav = managerNav;
+    nav = [...managerNav, ...payrollNav, ...essNav, ...performanceNav, ...trainingNav, ...exitAdminNav];
   } else if (userHasRole(user, "hr")) {
-    nav = appendCrmNav(hrNav);
+    nav = appendCrmNav([...hrNav, ...payrollHrNav, ...essNav, ...documentNav, ...recruitmentNav, ...trainingNav, ...exitAdminNav]);
   } else if (userHasRole(user, "sales")) {
-    nav = appendCrmNav(employeeNav);
+    nav = appendCrmNav([...employeeNav, ...payrollNav, ...essNav, ...myAppraisalNav, ...trainingNav, ...exitNav]);
   } else {
-    nav = employeeNav;
+    nav = [...employeeNav, ...payrollNav, ...essNav, ...myAppraisalNav, ...trainingNav, ...exitNav];
   }
 
   const isActive = (url: string, end?: boolean) =>

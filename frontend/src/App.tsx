@@ -1,6 +1,6 @@
 import { useEffect } from "react";
 import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
-import { BrowserRouter, Route, Routes } from "react-router-dom";
+import { BrowserRouter, Navigate, Route, Routes } from "react-router-dom";
 import { Toaster as Sonner } from "@/components/ui/sonner";
 import { Toaster } from "@/components/ui/toaster";
 import { TooltipProvider } from "@/components/ui/tooltip";
@@ -36,6 +36,49 @@ import EmployeeUpdates from "./pages/employee/EmployeeUpdates";
 import EmployeeLeaves from "./pages/employee/EmployeeLeaves";
 import EmployeeApprovals from "./pages/employee/EmployeeApprovals";
 
+// Recruitment pages
+import JobsList from "./pages/recruitment/JobsList";
+import JobCreate from "./pages/recruitment/JobCreate";
+import JobEdit from "./pages/recruitment/JobEdit";
+import JobPipeline from "./pages/recruitment/JobPipeline";
+import CandidatesList from "./pages/recruitment/CandidatesList";
+
+// Performance pages
+import CyclesList from "./pages/performance/CyclesList";
+import GoalsBoard from "./pages/performance/GoalsBoard";
+import MyAppraisal from "./pages/performance/MyAppraisal";
+import TeamAppraisals from "./pages/performance/TeamAppraisals";
+
+// ESS pages
+import ProfileChangeRequests from "./pages/ess/ProfileChangeRequests";
+import AdminChangeRequests from "./pages/ess/AdminChangeRequests";
+import TicketsList from "./pages/ess/TicketsList";
+import TicketDetail from "./pages/ess/TicketDetail";
+
+// Documents pages
+import PoliciesList from "./pages/documents/PoliciesList";
+import LetterTemplates from "./pages/documents/LetterTemplates";
+import LetterGenerate from "./pages/documents/LetterGenerate";
+import LetterHistory from "./pages/documents/LetterHistory";
+
+// Training pages
+import TrainingList from "./pages/training/TrainingList";
+import TrainingDetail from "./pages/training/TrainingDetail";
+import TrainingAdmin from "./pages/training/TrainingAdmin";
+
+import TaskManagement from "./pages/tasks/TaskManagement";
+
+// Exit Management pages
+import ResignationPage from "./pages/exit/ResignationPage";
+import ClearanceChecklist from "./pages/exit/ClearanceChecklist";
+import ExitInterviewPage from "./pages/exit/ExitInterviewPage";
+import ExitAdminPage from "./pages/exit/ExitAdminPage";
+
+// Payroll pages
+import PayslipsList from "./pages/payroll/PayslipsList";
+import SalaryStructurePage from "./pages/payroll/SalaryStructurePage";
+
+
 const queryClient = new QueryClient();
 
 const RoleBasedAdminDashboard = () => {
@@ -64,10 +107,31 @@ const App = () => {
               <Route path="/" element={<Index />} />
               <Route path="/login" element={<Login />} />
 
-              {/* Admin/Manager shared routes + HR limited admin access */}
+              {/* Admin/Manager/HR shared routes */}
               <Route element={<ProtectedRoute allow={["admin", "manager", "hr"]} />}>
                 <Route element={<DashboardLayout />}>
                   <Route path="/admin/attendance" element={<AttendanceManagement />} />
+                  <Route path="/admin/change-requests" element={<AdminChangeRequests />} />
+                  <Route path="/recruitment/jobs" element={<JobsList />} />
+                  <Route path="/recruitment/jobs/new" element={<JobCreate />} />
+                  <Route path="/recruitment/jobs/:id/edit" element={<JobEdit />} />
+                  <Route path="/recruitment/jobs/:id/pipeline" element={<JobPipeline />} />
+                  <Route path="/recruitment/openings" element={<JobsList />} />
+                  <Route path="/recruitment/openings/new" element={<JobCreate />} />
+                  <Route path="/recruitment/openings/:id/edit" element={<JobEdit />} />
+                  <Route path="/recruitment/openings/:id/pipeline" element={<JobPipeline />} />
+                  <Route path="/recruitment/candidates" element={<CandidatesList />} />
+                  <Route path="/performance/cycles" element={<CyclesList />} />
+                  <Route path="/performance/goals" element={<GoalsBoard />} />
+                  <Route path="/performance/team" element={<TeamAppraisals />} />
+                  <Route path="/letters/templates" element={<LetterTemplates />} />
+                  <Route path="/letters/generate" element={<LetterGenerate />} />
+                  <Route path="/letters/history" element={<LetterHistory />} />
+                  <Route path="/training/admin" element={<TrainingAdmin />} />
+                  <Route path="/exit/admin" element={<ExitAdminPage />} />
+                  <Route path="/exit/clearance/:resignationId" element={<ClearanceChecklist />} />
+                  <Route path="/exit/interview/:resignationId" element={<ExitInterviewPage />} />
+                  <Route path="/payroll/salary-structures" element={<SalaryStructurePage />} />
                 </Route>
               </Route>
 
@@ -96,14 +160,26 @@ const App = () => {
                 </Route>
               </Route>
 
-              {/* Employee pages (personal flow) */}
+              {/* General Employee / All Roles pages */}
               <Route element={<ProtectedRoute allow={["employee", "manager", "admin", "hr", "sales"]} />}>
                 <Route element={<DashboardLayout />}>
+                  <Route path="/dashboard" element={<Navigate to="/employee" replace />} />
+                  <Route path="/tasks" element={<TaskManagement />} />
                   <Route path="/employee" element={<EmployeeDashboard />} />
+
                   <Route path="/employee/attendance" element={<EmployeeAttendance />} />
                   <Route path="/employee/updates" element={<EmployeeUpdates />} />
                   <Route path="/employee/leaves" element={<EmployeeLeaves />} />
                   <Route path="/employee/approvals" element={<EmployeeApprovals />} />
+                  <Route path="/my-profile/change-requests" element={<ProfileChangeRequests />} />
+                  <Route path="/tickets" element={<TicketsList />} />
+                  <Route path="/tickets/:id" element={<TicketDetail />} />
+                  <Route path="/policies" element={<PoliciesList />} />
+                  <Route path="/payroll/slips" element={<PayslipsList />} />
+                  <Route path="/training" element={<TrainingList />} />
+                  <Route path="/training/:id" element={<TrainingDetail />} />
+                  <Route path="/resignation" element={<ResignationPage />} />
+                  <Route path="/performance/my-appraisal" element={<MyAppraisal />} />
                   <Route path="/profile" element={<Profile />} />
                   <Route path="/preferences" element={<Preferences />} />
                 </Route>

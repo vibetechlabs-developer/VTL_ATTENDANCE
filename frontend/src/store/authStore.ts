@@ -2,11 +2,11 @@ import { create } from "zustand";
 import { createJSONStorage, persist } from "zustand/middleware";
 import { safeGetItem, safeRemoveItem, safeSetItem } from "@/utils/storageSafe";
 
-export type Role = "admin" | "manager" | "employee" | "hr" | "sales";
+export type Role = "admin" | "manager" | "employee" | "hr" | "sales" | "intern";
 
 /** Roles that land on /employee (personal portal) after login. */
 export function roleUsesEmployeePortal(role: Role): boolean {
-  return role === "employee" || role === "hr" || role === "manager" || role === "sales";
+  return role === "employee" || role === "hr" || role === "manager" || role === "sales" || role === "intern";
 }
 
 export function userRoles(user: AuthUser | null): Role[] {

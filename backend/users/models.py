@@ -4,6 +4,7 @@ from django.db import models
 class User(AbstractUser):
     ROLE_CHOICES = [
         ('employee', 'Employee'),
+        ('intern', 'Intern'),
         ('manager', 'Manager'),
         ('hr', 'HR'),
         ('sales', 'Sales'),
@@ -42,6 +43,15 @@ class Employee(models.Model):
     is_wfh = models.BooleanField(default=False)
     face_encoding = models.JSONField(null=True, blank=True)
     profile_photo = models.ImageField(upload_to='photos/', null=True, blank=True)
+    address = models.TextField(blank=True, default='')
+    designation = models.CharField(max_length=100, blank=True, default='')
+    bank_account_number = models.CharField(max_length=50, blank=True, default='')
+    bank_name = models.CharField(max_length=100, blank=True, default='')
+    ifsc_code = models.CharField(max_length=30, blank=True, default='')
+    pan_number = models.CharField(max_length=30, blank=True, default='')
+    aadhaar_number = models.CharField(max_length=30, blank=True, default='')
+    salary = models.CharField(max_length=50, blank=True, default='')
+    grade = models.CharField(max_length=50, blank=True, default='')
     created_at = models.DateTimeField(auto_now_add=True)
 
     def __str__(self):

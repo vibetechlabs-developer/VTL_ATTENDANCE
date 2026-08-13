@@ -32,6 +32,14 @@ const emptyForm: Omit<Employee, "id"> = {
   faceStatus: "pending", status: "active", isWfh: false,
 };
 
+interface FormFieldErrors {
+  name?: string;
+  email?: string;
+  roles?: string;
+  department?: string;
+  password?: string;
+}
+
 export default function UserManagement() {
   const { employees, deleteEmployee, setEmployeesFromApi } = useDataStore();
   const accessToken = useAuthStore((s) => s.accessToken);
@@ -49,13 +57,20 @@ export default function UserManagement() {
   const [showCreatePassword, setShowCreatePassword] = useState(false);
   const [showEditPassword, setShowEditPassword] = useState(false);
   const [faceBase64, setFaceBase64] = useState("");
+  const [savingAdd, setSavingAdd] = useState(false);
   const [savingEdit, setSavingEdit] = useState(false);
   const [savingFace, setSavingFace] = useState(false);
+  const [formErrors, setFormErrors] = useState<FormFieldErrors>({});
+  const [editErrors, setEditErrors] = useState<FormFieldErrors>({});
   const [faceDataOpen, setFaceDataOpen] = useState(false);
   const [faceData, setFaceData] = useState<any | null>(null);
   const [loadingFaceData, setLoadingFaceData] = useState(false);
   const [facePhotoError, setFacePhotoError] = useState(false);
   const [cameraReady, setCameraReady] = useState(false);
+  const addNameRef = useRef<HTMLInputElement | null>(null);
+  const addEmailRef = useRef<HTMLInputElement | null>(null);
+  const editNameRef = useRef<HTMLInputElement | null>(null);
+  const editEmailRef = useRef<HTMLInputElement | null>(null);
   const videoRef = useRef<HTMLVideoElement | null>(null);
   const canvasRef = useRef<HTMLCanvasElement | null>(null);
   const streamRef = useRef<MediaStream | null>(null);
@@ -65,7 +80,13 @@ export default function UserManagement() {
     setForm(emptyForm);
     setCreatePassword("");
     setShowCreatePassword(false);
+    setFormErrors({});
   }, [open]);
+
+  useEffect(() => {
+    if (!editOpen) return;
+    setEditErrors({});
+  }, [editOpen]);
 
   useEffect(() => {
     if (!accessToken) return;
@@ -134,17 +155,11 @@ export default function UserManagement() {
   const departments = useMemo(
     () => {
       const defaults = ["HUMAN RESOURCES", "Tech", "Sales", "Engineering", "Design", "Marketing", "HR", "Operations", "Finance"];
-      return [
-      "all",
-      ...defaults,
-      ...Array.from(
-        new Set(
-          employees
-            .map((e) => e.department.trim())
-            .filter((department) => department.length > 0)
-        )
-      ),
-    ];
+      const empDepts = employees
+        .map((e) => e.department.trim())
+        .filter((department) => department.length > 0);
+      const uniqueDepts = Array.from(new Set([...defaults, ...empDepts]));
+      return ["all", ...uniqueDepts];
     },
     [employees]
   );
@@ -180,38 +195,54 @@ export default function UserManagement() {
     const department = form.department.trim();
     const allowedDepartments = new Set(createDepartmentOptions);
     const password = createPassword.trim();
+    const roles = form.roles?.length ? form.roles : (form.role ? [form.role] : []);
 
+    const errors: FormFieldErrors = {};
     if (!name) {
-      toast.error("Full name is required.");
-      return;
+      errors.name = "Full name is required";
+    } else if (name.length < 2) {
+      errors.name = "Full name must be at least 2 characters";
     }
-    if (name.length < 2) {
-      toast.error("Full name must be at least 2 characters.");
-      return;
-    }
+
     if (!email) {
-      toast.error("Email is required.");
-      return;
+      errors.email = "Email is required";
+    } else if (!/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(email)) {
+      errors.email = "Please enter a valid email address";
     }
-    if (!/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(email)) {
-      toast.error("Please enter a valid email address.");
-      return;
+
+    if (!roles.length) {
+      errors.roles = "At least one role must be selected";
     }
-    if (!allowedDepartments.has(department)) {
-      toast.error("Please select a valid department.");
-      return;
+
+    if (!department) {
+      errors.department = "Department is required";
+    } else if (!allowedDepartments.has(department)) {
+      errors.department = "Please select a valid department (Sales, HR, or Tech)";
     }
+
     if (password && password.length < 8) {
-      toast.error("Password must be at least 8 characters.");
+      errors.password = "Password must be at least 8 characters";
+    }
+
+    setFormErrors(errors);
+
+    if (Object.keys(errors).length > 0) {
+      toast.error("Please fill in all required fields highlighted below.");
+      if (errors.name && addNameRef.current) {
+        addNameRef.current.focus();
+      } else if (errors.email && addEmailRef.current) {
+        addEmailRef.current.focus();
+      }
       return;
     }
+
     if (!accessToken) {
       toast.error("Session expired. Please login again.");
       return;
     }
     const managerEmployeeIds = toManagerEmployeeIds(form.managerEmployeeIds);
+    setSavingAdd(true);
     try {
-      const roles = form.roles?.length ? form.roles : [form.role];
       const res = await usersCreateRequest(accessToken, {
         name,
         email,
@@ -242,9 +273,12 @@ export default function UserManagement() {
       setLastCreatedPassword(body.temporaryPassword ?? (createPassword.trim() || null));
       setForm(emptyForm);
       setCreatePassword("");
+      setFormErrors({});
       setOpen(false);
     } catch {
       toast.error("Could not create employee");
+    } finally {
+      setSavingAdd(false);
     }
   };
 
@@ -252,6 +286,7 @@ export default function UserManagement() {
     setSelectedEmployee(employee);
     setEditPassword("");
     setShowEditPassword(false);
+    setEditErrors({});
     setEditOpen(true);
   };
 
@@ -288,19 +323,62 @@ export default function UserManagement() {
 
   const handleEditSave = async () => {
     if (!selectedEmployee || !accessToken) return;
+
+    const name = selectedEmployee.name.trim();
+    const email = selectedEmployee.email.trim().toLowerCase();
+    const department = selectedEmployee.department.trim();
+    const roles = selectedEmployee.roles?.length
+      ? selectedEmployee.roles
+      : [selectedEmployee.role];
+    const password = editPassword.trim();
+
+    const errors: FormFieldErrors = {};
+    if (!name) {
+      errors.name = "Full name is required";
+    } else if (name.length < 2) {
+      errors.name = "Full name must be at least 2 characters";
+    }
+
+    if (!email) {
+      errors.email = "Email is required";
+    } else if (!/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(email)) {
+      errors.email = "Please enter a valid email address";
+    }
+
+    if (!roles.length) {
+      errors.roles = "At least one role must be selected";
+    }
+
+    if (!department) {
+      errors.department = "Department is required";
+    }
+
+    if (password && password.length < 8) {
+      errors.password = "Password must be at least 8 characters";
+    }
+
+    setEditErrors(errors);
+
+    if (Object.keys(errors).length > 0) {
+      toast.error("Please fill in all required fields highlighted below.");
+      if (errors.name && editNameRef.current) {
+        editNameRef.current.focus();
+      } else if (errors.email && editEmailRef.current) {
+        editEmailRef.current.focus();
+      }
+      return;
+    }
+
     setSavingEdit(true);
     const managerEmployeeIds = toManagerEmployeeIds(selectedEmployee.managerEmployeeIds);
     try {
-      const roles = selectedEmployee.roles?.length
-        ? selectedEmployee.roles
-        : [selectedEmployee.role];
       const res = await usersUpdateRequest(accessToken, selectedEmployee.id, {
-        name: selectedEmployee.name,
-        email: selectedEmployee.email,
+        name,
+        email,
         roles,
-        department: selectedEmployee.department,
+        department,
         manager_employee_ids: managerEmployeeIds,
-        password: editPassword.trim() || undefined,
+        password: password || undefined,
         is_wfh: Boolean(selectedEmployee.isWfh),
       });
       const body = (await res.json().catch(() => ({}))) as { error?: string };
@@ -317,6 +395,7 @@ export default function UserManagement() {
       setEditOpen(false);
       setSelectedEmployee(null);
       setEditPassword("");
+      setEditErrors({});
     } finally {
       setSavingEdit(false);
     }
@@ -428,40 +507,99 @@ export default function UserManagement() {
                   Create a new team member profile with role and department details.
                 </DialogDescription>
               </DialogHeader>
+
+              <div className="text-xs text-muted-foreground bg-muted/40 px-3 py-2 rounded-md border border-border/50 flex items-center justify-between">
+                <span>Fields marked with <span className="text-destructive font-bold">*</span> are required.</span>
+              </div>
+
               <div className="grid gap-3 py-2">
                 <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
-                  <div className="space-y-1.5">
-                    <Label>Full name</Label>
-                    <Input value={form.name} onChange={(e) => setForm({ ...form, name: e.target.value })} />
+                  <div className="space-y-1.5 sm:col-span-2">
+                    <Label htmlFor="add-name">
+                      Full name <span className="text-destructive font-medium ml-0.5">*</span>
+                    </Label>
+                    <Input
+                      id="add-name"
+                      ref={addNameRef}
+                      placeholder="e.g. Rahul Sharma"
+                      value={form.name}
+                      onChange={(e) => {
+                        setForm({ ...form, name: e.target.value });
+                        if (formErrors.name) setFormErrors((prev) => ({ ...prev, name: undefined }));
+                      }}
+                      className={formErrors.name ? "border-destructive focus-visible:ring-destructive" : ""}
+                    />
+                    {formErrors.name && (
+                      <p className="text-xs text-destructive font-medium mt-1">{formErrors.name}</p>
+                    )}
                   </div>
                 </div>
                 <div className="space-y-1.5">
-                  <Label>Email</Label>
-                  <Input type="email" value={form.email} onChange={(e) => setForm({ ...form, email: e.target.value })} />
+                  <Label htmlFor="add-email">
+                    Email <span className="text-destructive font-medium ml-0.5">*</span>
+                  </Label>
+                  <Input
+                    id="add-email"
+                    ref={addEmailRef}
+                    type="email"
+                    placeholder="e.g. rahul@company.com"
+                    value={form.email}
+                    onChange={(e) => {
+                      setForm({ ...form, email: e.target.value });
+                      if (formErrors.email) setFormErrors((prev) => ({ ...prev, email: undefined }));
+                    }}
+                    className={formErrors.email ? "border-destructive focus-visible:ring-destructive" : ""}
+                  />
+                  {formErrors.email && (
+                    <p className="text-xs text-destructive font-medium mt-1">{formErrors.email}</p>
+                  )}
                 </div>
                 <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
                   <div className="space-y-1.5 sm:col-span-2">
-                    <Label>Roles</Label>
+                    <Label>
+                      Roles <span className="text-destructive font-medium ml-0.5">*</span>
+                    </Label>
                     <RoleMultiSelect
                       value={form.roles ?? [form.role]}
-                      onChange={(roles) => setForm({ ...form, roles, role: roles[0] })}
+                      onChange={(roles) => {
+                        setForm({ ...form, roles, role: roles[0] });
+                        if (formErrors.roles) setFormErrors((prev) => ({ ...prev, roles: undefined }));
+                      }}
                     />
+                    {formErrors.roles && (
+                      <p className="text-xs text-destructive font-medium mt-1">{formErrors.roles}</p>
+                    )}
                   </div>
                   <div className="space-y-1.5">
-                    <Label>Department</Label>
-                    <Select value={form.department} onValueChange={(v) => setForm({ ...form, department: v })}>
-                      <SelectTrigger><SelectValue placeholder="Select department" /></SelectTrigger>
+                    <Label>
+                      Department <span className="text-destructive font-medium ml-0.5">*</span>
+                    </Label>
+                    <Select
+                      value={form.department}
+                      onValueChange={(v) => {
+                        setForm({ ...form, department: v });
+                        if (formErrors.department) setFormErrors((prev) => ({ ...prev, department: undefined }));
+                      }}
+                    >
+                      <SelectTrigger className={formErrors.department ? "border-destructive focus-visible:ring-destructive" : ""}>
+                        <SelectValue placeholder="Select department" />
+                      </SelectTrigger>
                       <SelectContent>
                         {createDepartmentOptions.map((d) => (
                           <SelectItem key={d} value={d}>{d}</SelectItem>
                         ))}
                       </SelectContent>
                     </Select>
+                    {formErrors.department && (
+                      <p className="text-xs text-destructive font-medium mt-1">{formErrors.department}</p>
+                    )}
                   </div>
                 </div>
                 <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
                   <div className="space-y-1.5">
-                    <Label>Reports to</Label>
+                    <Label className="text-muted-foreground">
+                      Reports to <span className="text-[11px] font-normal text-muted-foreground/80">(optional)</span>
+                    </Label>
                     <ManagerMultiSelect
                       value={form.managerEmployeeIds ?? []}
                       onChange={(ids) => setForm({ ...form, managerEmployeeIds: ids })}
@@ -470,12 +608,16 @@ export default function UserManagement() {
                     />
                   </div>
                   <div className="space-y-1.5">
-                    <Label>Joining date</Label>
+                    <Label className="text-muted-foreground">
+                      Joining date <span className="text-[11px] font-normal text-muted-foreground/80">(optional)</span>
+                    </Label>
                     <Input type="date" value={form.joiningDate} onChange={(e) => setForm({ ...form, joiningDate: e.target.value })} />
                   </div>
                 </div>
                 <div className="space-y-1.5">
-                  <Label>Work mode</Label>
+                  <Label className="text-muted-foreground">
+                    Work mode <span className="text-[11px] font-normal text-muted-foreground/80">(optional)</span>
+                  </Label>
                   <div className="flex items-center gap-2">
                     <input
                       id="create-is-wfh"
@@ -490,13 +632,19 @@ export default function UserManagement() {
                 </div>
 
                 <div className="space-y-1.5">
-                  <Label>Password (optional)</Label>
+                  <Label className="text-muted-foreground">
+                    Password <span className="text-[11px] font-normal text-muted-foreground/80">(optional)</span>
+                  </Label>
                   <div className="flex flex-col sm:flex-row gap-2">
                     <Input
                       type={showCreatePassword ? "text" : "password"}
                       value={createPassword}
-                      onChange={(e) => setCreatePassword(e.target.value)}
+                      onChange={(e) => {
+                        setCreatePassword(e.target.value);
+                        if (formErrors.password) setFormErrors((prev) => ({ ...prev, password: undefined }));
+                      }}
                       placeholder="Leave blank to auto-generate"
+                      className={formErrors.password ? "border-destructive focus-visible:ring-destructive" : ""}
                     />
                     <Button type="button" variant="outline" size="icon" onClick={() => setShowCreatePassword((v) => !v)}>
                       {showCreatePassword ? <EyeOff className="h-4 w-4" /> : <Eye className="h-4 w-4" />}
@@ -505,11 +653,19 @@ export default function UserManagement() {
                       type="button"
                       variant="outline"
                       className="w-full sm:w-auto"
-                      onClick={() => setCreatePassword(Math.random().toString(36).slice(2, 10) + "@123")}
+                      onClick={() => {
+                        setCreatePassword(Math.random().toString(36).slice(2, 10) + "@123");
+                        if (formErrors.password) setFormErrors((prev) => ({ ...prev, password: undefined }));
+                      }}
                     >
                       Generate
                     </Button>
                   </div>
+                  {formErrors.password ? (
+                    <p className="text-xs text-destructive font-medium mt-1">{formErrors.password}</p>
+                  ) : (
+                    <p className="text-[11px] text-muted-foreground">If left blank, a secure temporary password will be auto-generated.</p>
+                  )}
                 </div>
 
                 {lastCreatedPassword && (
@@ -526,8 +682,10 @@ export default function UserManagement() {
               </div>
               <DialogFooter>
                 <div className="flex flex-col-reverse sm:flex-row sm:justify-end gap-2 w-full">
-                  <Button variant="outline" className="w-full sm:w-auto" onClick={() => setOpen(false)}>Cancel</Button>
-                  <Button onClick={() => void handleAdd()} className="bg-gradient-primary w-full sm:w-auto">Add employee</Button>
+                  <Button variant="outline" className="w-full sm:w-auto" onClick={() => setOpen(false)} disabled={savingAdd}>Cancel</Button>
+                  <Button onClick={() => void handleAdd()} disabled={savingAdd} className="bg-gradient-primary w-full sm:w-auto">
+                    {savingAdd ? "Adding..." : "Add employee"}
+                  </Button>
                 </div>
               </DialogFooter>
             </DialogContent>
@@ -770,34 +928,86 @@ export default function UserManagement() {
             <DialogTitle>Edit employee</DialogTitle>
             <DialogDescription>Update employee details and save to backend.</DialogDescription>
           </DialogHeader>
+          <div className="text-xs text-muted-foreground bg-muted/40 px-3 py-2 rounded-md border border-border/50 flex items-center justify-between">
+            <span>Fields marked with <span className="text-destructive font-bold">*</span> are required.</span>
+          </div>
           {selectedEmployee && (
             <div className="grid gap-3 py-2">
               <div className="space-y-1.5">
-                <Label>Full name</Label>
-                <Input value={selectedEmployee.name} onChange={(e) => setSelectedEmployee({ ...selectedEmployee, name: e.target.value })} />
+                <Label htmlFor="edit-name">
+                  Full name <span className="text-destructive font-medium ml-0.5">*</span>
+                </Label>
+                <Input
+                  id="edit-name"
+                  ref={editNameRef}
+                  value={selectedEmployee.name}
+                  onChange={(e) => {
+                    setSelectedEmployee({ ...selectedEmployee, name: e.target.value });
+                    if (editErrors.name) setEditErrors((prev) => ({ ...prev, name: undefined }));
+                  }}
+                  className={editErrors.name ? "border-destructive focus-visible:ring-destructive" : ""}
+                />
+                {editErrors.name && (
+                  <p className="text-xs text-destructive font-medium mt-1">{editErrors.name}</p>
+                )}
               </div>
               <div className="space-y-1.5">
-                <Label>Email</Label>
-                <Input type="email" value={selectedEmployee.email} onChange={(e) => setSelectedEmployee({ ...selectedEmployee, email: e.target.value })} />
+                <Label htmlFor="edit-email">
+                  Email <span className="text-destructive font-medium ml-0.5">*</span>
+                </Label>
+                <Input
+                  id="edit-email"
+                  ref={editEmailRef}
+                  type="email"
+                  value={selectedEmployee.email}
+                  onChange={(e) => {
+                    setSelectedEmployee({ ...selectedEmployee, email: e.target.value });
+                    if (editErrors.email) setEditErrors((prev) => ({ ...prev, email: undefined }));
+                  }}
+                  className={editErrors.email ? "border-destructive focus-visible:ring-destructive" : ""}
+                />
+                {editErrors.email && (
+                  <p className="text-xs text-destructive font-medium mt-1">{editErrors.email}</p>
+                )}
               </div>
               <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
                 <div className="space-y-1.5 sm:col-span-2">
-                  <Label>Roles</Label>
+                  <Label>
+                    Roles <span className="text-destructive font-medium ml-0.5">*</span>
+                  </Label>
                   <RoleMultiSelect
                     value={selectedEmployee.roles ?? [selectedEmployee.role]}
-                    onChange={(roles) =>
-                      setSelectedEmployee({ ...selectedEmployee, roles, role: roles[0] })
-                    }
+                    onChange={(roles) => {
+                      setSelectedEmployee({ ...selectedEmployee, roles, role: roles[0] });
+                      if (editErrors.roles) setEditErrors((prev) => ({ ...prev, roles: undefined }));
+                    }}
                   />
+                  {editErrors.roles && (
+                    <p className="text-xs text-destructive font-medium mt-1">{editErrors.roles}</p>
+                  )}
                 </div>
                 <div className="space-y-1.5">
-                  <Label>Department</Label>
-                  <Input value={selectedEmployee.department} onChange={(e) => setSelectedEmployee({ ...selectedEmployee, department: e.target.value })} />
+                  <Label>
+                    Department <span className="text-destructive font-medium ml-0.5">*</span>
+                  </Label>
+                  <Input
+                    value={selectedEmployee.department}
+                    onChange={(e) => {
+                      setSelectedEmployee({ ...selectedEmployee, department: e.target.value });
+                      if (editErrors.department) setEditErrors((prev) => ({ ...prev, department: undefined }));
+                    }}
+                    className={editErrors.department ? "border-destructive focus-visible:ring-destructive" : ""}
+                  />
+                  {editErrors.department && (
+                    <p className="text-xs text-destructive font-medium mt-1">{editErrors.department}</p>
+                  )}
                 </div>
               </div>
 
               <div className="space-y-1.5">
-                <Label>Reports to</Label>
+                <Label className="text-muted-foreground">
+                  Reports to <span className="text-[11px] font-normal text-muted-foreground/80">(optional)</span>
+                </Label>
                 <ManagerMultiSelect
                   value={selectedEmployee.managerEmployeeIds ?? []}
                   onChange={(ids) =>
@@ -821,7 +1031,9 @@ export default function UserManagement() {
                 />
               </div>
               <div className="space-y-1.5">
-                <Label>Work mode</Label>
+                <Label className="text-muted-foreground">
+                  Work mode <span className="text-[11px] font-normal text-muted-foreground/80">(optional)</span>
+                </Label>
                 <div className="flex items-center gap-2">
                   <input
                     id="edit-is-wfh"
@@ -836,17 +1048,27 @@ export default function UserManagement() {
               </div>
 
               <div className="space-y-1.5">
-                <Label>Change password (optional)</Label>
+                <Label className="text-muted-foreground">
+                  Change password <span className="text-[11px] font-normal text-muted-foreground/80">(optional)</span>
+                </Label>
                 <Input
                   type={showEditPassword ? "text" : "password"}
                   value={editPassword}
-                  onChange={(e) => setEditPassword(e.target.value)}
+                  onChange={(e) => {
+                    setEditPassword(e.target.value);
+                    if (editErrors.password) setEditErrors((prev) => ({ ...prev, password: undefined }));
+                  }}
                   placeholder="Enter new password to reset"
+                  className={editErrors.password ? "border-destructive focus-visible:ring-destructive" : ""}
                 />
                 <Button type="button" variant="outline" size="sm" onClick={() => setShowEditPassword((v) => !v)}>
                   {showEditPassword ? "Hide" : "Show"} password
                 </Button>
-                <p className="text-[11px] text-muted-foreground">If empty, password will remain unchanged.</p>
+                {editErrors.password ? (
+                  <p className="text-xs text-destructive font-medium mt-1">{editErrors.password}</p>
+                ) : (
+                  <p className="text-[11px] text-muted-foreground">If empty, password will remain unchanged.</p>
+                )}
               </div>
             </div>
           )}

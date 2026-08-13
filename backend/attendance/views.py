@@ -16,8 +16,15 @@ import uuid
 
 from users.models import Employee, OfficeLocation, AppNotification
 from leaves.models import LeaveRequest
-from .models import AttendanceLog, BreakLog, CallLog
-from .serializers import CheckInSerializer, CheckOutSerializer, AttendanceLogSerializer
+from .models import AttendanceLog, BreakLog, CallLog, TaskInterruptionLog
+from .serializers import CheckInSerializer, CheckOutSerializer, AttendanceLogSerializer, TaskInterruptionLogSerializer
+from updates.models import Task
+from rest_framework import viewsets, filters
+
+# Helper to fetch open tasks for an employee
+def get_open_tasks(employee):
+    return Task.objects.filter(assigned_to=employee).exclude(status__in=['completed', 'reviewed', 'cancelled'])
+
 from .face_utils import (
     decode_base64_image,
     get_face_encoding,
@@ -346,6 +353,13 @@ class CheckOutView(APIView):
     permission_classes = [IsAuthenticated]
 
     def post(self, request):
+        # 1️⃣ Enforce open‑task reason if needed
+        open_tasks = get_open_tasks(request.user.employee)
+        if open_tasks.exists():
+            reason = request.data.get('reason')
+            if not reason:
+                return Response({'error': 'Reason required due to open task(s).', 'open_tasks': [t.title for t in open_tasks]}, status=400)
+
         serializer = CheckOutSerializer(data=request.data)
         if not serializer.is_valid():
             return Response({'error': 'Invalid data'}, status=400)
@@ -430,6 +444,18 @@ class CheckOutView(APIView):
             title_suffix=' recorded',
         )
 
+        # 2️⃣ Record interruption log if needed
+        if open_tasks.exists():
+            task = open_tasks.order_by('due_datetime').first()
+            TaskInterruptionLog.objects.create(
+                task=task,
+                employee=request.user.employee,
+                interruption_type='checkout',
+                reason=reason,
+                task_status_at_time=task.status,
+                deadline_at_time=task.due_datetime,
+            )
+
         return Response({
             'message': 'Check-out successful!',
             'total_hours': log.total_hours,
@@ -441,12 +467,16 @@ class CheckOutView(APIView):
         })
 
 
+from users.utils import get_or_create_employee
+
+
 # ─── My Attendance History ─────────────────────────────
 class MyAttendanceHistoryView(APIView):
     permission_classes = [IsAuthenticated]
 
     def get(self, request):
-        logs = AttendanceLog.objects.filter(employee=request.user.employee).order_by('-date', '-check_in')
+        emp = get_or_create_employee(request.user)
+        logs = AttendanceLog.objects.filter(employee=emp).order_by('-date', '-check_in')
         serializer = AttendanceLogSerializer(logs, many=True)
         return Response(serializer.data)
 
@@ -456,10 +486,12 @@ class MyAttendanceSessionView(APIView):
 
     def get(self, request):
         today = timezone.now().date()
+        emp = get_or_create_employee(request.user)
         log = AttendanceLog.objects.filter(
-            employee=request.user.employee,
+            employee=emp,
             date=today
         ).order_by('-check_in').first()
+
 
         if not log or not log.check_in:
             return Response({'active': False})
@@ -802,6 +834,13 @@ class BreakStartView(APIView):
     permission_classes = [IsAuthenticated]
 
     def post(self, request):
+        # 1️⃣ Check for open tasks
+        open_tasks = get_open_tasks(request.user.employee)
+        if open_tasks.exists():
+            reason = request.data.get('reason')
+            if not reason:
+                return Response({'error': 'Reason required due to open task(s).', 'open_tasks': [t.title for t in open_tasks]}, status=400)
+        
         today = timezone.now().date()
         log = (
             AttendanceLog.objects.filter(
@@ -832,6 +871,19 @@ class BreakStartView(APIView):
             break_start=timezone.now()
         )
 
+        # 2️⃣ Record interruption log if needed
+        if open_tasks.exists():
+            # pick the earliest due task (or first)
+            task = open_tasks.order_by('due_datetime').first()
+            TaskInterruptionLog.objects.create(
+                task=task,
+                employee=request.user.employee,
+                interruption_type='break',
+                reason=reason,
+                task_status_at_time=task.status,
+                deadline_at_time=task.due_datetime,
+            )
+
         return Response({
             'message': 'Break started.',
             'break_start': break_log.break_start
@@ -843,6 +895,13 @@ class BreakEndView(APIView):
     permission_classes = [IsAuthenticated]
 
     def post(self, request):
+        # 1️⃣ Check for open tasks
+        open_tasks = get_open_tasks(request.user.employee)
+        if open_tasks.exists():
+            reason = request.data.get('reason')
+            if not reason:
+                return Response({'error': 'Reason required due to open task(s).', 'open_tasks': [t.title for t in open_tasks]}, status=400)
+
         today = timezone.now().date()
         log = (
             AttendanceLog.objects.filter(
@@ -873,21 +932,30 @@ class BreakEndView(APIView):
                 'auto_resumed': auto_resumed,
             })
 
+        # End the break
         active_break.break_end = timezone.now()
         active_break.save()
 
-        break_minutes = int(
-            (active_break.break_end - active_break.break_start).total_seconds() // 60
-        )
-
-        log.break_minutes += break_minutes
-        log.save(update_fields=['break_minutes'])
+        # 2️⃣ Record interruption log if needed
+        if open_tasks.exists():
+            task = open_tasks.order_by('due_datetime').first()
+            TaskInterruptionLog.objects.create(
+                task=task,
+                employee=request.user.employee,
+                interruption_type='break',
+                reason=reason,
+                task_status_at_time=task.status,
+                deadline_at_time=task.due_datetime,
+            )
 
         return Response({
             'message': 'Break ended.',
-            'break_minutes': break_minutes,
-            'auto_resumed': False,
+            'break_end': active_break.break_end,
+            'auto_resumed': auto_resumed,
         })
+
+# Duplicate code removed – the response above already ends the request
+
 
 
 # ─── Sales: On a call (idle auto-break pause) ───────────
@@ -1001,3 +1069,19 @@ class FaceRegisterView(APIView):
         employee.save()
 
         return Response({'message': 'Face registered successfully.'})
+
+
+# ─── Task Interruption Log ViewSet ───────────────────────
+class TaskInterruptionLogViewSet(viewsets.ReadOnlyModelViewSet):
+    """Managers can list interruption logs; employees can view their own logs."""
+    serializer_class = TaskInterruptionLogSerializer
+    permission_classes = [IsAuthenticated]
+    filter_backends = [filters.SearchFilter, filters.OrderingFilter]
+    search_fields = ['employee__name', 'task__title', 'interruption_type']
+    ordering = ['-triggered_at']
+
+    def get_queryset(self):
+        user = self.request.user
+        if hasattr(user, 'employee') and not user.role in ['manager', 'admin', 'hr']:
+            return TaskInterruptionLog.objects.filter(employee=user.employee)
+        return TaskInterruptionLog.objects.all()

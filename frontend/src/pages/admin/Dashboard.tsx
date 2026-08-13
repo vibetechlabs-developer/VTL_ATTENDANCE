@@ -161,6 +161,8 @@ export default function AdminDashboard() {
     }
   };
 
+  const pendingLeaves = useMemo(() => leaves.filter((lv: any) => !lv.status || lv.status === "pending"), [leaves]);
+
   return (
     <div className="space-y-6">
       <motion.div
@@ -291,13 +293,13 @@ export default function AdminDashboard() {
             <p className="text-xs text-muted-foreground">Approve or reject without leaving dashboard</p>
           </CardHeader>
           <CardContent className="space-y-2 max-h-[220px] overflow-y-auto pr-1">
-            {leaves.length === 0 ? (
+            {pendingLeaves.length === 0 ? (
               <div className="rounded-2xl border border-dashed border-border/70 p-6 text-center text-sm text-muted-foreground">
                 <CheckCircle2 className="h-8 w-8 mx-auto mb-2 text-success/70" />
                 No pending leaves. You&apos;re all caught up.
               </div>
             ) : (
-              leaves.slice(0, 6).map((lv) => (
+              pendingLeaves.slice(0, 6).map((lv) => (
                 <div
                   key={lv.id}
                   className="flex items-center justify-between gap-2 rounded-xl border border-border/50 bg-muted/15 px-3 py-2"

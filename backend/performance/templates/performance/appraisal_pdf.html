@@ -1,0 +1,86 @@
+{% extends "base.html" %}
+{% load static %}
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8" />
+    <title>Performance Appraisal – {{ employee.name }}</title>
+    <style>
+        body {font-family: 'Inter', Arial, sans-serif; margin:0; padding:0; color:#212529;}
+        .header {background: linear-gradient(135deg, #4e54c8, #8f94fb); color:#fff; padding:2rem 1.5rem; text-align:center;}
+        .logo {height:40px; margin-bottom:0.5rem;}
+        .content {padding:1.5rem;}
+        .section {margin-bottom:1.5rem;}
+        .section h2 {border-bottom:2px solid #e2e8f0; padding-bottom:0.3rem; color:#2d3748;}
+        .table {width:100%; border-collapse:collapse; margin-top:0.5rem;}
+        .table th, .table td {border:1px solid #e2e8f0; padding:0.6rem; text-align:left;}
+        .table th {background:#f7fafc;}
+        .rating {font-weight:bold; color:#2b6cb0;}
+        .footer {text-align:center; font-size:0.8rem; color:#718096; margin-top:2rem;}
+    </style>
+</head>
+<body>
+<div class="header">
+    <img src="{% static 'images/company_logo.png' %}" alt="Company Logo" class="logo" />
+    <h1>Performance Appraisal</h1>
+    <h3>{{ employee.name }} – {{ employee.designation|default:"Employee" }}</h3>
+    <p>Cycle: {{ cycle.name|default:"Active Cycle" }} ({{ cycle.start_date|date:"M d, Y" }} – {{ cycle.end_date|date:"M d, Y" }})</p>
+</div>
+<div class="content">
+    <div class="section">
+        <h2>Overall Rating</h2>
+        <p class="rating">{{ appraisal.overall_rating }} / 5</p>
+    </div>
+    <div class="section">
+        <h2>Goals</h2>
+        <table class="table">
+            <thead>
+                <tr>
+                    <th>Title</th>
+                    <th>Description</th>
+                    <th>Weight %</th>
+                    <th>Self Rating</th>
+                    <th>Manager Rating</th>
+                </tr>
+            </thead>
+            <tbody>
+                {% for goal in goals %}
+                <tr>
+                    <td>{{ goal.title }}</td>
+                    <td>{{ goal.description|default:"-" }}</td>
+                    <td>{{ goal.weightage }}</td>
+                    <td>{{ goal.self_rating|default:"-" }}</td>
+                    <td>{{ goal.manager_rating|default:"-" }}</td>
+                </tr>
+                {% endfor %}
+            </tbody>
+        </table>
+    </div>
+    <div class="section">
+        <h2>Performance Factors (40% of total)</h2>
+        <ul>
+            {% if appraisal.punctuality_rating %}<li>Punctuality & Attendance: {{ appraisal.punctuality_rating }} /5 – {{ appraisal.punctuality_comment|default:"" }}</li>{% endif %}
+            {% if appraisal.quality_rating %}<li>Work Quality & Accuracy: {{ appraisal.quality_rating }} /5 – {{ appraisal.quality_comment|default:"" }}</li>{% endif %}
+            {% if appraisal.productivity_rating %}<li>Productivity & Speed: {{ appraisal.productivity_rating }} /5 – {{ appraisal.productivity_comment|default:"" }}</li>{% endif %}
+            {% if appraisal.teamwork_rating %}<li>Teamwork & Communication: {{ appraisal.teamwork_rating }} /5 – {{ appraisal.teamwork_comment|default:"" }}</li>{% endif %}
+            {% if appraisal.initiative_rating %}<li>Initiative & Problem Solving: {{ appraisal.initiative_rating }} /5 – {{ appraisal.initiative_comment|default:"" }}</li>{% endif %}
+        </ul>
+    </div>
+    {% if appraisal.manager_notes %}
+    <div class="section">
+        <h2>Manager Notes</h2>
+        <p>{{ appraisal.manager_notes }}</p>
+    </div>
+    {% endif %}
+    {% if appraisal.employee_notes %}
+    <div class="section">
+        <h2>Employee Self‑Assessment</h2>
+        <p>{{ appraisal.employee_notes }}</p>
+    </div>
+    {% endif %}
+</div>
+<div class="footer">
+    Generated on {{ now|date:"Y-m-d H:i" }} – Confidential HR Document
+</div>
+</body>
+</html>

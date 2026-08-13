@@ -41,3 +41,20 @@ class CallLog(models.Model):
 
     def __str__(self):
         return f"Call - {self.attendance.employee.name}"
+
+
+class TaskInterruptionLog(models.Model):
+    INTERRUPTION_CHOICES = [
+        ('break', 'Break'),
+        ('checkout', 'Check‑Out'),
+    ]
+    task = models.ForeignKey('updates.Task', on_delete=models.CASCADE, related_name='interruption_logs')
+    employee = models.ForeignKey(Employee, on_delete=models.CASCADE, related_name='task_interruption_logs')
+    interruption_type = models.CharField(max_length=10, choices=INTERRUPTION_CHOICES)
+    triggered_at = models.DateTimeField(auto_now_add=True)
+    reason = models.TextField()
+    task_status_at_time = models.CharField(max_length=20)
+    deadline_at_time = models.DateTimeField()
+
+    def __str__(self):
+        return f"{self.employee.name} – {self.interruption_type} – {self.task.title}"

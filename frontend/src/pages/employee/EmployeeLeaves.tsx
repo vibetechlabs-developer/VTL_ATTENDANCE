@@ -72,9 +72,17 @@ export default function EmployeeLeaves() {
       reason: finalReason,
       is_half_day: half,
     });
-    const body = (await res.json().catch(() => ({}))) as { error?: string; message?: string };
+    const body = (await res.json().catch(() => ({}))) as { error?: string; message?: string; detail?: string; [key: string]: any };
     if (!res.ok) {
-      toast.error(body.error || "Leave apply failed");
+      let errMsg = body.error || body.detail;
+      if (!errMsg && typeof body === 'object') {
+        const keys = Object.keys(body);
+        if (keys.length > 0) {
+          const firstVal = body[keys[0]];
+          errMsg = Array.isArray(firstVal) ? `${keys[0]}: ${firstVal[0]}` : String(firstVal);
+        }
+      }
+      toast.error(errMsg || "Leave apply failed");
       return;
     }
     toast.success(body.message || "Leave request submitted");

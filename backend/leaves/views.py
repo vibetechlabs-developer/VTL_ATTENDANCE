@@ -8,8 +8,10 @@ from .serializers import (
     LeaveRequestSerializer
 )
 from users.models import Employee
-from users.models import AppNotification
+from users.utils import get_or_create_employee
 from decimal import Decimal
+# Notification + Audit helpers (Module 10 wiring demonstration)
+from notifications.helpers import notify, log_action
 
 
 # ─── Leave Apply ───────────────────────────────────────
@@ -19,10 +21,20 @@ class LeaveApplyView(APIView):
     def post(self, request):
         serializer = LeaveApplySerializer(data=request.data)
         if not serializer.is_valid():
-            return Response(serializer.errors, status=400)
+            error_msg = "Invalid leave data."
+            if serializer.errors:
+                first_field = next(iter(serializer.errors))
+                first_err = serializer.errors[first_field]
+                if isinstance(first_err, list) and first_err:
+                    error_msg = f"{first_field}: {first_err[0]}" if first_field != 'non_field_errors' else str(first_err[0])
+                else:
+                    error_msg = str(first_err)
+            return Response({'error': error_msg, 'details': serializer.errors}, status=400)
 
         data = serializer.validated_data
-        employee = request.user.employee
+        employee = get_or_create_employee(request.user)
+        if not employee:
+            return Response({'error': 'Employee profile not found.'}, status=400)
 
         # Total days calculate karo
         is_half_day = data.get('is_half_day', False)
@@ -44,8 +56,8 @@ class LeaveApplyView(APIView):
                 status=400,
             )
 
-        # Balance check karo
-        balance = LeaveBalance.objects.get(employee=employee)
+        # Balance check karo (safely get_or_create balance)
+        balance, _ = LeaveBalance.objects.get_or_create(employee=employee)
         leave_type = data['leave_type']
 
         if leave_type in ['casual', 'sick', 'earned']:
@@ -109,13 +121,22 @@ class LeaveApproveView(APIView):
         leave.reviewed_by = request.user
         leave.save()
 
+        # Audit log for approval
+        log_action(
+            actor=request.user.employee,
+            action='approved_leave',
+            module='leave',
+            object_repr=str(leave),
+            request=request,
+        )
+
         # Balance update karo
         if leave.is_half_day:
             days = Decimal('0.5')
         else:
             delta = leave.end_date - leave.start_date
             days = Decimal(delta.days + 1)
-        balance = LeaveBalance.objects.get(employee=leave.employee)
+        balance, _ = LeaveBalance.objects.get_or_create(employee=leave.employee)
 
         if leave.leave_type == 'casual':
             balance.casual_used += days
@@ -126,11 +147,13 @@ class LeaveApproveView(APIView):
 
         balance.save()
 
-        AppNotification.objects.create(
-            user=leave.employee.user,
+        # Unified notification using the notifications helper
+        notify(
+            recipient_employee=leave.employee,
+            event_type='leave_approved',
             title='Leave approved',
             body=f'Your {leave.leave_type} leave ({leave.start_date} to {leave.end_date}) has been approved.',
-            type='success',
+            related_object={'type': 'LeaveRequest', 'id': leave.id},
         )
 
         return Response({
@@ -159,11 +182,23 @@ class LeaveRejectView(APIView):
         leave.reviewed_by = request.user
         leave.save()
 
-        AppNotification.objects.create(
-            user=leave.employee.user,
+        # Audit log for rejection
+        actor_emp = get_or_create_employee(request.user)
+        log_action(
+            actor=actor_emp,
+            action='rejected_leave',
+            module='leave',
+            object_repr=str(leave),
+            request=request,
+        )
+
+        # Unified notification using the notifications helper
+        notify(
+            recipient_employee=leave.employee,
+            event_type='leave_rejected',
             title='Leave rejected',
             body=f'Your {leave.leave_type} leave ({leave.start_date} to {leave.end_date}) has been rejected.',
-            type='warning',
+            related_object={'type': 'LeaveRequest', 'id': leave.id},
         )
 
         return Response({'message': 'Leave rejected.'})
@@ -174,8 +209,11 @@ class LeaveBalanceView(APIView):
     permission_classes = [IsAuthenticated]
 
     def get(self, request):
+        employee = get_or_create_employee(request.user)
+        if not employee:
+            return Response({'error': 'Employee profile not found.'}, status=400)
         balance, _ = LeaveBalance.objects.get_or_create(
-            employee=request.user.employee
+            employee=employee
         )
         serializer = LeaveBalanceSerializer(balance)
         return Response(serializer.data)
@@ -186,15 +224,18 @@ class LeaveHistoryView(APIView):
     permission_classes = [IsAuthenticated]
 
     def get(self, request):
+        employee = get_or_create_employee(request.user)
+        if not employee:
+            return Response([], status=200)
         leaves = LeaveRequest.objects.filter(
-            employee=request.user.employee
+            employee=employee
         ).order_by('-applied_at')
 
         serializer = LeaveRequestSerializer(leaves, many=True)
         return Response(serializer.data)
 
 
-# ─── All Pending Leaves (Admin/Manager) ────────────────
+# ─── All Pending / All Leaves (Admin/Manager) ────────────────
 class PendingLeavesView(APIView):
     permission_classes = [IsAuthenticated]
 
@@ -202,9 +243,11 @@ class PendingLeavesView(APIView):
         if request.user.role not in ['admin', 'manager', 'hr']:
             return Response({'error': 'Permission denied.'}, status=403)
 
-        leaves = LeaveRequest.objects.filter(
-            status='pending'
-        ).order_by('-applied_at')
+        status_param = request.query_params.get('status')
+        if status_param and status_param != 'all':
+            leaves = LeaveRequest.objects.filter(status=status_param).order_by('-applied_at')
+        else:
+            leaves = LeaveRequest.objects.all().order_by('-applied_at')
 
         serializer = LeaveRequestSerializer(leaves, many=True)
         return Response(serializer.data)

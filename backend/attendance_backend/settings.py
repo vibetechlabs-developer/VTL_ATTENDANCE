@@ -30,7 +30,7 @@ SECRET_KEY = os.getenv(
 )
 
 # SECURITY WARNING: don't run with debug turned on in production!
-DEBUG = (os.getenv("DEBUG", "false").strip().lower() in ["1", "true", "yes", "y"])
+DEBUG = (os.getenv("DEBUG", "true").strip().lower() in ["1", "true", "yes", "y"])
 
 _allowed_hosts = (os.getenv("ALLOWED_HOSTS", "") or "").strip()
 if _allowed_hosts:
@@ -55,8 +55,19 @@ INSTALLED_APPS = [
     'django.contrib.staticfiles',
     'rest_framework',
     'rest_framework_simplejwt.token_blacklist',
+    'drf_spectacular',
     'corsheaders',
+    'core',
+    'sysadmin',
     'leaves',
+    'leave',
+    'payroll',
+    'recruitment',
+    'performance',
+    'ess',
+    'documents',
+    'training',
+    'exit_management',
     'users',
     'updates',
     'attendance',
@@ -69,6 +80,7 @@ MIDDLEWARE = [
     'django.middleware.common.CommonMiddleware',
     'django.middleware.csrf.CsrfViewMiddleware',
     'django.contrib.auth.middleware.AuthenticationMiddleware',
+    'core.middleware.AuditUserMiddleware',
     'django.contrib.messages.middleware.MessageMiddleware',
     'django.middleware.clickjacking.XFrameOptionsMiddleware',
 ]
@@ -95,7 +107,9 @@ WSGI_APPLICATION = 'attendance_backend.wsgi.application'
 
 import sys
 
-if 'test' in sys.argv:
+IS_TESTING = 'test' in sys.argv or any('pytest' in arg for arg in sys.argv) or 'PYTEST_CURRENT_TEST' in os.environ
+
+if IS_TESTING:
     DATABASES = {
         'default': {
             'ENGINE': 'django.db.backends.sqlite3',
@@ -186,12 +200,32 @@ REST_FRAMEWORK = {
     'DEFAULT_AUTHENTICATION_CLASSES': (
         'rest_framework_simplejwt.authentication.JWTAuthentication',
     ),
+    'DEFAULT_SCHEMA_CLASS': 'drf_spectacular.openapi.AutoSchema',
+}
+
+SPECTACULAR_SETTINGS = {
+    'TITLE': 'VTL HRMS API',
+    'DESCRIPTION': 'VTL Attendance & HRMS — attendance, leave, payroll, and employee management.',
+    'VERSION': '1.0.0',
+    'SERVE_INCLUDE_SCHEMA': False,
 }
 
 # AUTH_USER_MODEL = 'core.User'
 
 AUTH_USER_MODEL = 'users.User'
 DEFAULT_AUTO_FIELD = 'django.db.models.BigAutoField'
+
+# Email (EMP-01 welcome / onboarding)
+EMAIL_BACKEND = os.getenv(
+    'EMAIL_BACKEND',
+    'django.core.mail.backends.console.EmailBackend',
+)
+DEFAULT_FROM_EMAIL = os.getenv('DEFAULT_FROM_EMAIL', 'noreply@vibetechlabs.cloud')
+EMAIL_HOST = os.getenv('EMAIL_HOST', '')
+EMAIL_PORT = int(os.getenv('EMAIL_PORT', '587'))
+EMAIL_HOST_USER = os.getenv('EMAIL_HOST_USER', '')
+EMAIL_HOST_PASSWORD = os.getenv('EMAIL_HOST_PASSWORD', '')
+EMAIL_USE_TLS = os.getenv('EMAIL_USE_TLS', 'true').strip().lower() in ['1', 'true', 'yes', 'y']
 
 # Web Push (VAPID) config
 WEB_PUSH_PUBLIC_KEY = os.getenv(

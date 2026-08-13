@@ -13,6 +13,7 @@ import uuid
 import threading
 
 from .role_utils import all_roles
+from core.permissions import HasModulePermission
 from .serializers import (
     LoginSerializer,
     EmployeeListSerializer,
@@ -152,7 +153,8 @@ class MeView(APIView):
 
 
 class EmployeesListView(APIView):
-    permission_classes = [IsAuthenticated]
+    permission_classes = [IsAuthenticated, HasModulePermission]
+    module = 'users'
 
     def get(self, request):
         users = User.objects.select_related('employee').prefetch_related(
@@ -160,7 +162,21 @@ class EmployeesListView(APIView):
         ).order_by('-id')
         rows = []
         for user in users:
-            employee = getattr(user, 'employee', None)
+            try:
+                employee = user.employee
+            except Employee.DoesNotExist:
+                profile_name = (
+                    user.get_full_name().strip()
+                    or (user.username or '').strip()
+                    or (user.email.split('@')[0] if user.email else "Employee")
+                )
+                employee, _ = Employee.objects.get_or_create(
+                    user=user,
+                    defaults={
+                        'name': profile_name,
+                        'department': 'Administration' if user.role == 'admin' else 'General',
+                    }
+                )
             profile_name = ''
             if employee and employee.name:
                 profile_name = employee.name.strip()
@@ -175,68 +191,68 @@ class EmployeesListView(APIView):
             else:
                 avatar = None
             rows.append({
-                'id': str(employee.id) if employee else f'user-{user.id}',
+                'id': str(employee.id),
                 'userId': str(user.id),
                 'name': fallback_name,
                 'email': user.email,
-                'empId': f'VTL-{str(employee.id if employee else user.id).zfill(3)}',
+                'empId': f'VTL-{str(employee.id).zfill(3)}',
                 'role': user.role,
                 'roles': all_roles(user),
-                'department': employee.department if employee else ('Administration' if user.role == 'admin' else 'General'),
-                'managerUserId': str(employee.manager_id) if employee and employee.manager_id else None,
+                'department': employee.department or ('Administration' if user.role == 'admin' else 'General'),
+                'managerUserId': str(employee.manager_id) if employee.manager_id else None,
                 'managerEmployeeId': (
                     str(_manager_employee_ids(employee)[0])
-                    if employee and _manager_employee_ids(employee)
+                    if _manager_employee_ids(employee)
                     else None
                 ),
-                'managerEmployeeIds': [str(i) for i in _manager_employee_ids(employee)] if employee else [],
-                'reportsTo': _format_reports_to(employee) if employee else '—',
+                'managerEmployeeIds': [str(i) for i in _manager_employee_ids(employee)],
+                'reportsTo': _format_reports_to(employee),
                 'joiningDate': (
                     employee.created_at.strftime('%Y-%m-%d')
-                    if employee and employee.created_at
+                    if employee.created_at
                     else user.date_joined.strftime('%Y-%m-%d')
                 ),
-                'faceStatus': 'registered' if employee and is_valid_stored_encoding(employee.face_encoding) else 'pending',
+                'faceStatus': 'registered' if is_valid_stored_encoding(employee.face_encoding) else 'pending',
                 'avatar': avatar,
                 'status': 'active' if user.is_active else 'inactive',
-                'hasEmployeeProfile': bool(employee),
-                'isWfh': bool(employee.is_wfh) if employee else False,
+                'hasEmployeeProfile': True,
+                'isWfh': bool(employee.is_wfh),
             })
         return Response(rows)
 
 
+
 class EmployeesCreateView(APIView):
-    permission_classes = [IsAuthenticated]
+    permission_classes = [IsAuthenticated, HasModulePermission]
+    module = 'users'
+    required_action = 'add'
 
     def post(self, request):
-        if request.user.role not in ['admin', 'manager']:
-            return Response({'error': 'Permission denied'}, status=status.HTTP_403_FORBIDDEN)
-
         serializer = EmployeeCreateSerializer(data=request.data)
         if not serializer.is_valid():
             return Response(
                 {'error': _first_serializer_error(serializer.errors) or 'Invalid employee details.'},
                 status=status.HTTP_400_BAD_REQUEST
             )
-        employee, temp_password = serializer.save()
+        employee, temp_password, email_sent = serializer.save()
 
         row = EmployeeListSerializer(employee, context={'request': request}).data
         return Response(
             {
                 'employee': row,
                 'temporaryPassword': temp_password,
+                'emailSent': email_sent,
             },
             status=status.HTTP_201_CREATED
         )
 
 
 class EmployeesUpdateView(APIView):
-    permission_classes = [IsAuthenticated]
+    permission_classes = [IsAuthenticated, HasModulePermission]
+    module = 'users'
+    required_action = 'edit'
 
     def patch(self, request, pk):
-        if request.user.role not in ['admin', 'manager']:
-            return Response({'error': 'Permission denied'}, status=status.HTTP_403_FORBIDDEN)
-
         employee = Employee.objects.select_related('user').filter(pk=pk).first()
         if not employee:
             return Response({'error': 'Employee not found'}, status=status.HTTP_404_NOT_FOUND)
@@ -254,12 +270,11 @@ class EmployeesUpdateView(APIView):
 
 
 class EmployeesDeleteView(APIView):
-    permission_classes = [IsAuthenticated]
+    permission_classes = [IsAuthenticated, HasModulePermission]
+    module = 'users'
+    required_action = 'delete'
 
     def delete(self, request, pk):
-        if request.user.role not in ['admin', 'manager']:
-            return Response({'error': 'Permission denied'}, status=status.HTTP_403_FORBIDDEN)
-
         employee = Employee.objects.select_related('user').filter(pk=pk).first()
         if not employee:
             return Response({'error': 'Employee not found'}, status=status.HTTP_404_NOT_FOUND)

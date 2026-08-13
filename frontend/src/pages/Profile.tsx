@@ -1,6 +1,7 @@
 import { useEffect, useRef, useState } from "react";
 import { motion } from "framer-motion";
-import { Save, Mail, Phone, MapPin, Briefcase, IdCard, Camera, ScanFace, Eye, EyeOff } from "lucide-react";
+import { Save, Mail, Phone, MapPin, Briefcase, IdCard, Camera, ScanFace, Eye, EyeOff, UserCheck } from "lucide-react";
+import { createProfileChangeRequest } from "@/api/ess";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { userInitials } from "@/lib/utils";
@@ -23,6 +24,32 @@ export default function Profile() {
   const [confirmPassword, setConfirmPassword] = useState("");
   const [showNewPassword, setShowNewPassword] = useState(false);
   const [showConfirmPassword, setShowConfirmPassword] = useState(false);
+  const [changeRequestOpen, setChangeRequestOpen] = useState(false);
+  const [changeField, setChangeField] = useState("name");
+  const [requestedVal, setRequestedVal] = useState("");
+  const [submittingChange, setSubmittingChange] = useState(false);
+
+  const handleRequestChangeSubmit = async (e: React.FormEvent) => {
+    e.preventDefault();
+    if (!requestedVal.trim()) {
+      toast.error("Requested value cannot be empty");
+      return;
+    }
+    setSubmittingChange(true);
+    try {
+      await createProfileChangeRequest({
+        field_name: changeField,
+        requested_value: requestedVal.trim(),
+      });
+      toast.success("Profile change request submitted to HR");
+      setChangeRequestOpen(false);
+      setRequestedVal("");
+    } catch (err: any) {
+      toast.error(err?.response?.data?.error || "Failed to submit change request");
+    } finally {
+      setSubmittingChange(false);
+    }
+  };
   const videoRef = useRef<HTMLVideoElement | null>(null);
   const canvasRef = useRef<HTMLCanvasElement | null>(null);
   const [form, setForm] = useState({
@@ -247,7 +274,17 @@ export default function Profile() {
                   </button>
                 </div>
               </div>
-              <div className="sm:col-span-2 flex justify-end">
+              <div className="sm:col-span-2 flex justify-between items-center pt-2">
+                <Button
+                  type="button"
+                  variant="outline"
+                  size="sm"
+                  onClick={() => setChangeRequestOpen(true)}
+                  className="text-xs gap-1.5"
+                >
+                  <UserCheck className="h-3.5 w-3.5" />
+                  Request Sensitive Field Change
+                </Button>
                 <Button type="submit" className="bg-sage-3d shadow-3d border-0 text-primary-foreground">
                   <Save className="h-4 w-4 mr-2" /> Save changes
                 </Button>
@@ -256,6 +293,59 @@ export default function Profile() {
           </CardContent>
         </Card>
       </div>
+
+      {/* Sensitive Profile Change Request Modal */}
+      <Dialog open={changeRequestOpen} onOpenChange={setChangeRequestOpen}>
+        <DialogContent className="sm:max-w-[480px]">
+          <DialogHeader>
+            <DialogTitle className="flex items-center gap-2">
+              <UserCheck className="h-5 w-5 text-primary" /> Request Profile Change
+            </DialogTitle>
+            <DialogDescription>
+              Submit a formal request to HR to change sensitive employee fields (Name, Phone, Location, Bank Details).
+            </DialogDescription>
+          </DialogHeader>
+
+          <form onSubmit={handleRequestChangeSubmit} className="space-y-4 py-2">
+            <div className="space-y-2">
+              <Label htmlFor="field_name">Field to Change</Label>
+              <select
+                id="field_name"
+                className="w-full h-10 px-3 rounded-md border border-input bg-background text-sm"
+                value={changeField}
+                onChange={(e) => setChangeField(e.target.value)}
+              >
+                <option value="name">Full Name</option>
+                <option value="phone">Phone Number</option>
+                <option value="location">Location / Address</option>
+                <option value="bank_account_number">Bank Account Number</option>
+                <option value="ifsc_code">IFSC Code</option>
+                <option value="emergency_contact">Emergency Contact</option>
+              </select>
+            </div>
+
+            <div className="space-y-2">
+              <Label htmlFor="requested_value">New Value</Label>
+              <Input
+                id="requested_value"
+                required
+                placeholder="Enter new value"
+                value={requestedVal}
+                onChange={(e) => setRequestedVal(e.target.value)}
+              />
+            </div>
+
+            <DialogFooter className="pt-2">
+              <Button type="button" variant="outline" onClick={() => setChangeRequestOpen(false)}>
+                Cancel
+              </Button>
+              <Button type="submit" disabled={submittingChange}>
+                {submittingChange ? "Submitting..." : "Submit Request"}
+              </Button>
+            </DialogFooter>
+          </form>
+        </DialogContent>
+      </Dialog>
 
       <Dialog open={faceOpen} onOpenChange={setFaceOpen}>
         <DialogContent className="sm:max-w-[540px]">

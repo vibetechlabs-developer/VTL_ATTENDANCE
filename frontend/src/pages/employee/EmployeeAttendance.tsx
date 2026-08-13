@@ -3,15 +3,31 @@ import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { Calendar } from "@/components/ui/calendar";
 import { StatusPill } from "@/components/StatusPill";
-import { Download } from "lucide-react";
+import { Download, Calendar as CalendarIcon } from "lucide-react";
 import { addDays, eachDayOfInterval, format, isWeekend, startOfWeek, subWeeks } from "date-fns";
 import { formatApiDate, parseApiDate } from "@/utils/safeDate";
 import { exportCsv } from "@/utils/csv";
 import { toast } from "sonner";
 import { useAuthStore } from "@/store/authStore";
 import { attendanceHistoryRequest, leaveHistoryRequest } from "@/lib/api";
+import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 
 const today = new Date();
+
+const MONTHS = [
+  { value: 0, label: "January" },
+  { value: 1, label: "February" },
+  { value: 2, label: "March" },
+  { value: 3, label: "April" },
+  { value: 4, label: "May" },
+  { value: 5, label: "June" },
+  { value: 6, label: "July" },
+  { value: 7, label: "August" },
+  { value: 8, label: "September" },
+  { value: 9, label: "October" },
+  { value: 10, label: "November" },
+  { value: 11, label: "December" },
+];
 
 type AttendanceLogApi = {
   id: number | string;
@@ -31,9 +47,32 @@ function isLateCheckIn(iso: string | null): boolean {
 
 export default function EmployeeAttendance() {
   const [selected, setSelected] = useState<Date | undefined>(today);
+  const [displayMonth, setDisplayMonth] = useState<Date>(today);
   const accessToken = useAuthStore((s) => s.accessToken);
   const [logs, setLogs] = useState<AttendanceLogApi[]>([]);
   const [approvedLeaves, setApprovedLeaves] = useState<{ start: string; end: string }[]>([]);
+
+  const years = useMemo(() => {
+    const currentYear = today.getFullYear();
+    return Array.from({ length: 5 }, (_, i) => currentYear - 3 + i);
+  }, []);
+
+  const handleMonthChange = (val: string) => {
+    const mIdx = Number(val);
+    const updated = new Date(displayMonth.getFullYear(), mIdx, 1);
+    setDisplayMonth(updated);
+  };
+
+  const handleYearChange = (val: string) => {
+    const yr = Number(val);
+    const updated = new Date(yr, displayMonth.getMonth(), 1);
+    setDisplayMonth(updated);
+  };
+
+  const handleGoToToday = () => {
+    setDisplayMonth(today);
+    setSelected(today);
+  };
 
   useEffect(() => {
     if (!accessToken) return;
@@ -90,7 +129,7 @@ export default function EmployeeAttendance() {
   const absentDays = useMemo(() => {
     const attendedKeys = new Set(logs.filter((l) => l.check_in).map((l) => l.date));
     const leaveKeys = new Set(leaveDays.map((d) => format(d, "yyyy-MM-dd")));
-    const start = new Date(today.getFullYear(), 0, 1);
+    const start = new Date(2024, 0, 1);
     const range = eachDayOfInterval({ start, end: today });
     return range.filter((d) => {
       if (isWeekend(d)) return false;
@@ -202,12 +241,48 @@ export default function EmployeeAttendance() {
 
       <div className="grid gap-4 lg:grid-cols-3">
         <Card className="lg:col-span-2">
-          <CardHeader className="pb-2">
-            <CardTitle className="text-base">{format(today, "MMMM yyyy")}</CardTitle>
+          <CardHeader className="pb-3 flex flex-col sm:flex-row sm:items-center justify-between gap-3 border-b border-border/40">
+            <div className="flex items-center gap-2">
+              <CalendarIcon className="h-5 w-5 text-primary" />
+              <CardTitle className="text-base font-semibold">Attendance Calendar</CardTitle>
+            </div>
+            <div className="flex flex-wrap items-center gap-2">
+              <Select value={String(displayMonth.getMonth())} onValueChange={handleMonthChange}>
+                <SelectTrigger className="w-[130px] h-8 text-xs font-medium bg-background">
+                  <SelectValue placeholder="Select Month" />
+                </SelectTrigger>
+                <SelectContent>
+                  {MONTHS.map((m) => (
+                    <SelectItem key={m.value} value={String(m.value)} className="text-xs">
+                      {m.label}
+                    </SelectItem>
+                  ))}
+                </SelectContent>
+              </Select>
+
+              <Select value={String(displayMonth.getFullYear())} onValueChange={handleYearChange}>
+                <SelectTrigger className="w-[95px] h-8 text-xs font-medium bg-background">
+                  <SelectValue placeholder="Select Year" />
+                </SelectTrigger>
+                <SelectContent>
+                  {years.map((y) => (
+                    <SelectItem key={y} value={String(y)} className="text-xs">
+                      {y}
+                    </SelectItem>
+                  ))}
+                </SelectContent>
+              </Select>
+
+              <Button variant="outline" size="sm" onClick={handleGoToToday} className="h-8 text-xs">
+                Today
+              </Button>
+            </div>
           </CardHeader>
-          <CardContent className="flex justify-center overflow-x-auto">
+          <CardContent className="flex justify-center overflow-x-auto pt-4">
             <Calendar
               mode="single"
+              month={displayMonth}
+              onMonthChange={setDisplayMonth}
               selected={selected}
               onSelect={(d) => {
                 if (!d) return setSelected(undefined);

@@ -2,7 +2,8 @@ import { useCallback, useEffect, useState } from "react";
 import { motion, AnimatePresence } from "framer-motion";
 import {
   Play, Square, Coffee, Clock, CalendarDays, MessageSquare, User,
-  Pause, AlertTriangle, Sparkles, CheckCircle2, ScanFace, MapPin, ArrowLeft, Loader2, Phone
+  Pause, AlertTriangle, Sparkles, CheckCircle2, ScanFace, MapPin, ArrowLeft, Loader2, Phone,
+  CheckSquare, HelpCircle, UserCheck
 } from "lucide-react";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
@@ -934,10 +935,12 @@ export default function EmployeeDashboard() {
   };
 
   const quickActions = [
-    { label: "Apply Leave", description: "Request casual/sick leave and track approval status.", icon: CalendarDays, to: "/employee/leaves", accent: "icon-3d-sage" },
-    { label: "Attendance", description: "See your check-in/out history and daily status.", icon: Clock, to: "/employee/attendance", accent: "icon-3d-peach" },
-    { label: "Updates", description: "View daily updates you shared today.", icon: MessageSquare, to: "/employee/updates", accent: "icon-3d-powder" },
-    { label: "Profile", description: "Manage your profile and face settings.", icon: User, to: "/profile", accent: "icon-3d-cream" },
+    { label: "Apply Leave", description: "Request casual/sick leave and track status.", icon: CalendarDays, to: "/employee/leaves", accent: "icon-3d-sage" },
+    { label: "Attendance", description: "See check-in/out history and daily status.", icon: Clock, to: "/employee/attendance", accent: "icon-3d-peach" },
+    { label: "Task Assignments", description: "View and track tasks assigned to you.", icon: CheckSquare, to: "/tasks", accent: "icon-3d-powder" },
+    { label: "Daily Updates", description: "View updates shared today or add notes.", icon: MessageSquare, to: "/employee/updates", accent: "icon-3d-cream" },
+    { label: "HR Support Tickets", description: "Raise HR support tickets or view status.", icon: HelpCircle, to: "/tickets", accent: "icon-3d-sage" },
+    { label: "Change Requests", description: "Track profile update requests & status.", icon: UserCheck, to: "/my-profile/change-requests", accent: "icon-3d-peach" },
   ];
 
   const completedPct = Math.min(100, Math.round((workMs / FULL_DAY_MS) * 100));
@@ -1269,10 +1272,10 @@ export default function EmployeeDashboard() {
         </Card>
       )}
 
-      {/* Quick actions — peach + powder + sage 3D */}
-      <div className="grid grid-cols-1 sm:grid-cols-2 xl:grid-cols-4 gap-4 sm:gap-5">
+      {/* Quick actions — self-service operations & requests */}
+      <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-6 gap-4 sm:gap-5">
         {pendingApprovals > 0 && (
-          <Link to="/employee/leaves" className="col-span-2 lg:col-span-4">
+          <Link to="/employee/leaves" className="col-span-1 sm:col-span-2 lg:col-span-3 xl:col-span-6">
             <Card className="border-0 shadow-lg text-white hover:-translate-y-1 transition-smooth cursor-pointer mb-1 border-glow-shine" style={{ background: "var(--gradient-success)" }}>
               <CardContent className="p-4 flex flex-row items-center justify-between">
                 <div className="flex items-center gap-3">

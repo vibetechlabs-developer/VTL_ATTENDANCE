@@ -382,10 +382,11 @@ export async function markNotificationsReadRequest(accessToken: string): Promise
   return fetchWithAutoRefresh(accessToken, "/api/users/notifications/mark-read/", { method: "POST" });
 }
 
-export async function updatesRequest(accessToken: string, params?: { all?: boolean; date?: string }): Promise<Response> {
+export async function updatesRequest(accessToken: string, params?: { all?: boolean; date?: string; employee_id?: string }): Promise<Response> {
   const query = new URLSearchParams();
   if (params?.all) query.set("all", "1");
-  if (params?.date) query.set("date", params.date);
+  if (params?.date && params.date !== "all") query.set("date", params.date);
+  if (params?.employee_id) query.set("employee_id", params.employee_id);
   const suffix = query.toString() ? `?${query.toString()}` : "";
   return fetchWithAutoRefresh(accessToken, `/api/updates/${suffix}`);
 }

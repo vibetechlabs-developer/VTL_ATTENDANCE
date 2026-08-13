@@ -27,13 +27,16 @@ export class SectionErrorBoundary extends Component<Props, State> {
     if (this.props.fallback) return this.props.fallback;
 
     return (
-      <div className="p-4 border-b border-border/40 bg-muted/20 text-center">
-        <p className="text-sm text-muted-foreground">{this.props.section} could not load on this device.</p>
+      <div className="p-6 border border-border/40 rounded-xl bg-muted/10 text-center max-w-md mx-auto my-8">
+        <p className="text-sm font-semibold text-foreground">{this.props.section} Error</p>
+          <p className="text-xs text-muted-foreground mt-1 font-mono bg-muted/30 p-2 rounded border border-border/20">
+            {this.state.error.message || 'An unexpected error occurred.'}
+          </p>
         <Button
           type="button"
           variant="outline"
           size="sm"
-          className="mt-2"
+          className="mt-3"
           onClick={() => this.setState({ error: null })}
         >
           Retry

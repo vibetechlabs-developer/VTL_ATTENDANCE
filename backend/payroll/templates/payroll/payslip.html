@@ -1,0 +1,298 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <title>Payslip - {{ payslip.payroll_run.month }}/{{ payslip.payroll_run.year }}</title>
+    <style>
+        @page {
+            size: A4;
+            margin: 15mm;
+        }
+        body {
+            font-family: 'Helvetica Neue', Helvetica, Arial, sans-serif;
+            font-size: 11px;
+            line-height: 1.4;
+            color: #333;
+            margin: 0;
+            padding: 0;
+        }
+        .payslip-container {
+            border: 1px solid #111827;
+            padding: 15px;
+            max-width: 800px;
+            margin: 0 auto;
+        }
+        .header-table {
+            width: 100%;
+            border-bottom: 2px solid #111827;
+            padding-bottom: 10px;
+            margin-bottom: 12px;
+        }
+        .company-name {
+            font-size: 18px;
+            font-weight: bold;
+            color: #111827;
+            text-transform: uppercase;
+        }
+        .company-details {
+            font-size: 10px;
+            color: #4b5563;
+        }
+        .payslip-title {
+            text-align: right;
+            font-size: 14px;
+            font-weight: bold;
+            color: #059669;
+            text-transform: uppercase;
+        }
+        .emp-info-table {
+            width: 100%;
+            border-collapse: collapse;
+            margin-bottom: 12px;
+        }
+        .emp-info-table td {
+            padding: 4px 6px;
+            vertical-align: top;
+        }
+        .label {
+            font-weight: bold;
+            color: #374151;
+            width: 18%;
+        }
+        .val {
+            color: #111827;
+            width: 32%;
+        }
+        .section-title {
+            background-color: #f3f4f6;
+            font-weight: bold;
+            padding: 5px 8px;
+            font-size: 11px;
+            color: #111827;
+            border: 1px solid #d1d5db;
+            border-bottom: none;
+            text-transform: uppercase;
+        }
+        .details-table {
+            width: 100%;
+            border-collapse: collapse;
+            margin-bottom: 12px;
+        }
+        .details-table th {
+            background-color: #e5e7eb;
+            color: #1f2937;
+            font-weight: bold;
+            padding: 6px 8px;
+            text-align: left;
+            border: 1px solid #d1d5db;
+        }
+        .details-table td {
+            padding: 6px 8px;
+            border: 1px solid #e5e7eb;
+        }
+        .text-right {
+            text-align: right;
+        }
+        .total-row td {
+            font-weight: bold;
+            background-color: #f9fafb;
+            border-top: 2px solid #9ca3af;
+        }
+        .net-pay-box {
+            background-color: #ecfdf5;
+            border: 1px solid #10b981;
+            padding: 10px;
+            margin-bottom: 12px;
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+        }
+        .net-pay-title {
+            font-size: 12px;
+            font-weight: bold;
+            color: #065f46;
+        }
+        .net-pay-amount {
+            font-size: 16px;
+            font-weight: bold;
+            color: #047857;
+        }
+        .in-words {
+            font-style: italic;
+            font-size: 10px;
+            color: #047857;
+            margin-top: 2px;
+        }
+        .footer {
+            margin-top: 20px;
+            border-top: 1px dashed #9ca3af;
+            padding-top: 8px;
+            text-align: center;
+            font-size: 9px;
+            color: #6b7280;
+        }
+    </style>
+</head>
+<body>
+
+<div class="payslip-container">
+    <table class="header-table">
+        <tr>
+            <td>
+                <div class="company-name">Vibe Tech Labs</div>
+                <div class="company-details">
+                    123 Tech Park, Cyber City, Hyderabad, TG, India<br>
+                    PF Reg: HYD/1234567 | ESI Code: 3600123456
+                </div>
+            </td>
+            <td style="vertical-align: top;">
+                <div class="payslip-title">Salary Slip</div>
+                <div style="text-align: right; font-size: 11px; color: #4b5563;">
+                    For the month of <strong>{{ payslip.payroll_run.month }}/{{ payslip.payroll_run.year }}</strong>
+                </div>
+            </td>
+        </tr>
+    </table>
+
+    <table class="emp-info-table">
+        <tr>
+            <td class="label">Employee Name:</td>
+            <td class="val"><strong>{{ payslip.employee.name }}</strong></td>
+            <td class="label">Employee ID:</td>
+            <td class="val">{{ payslip.employee.id }}</td>
+        </tr>
+        <tr>
+            <td class="label">Designation:</td>
+            <td class="val">{{ payslip.employee.designation|default:"N/A" }}</td>
+            <td class="label">Department:</td>
+            <td class="val">{{ payslip.employee.department|default:"N/A" }}</td>
+        </tr>
+        <tr>
+            <td class="label">Bank Account:</td>
+            <td class="val">{{ payslip.employee.bank_account_number|default:"XXXX XXXX XXXX" }}</td>
+            <td class="label">Bank Name:</td>
+            <td class="val">{{ payslip.employee.bank_name|default:"N/A" }}</td>
+        </tr>
+        <tr>
+            <td class="label">PAN Number:</td>
+            <td class="val">{{ payslip.employee.pan_number|default:"N/A" }}</td>
+            <td class="label">Aadhaar Number:</td>
+            <td class="val">{{ payslip.employee.aadhaar_number|default:"N/A" }}</td>
+        </tr>
+        <tr>
+            <td class="label">LOP Days:</td>
+            <td class="val"><strong>{{ payslip.lop_days }}</strong></td>
+            <td class="label">LOP Amount:</td>
+            <td class="val">₹ {{ payslip.lop_amount }}</td>
+        </tr>
+    </table>
+
+    <div class="section-title">Salary Breakdown</div>
+    <table class="details-table">
+        <thead>
+            <tr>
+                <th style="width: 50%;">Earnings</th>
+                <th style="width: 50%;" class="text-right">Amount (₹)</th>
+            </tr>
+        </thead>
+        <tbody>
+            {% for item in payslip.breakdown %}
+                {% if item.component_type == 'earning' %}
+                <tr>
+                    <td>{{ item.component_name }}</td>
+                    <td class="text-right">{{ item.final_value }}</td>
+                </tr>
+                {% endif %}
+            {% empty %}
+                <tr>
+                    <td>Gross Base Salary</td>
+                    <td class="text-right">{{ payslip.gross_earnings }}</td>
+                </tr>
+            {% endfor %}
+            <tr class="total-row">
+                <td>Gross Earnings</td>
+                <td class="text-right">₹ {{ payslip.gross_earnings }}</td>
+            </tr>
+        </tbody>
+    </table>
+
+    <table class="details-table">
+        <thead>
+            <tr>
+                <th style="width: 50%;">Deductions</th>
+                <th style="width: 50%;" class="text-right">Amount (₹)</th>
+            </tr>
+        </thead>
+        <tbody>
+            {% for item in payslip.breakdown %}
+                {% if item.component_type == 'deduction' %}
+                <tr>
+                    <td>{{ item.component_name }}</td>
+                    <td class="text-right">{{ item.final_value }}</td>
+                </tr>
+                {% endif %}
+            {% empty %}
+                <tr>
+                    <td>Total Statutory Deductions</td>
+                    <td class="text-right">{{ payslip.total_deductions }}</td>
+                </tr>
+            {% endfor %}
+            <tr class="total-row">
+                <td>Total Deductions</td>
+                <td class="text-right">₹ {{ payslip.total_deductions }}</td>
+            </tr>
+        </tbody>
+    </table>
+
+    <div class="net-pay-box">
+        <div>
+            <div class="net-pay-title">NET SALARY PAYABLE</div>
+            <div class="in-words">Amount in words: {{ payslip.net_pay_in_words }}</div>
+        </div>
+        <div class="net-pay-amount">
+            ₹ {{ payslip.net_pay }}
+        </div>
+    </div>
+
+    {% if payslip.employer_pf or payslip.employer_esi %}
+    <div class="section-title">Employer Contributions & YTD Summary</div>
+    <table class="details-table">
+        <thead>
+            <tr>
+                <th>Employer Contribution</th>
+                <th class="text-right">Amount (₹)</th>
+                <th>YTD Component</th>
+                <th class="text-right">YTD Total (₹)</th>
+            </tr>
+        </thead>
+        <tbody>
+            <tr>
+                <td>Employer PF</td>
+                <td class="text-right">{{ payslip.employer_pf }}</td>
+                <td>YTD Gross Earnings</td>
+                <td class="text-right">{{ payslip.ytd_gross }}</td>
+            </tr>
+            <tr>
+                <td>Employer ESI</td>
+                <td class="text-right">{{ payslip.employer_esi }}</td>
+                <td>YTD PF Contribution</td>
+                <td class="text-right">{{ payslip.ytd_pf }}</td>
+            </tr>
+            <tr>
+                <td>Employer Gratuity</td>
+                <td class="text-right">{{ payslip.employer_gratuity }}</td>
+                <td>YTD Deductions</td>
+                <td class="text-right">{{ payslip.ytd_tds }}</td>
+            </tr>
+        </tbody>
+    </table>
+    {% endif %}
+
+    <div class="footer">
+        This is a computer-generated salary slip and does not require a physical signature.<br>
+        Vibe Tech Labs — Confidential HR Document
+    </div>
+</div>
+
+</body>
+</html>

@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useState } from "react";
+import { useCallback, useEffect, useMemo, useState } from "react";
 import { Download, Search, ChevronLeft, ChevronRight, Calendar as CalendarIcon, Users, UserCheck, UserX, Plane, Eye, UserPlus, UserMinus, Phone } from "lucide-react";
 import { format, addDays, subDays, startOfWeek, endOfWeek, startOfMonth, endOfMonth, startOfDay, isAfter } from "date-fns";
 import { toast } from "sonner";
@@ -10,7 +10,23 @@ import { useAuthStore } from "@/store/authStore";
 import { attendanceAdminHistoryRequest, attendanceAdminRequest, attendanceForceCheckoutRequest } from "@/lib/api";
 import { Dialog, DialogContent, DialogDescription, DialogHeader, DialogTitle } from "@/components/ui/dialog";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
+import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { cn } from "@/lib/utils";
+
+const MONTHS = [
+  { value: 0, label: "January" },
+  { value: 1, label: "February" },
+  { value: 2, label: "March" },
+  { value: 3, label: "April" },
+  { value: 4, label: "May" },
+  { value: 5, label: "June" },
+  { value: 6, label: "July" },
+  { value: 7, label: "August" },
+  { value: 8, label: "September" },
+  { value: 9, label: "October" },
+  { value: 10, label: "November" },
+  { value: 11, label: "December" },
+];
 
 function formatMinutesHM(mins: number): string {
   const m = Math.max(0, Math.floor(mins));
@@ -49,6 +65,25 @@ export default function AttendanceManagement() {
   const [historyLoading, setHistoryLoading] = useState(false);
   const [loading, setLoading] = useState(false);
   const [loadError, setLoadError] = useState<string | null>(null);
+
+  const years = useMemo(() => {
+    const currentYear = today.getFullYear();
+    return Array.from({ length: 5 }, (_, i) => currentYear - 3 + i);
+  }, [today]);
+
+  const handleAdminMonthChange = (val: string) => {
+    const mIdx = Number(val);
+    const dayVal = Math.min(date.getDate(), 28);
+    const updated = new Date(date.getFullYear(), mIdx, dayVal);
+    setDate(updated > today ? today : updated);
+  };
+
+  const handleAdminYearChange = (val: string) => {
+    const yr = Number(val);
+    const dayVal = Math.min(date.getDate(), 28);
+    const updated = new Date(yr, date.getMonth(), dayVal);
+    setDate(updated > today ? today : updated);
+  };
 
   const loadAttendance = useCallback(async () => {
     if (!accessToken) return;
@@ -211,7 +246,7 @@ export default function AttendanceManagement() {
         <p className="text-muted-foreground mt-1 ml-9">View and track staff attendance for any date</p>
       </div>
 
-      <div className="flex items-center justify-center gap-2 sm:gap-4">
+      <div className="flex flex-wrap items-center justify-center gap-2 sm:gap-3">
         <button
           type="button"
           onClick={() => setDate(subDays(date, 1))}
@@ -220,10 +255,38 @@ export default function AttendanceManagement() {
         >
           <ChevronLeft className="h-4 w-4 text-muted-foreground" />
         </button>
-        <div className="flex items-center gap-2 px-3 sm:px-4 py-2 font-semibold text-sm sm:text-lg text-primary bg-muted/20 rounded-xl min-w-0">
-          <CalendarIcon className="h-5 w-5 shrink-0" />
+
+        <Select value={String(date.getMonth())} onValueChange={handleAdminMonthChange}>
+          <SelectTrigger className="w-[125px] h-9 text-xs sm:text-sm font-medium bg-card border-border/50">
+            <SelectValue placeholder="Month" />
+          </SelectTrigger>
+          <SelectContent>
+            {MONTHS.map((m) => (
+              <SelectItem key={m.value} value={String(m.value)} className="text-xs sm:text-sm">
+                {m.label}
+              </SelectItem>
+            ))}
+          </SelectContent>
+        </Select>
+
+        <Select value={String(date.getFullYear())} onValueChange={handleAdminYearChange}>
+          <SelectTrigger className="w-[90px] h-9 text-xs sm:text-sm font-medium bg-card border-border/50">
+            <SelectValue placeholder="Year" />
+          </SelectTrigger>
+          <SelectContent>
+            {years.map((y) => (
+              <SelectItem key={y} value={String(y)} className="text-xs sm:text-sm">
+                {y}
+              </SelectItem>
+            ))}
+          </SelectContent>
+        </Select>
+
+        <div className="flex items-center gap-2 px-3 sm:px-4 py-2 font-semibold text-xs sm:text-base text-primary bg-muted/20 rounded-xl min-w-0 border border-border/40">
+          <CalendarIcon className="h-4 w-4 shrink-0 text-primary" />
           <span className="tabular-nums">{format(date, "dd-MM-yyyy")}</span>
         </div>
+
         <button
           type="button"
           onClick={() => canGoNext && setDate(addDays(date, 1))}
