@@ -1484,93 +1484,139 @@ export default function EmployeeDashboard() {
               ) : null}
             </div>
 
-            {userHasRole(user, "sales") && (
-              <div className="min-w-0 space-y-3 rounded-2xl border border-border/80 bg-muted/20 p-3 sm:p-4">
-                <p className="text-xs font-semibold text-foreground">
-                  Sales/BDE compulsory daily report (all fields required)
-                </p>
-                <div className="grid grid-cols-1 gap-2.5 sm:grid-cols-2">
-                  {SALES_REPORT_FIELD_META.map((field) => (
-                    <div key={field.key} className={cn("space-y-1.5", field.key.endsWith("Links") ? "sm:col-span-2" : "")}>
-                      <Label className="text-[11px] leading-snug">
-                        {field.label} <span className="text-destructive">*</span>
-                      </Label>
-                      {field.key === "businessListingLinks" || field.key === "classifiedAdsLinks" ? (
-                        <div className={cn(
-                          "rounded-xl border border-border bg-background/40 p-2 space-y-2",
-                          checkoutErrorFieldIds.has(field.key) && "border-destructive ring-1 ring-destructive/50",
-                        )}>
-                          <p className="text-[11px] text-muted-foreground">
-                            Add exactly 5 links (each must start with http/https)
-                          </p>
-                          <div className="grid grid-cols-1 sm:grid-cols-2 gap-2">
-                            {((salesReport[field.key] as unknown as string[]) || ["", "", "", "", ""]).slice(0, 5).map((val, idx) => (
-                              <div key={idx} className="flex items-center gap-2">
-                                <span className="text-[11px] text-muted-foreground w-5">{idx + 1}.</span>
-                                <input
-                                  type="url"
-                                  value={val}
-                                  onChange={(e) => {
-                                    const next = e.target.value;
-                                    setSalesReport((prev) => {
-                                      const arr = Array.isArray(prev[field.key])
-                                        ? ([...prev[field.key]] as string[])
-                                        : ["", "", "", "", ""];
-                                      while (arr.length < 5) arr.push("");
-                                      arr[idx] = next;
-                                      return { ...prev, [field.key]: arr } as SalesDailyReport;
-                                    });
-                                    if (checkoutErrorFieldIds.has(field.key)) {
-                                      setCheckoutErrors((prev) => prev.filter((error) => error.fieldId !== field.key));
-                                    }
-                                  }}
-                                  placeholder={field.placeholder}
-                                  className="flex h-9 w-full rounded-xl border border-input bg-background px-3 py-1 text-xs shadow-sm transition-colors placeholder:text-muted-foreground focus-visible:outline-none focus-visible:ring-1 focus-visible:ring-ring"
-                                />
+            {userHasRole(user, "sales") && (() => {
+              const blogCount = Number(salesReport.blogPosts) || 0;
+              const pptCount = Number(salesReport.pptPosts) || 0;
+              const businessCount = Number(salesReport.businessListings) || 0;
+              const classifiedCount = Number(salesReport.classifiedAds) || 0;
+
+              const isLinkEnabled = (key: keyof SalesDailyReport): boolean => {
+                if (key === "blogLinks") return blogCount >= 1;
+                if (key === "pptLinks") return pptCount >= 1;
+                if (key === "businessListingLinks") return businessCount >= 5;
+                if (key === "classifiedAdsLinks") return classifiedCount >= 5;
+                return true;
+              };
+
+              const getLinkHint = (key: keyof SalesDailyReport): string | null => {
+                if (key === "blogLinks") return blogCount < 1 ? `Enter Blog posts count (min 1) above to unlock` : null;
+                if (key === "pptLinks") return pptCount < 1 ? `Enter PPT posts count (min 1) above to unlock` : null;
+                if (key === "businessListingLinks") return businessCount < 5 ? `Enter Business listings count (min 5) above to unlock` : null;
+                if (key === "classifiedAdsLinks") return classifiedCount < 5 ? `Enter Classified ads count (min 5) above to unlock` : null;
+                return null;
+              };
+
+              return (
+                <div className="min-w-0 space-y-3 rounded-2xl border border-border/80 bg-muted/20 p-3 sm:p-4">
+                  <p className="text-xs font-semibold text-foreground">
+                    Sales/BDE compulsory daily report (all fields required)
+                  </p>
+                  <div className="grid grid-cols-1 gap-2.5 sm:grid-cols-2">
+                    {SALES_REPORT_FIELD_META.map((field) => {
+                      const isLink = field.key.endsWith("Links");
+                      const enabled = isLinkEnabled(field.key);
+                      const hint = getLinkHint(field.key);
+
+                      return (
+                        <div key={field.key} className={cn("space-y-1.5", isLink ? "sm:col-span-2" : "")}>
+                          <Label className={cn("text-[11px] leading-snug", isLink && !enabled && "text-muted-foreground/50")}>
+                            {field.label} {!isLink && <span className="text-destructive">*</span>}
+                            {isLink && enabled && <span className="text-destructive"> *</span>}
+                          </Label>
+
+                          {/* Disabled hint when link field is locked */}
+                          {isLink && !enabled && (
+                            <div className="flex items-center gap-2 rounded-xl border border-border/40 bg-muted/30 px-3 py-2 text-[11px] text-muted-foreground/60 select-none">
+                              <svg className="h-3.5 w-3.5 shrink-0" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}><path strokeLinecap="round" strokeLinejoin="round" d="M12 15v2m-6 4h12a2 2 0 002-2v-6a2 2 0 00-2-2H6a2 2 0 00-2 2v6a2 2 0 002 2zm10-10V7a4 4 0 00-8 0v4h8z" /></svg>
+                              {hint}
+                            </div>
+                          )}
+
+                          {/* Business/Classified 5-link grid */}
+                          {isLink && enabled && (field.key === "businessListingLinks" || field.key === "classifiedAdsLinks") && (
+                            <div className={cn(
+                              "rounded-xl border border-border bg-background/40 p-2 space-y-2",
+                              checkoutErrorFieldIds.has(field.key) && "border-destructive ring-1 ring-destructive/50",
+                            )}>
+                              <p className="text-[11px] text-muted-foreground">
+                                Add exactly 5 links (each must start with http/https)
+                              </p>
+                              <div className="grid grid-cols-1 sm:grid-cols-2 gap-2">
+                                {((salesReport[field.key] as unknown as string[]) || ["", "", "", "", ""]).slice(0, 5).map((val, idx) => (
+                                  <div key={idx} className="flex items-center gap-2">
+                                    <span className="text-[11px] text-muted-foreground w-5">{idx + 1}.</span>
+                                    <input
+                                      type="url"
+                                      value={val}
+                                      onChange={(e) => {
+                                        const next = e.target.value;
+                                        setSalesReport((prev) => {
+                                          const arr = Array.isArray(prev[field.key])
+                                            ? ([...prev[field.key]] as string[])
+                                            : ["", "", "", "", ""];
+                                          while (arr.length < 5) arr.push("");
+                                          arr[idx] = next;
+                                          return { ...prev, [field.key]: arr } as SalesDailyReport;
+                                        });
+                                        if (checkoutErrorFieldIds.has(field.key)) {
+                                          setCheckoutErrors((prev) => prev.filter((error) => error.fieldId !== field.key));
+                                        }
+                                      }}
+                                      placeholder={field.placeholder}
+                                      className="flex h-9 w-full rounded-xl border border-input bg-background px-3 py-1 text-xs shadow-sm transition-colors placeholder:text-muted-foreground focus-visible:outline-none focus-visible:ring-1 focus-visible:ring-ring"
+                                    />
+                                  </div>
+                                ))}
                               </div>
-                            ))}
-                          </div>
+                            </div>
+                          )}
+
+                          {/* Blog/PPT textarea links */}
+                          {isLink && enabled && field.key !== "businessListingLinks" && field.key !== "classifiedAdsLinks" && (
+                            <Textarea
+                              value={salesReport[field.key] as unknown as string}
+                              onChange={(e) => {
+                                const value = e.target.value;
+                                setSalesReport((prev) => ({ ...prev, [field.key]: value }));
+                                if (checkoutErrorFieldIds.has(field.key)) {
+                                  setCheckoutErrors((prev) => prev.filter((error) => error.fieldId !== field.key));
+                                }
+                              }}
+                              placeholder={field.placeholder}
+                              className={cn(
+                                "min-h-[68px] w-full min-w-0 resize-none rounded-xl text-xs",
+                                checkoutErrorFieldIds.has(field.key) && "border-destructive ring-1 ring-destructive/50",
+                              )}
+                            />
+                          )}
+
+                          {/* Number inputs */}
+                          {!isLink && (
+                            <input
+                              type="number"
+                              min={0}
+                              value={salesReport[field.key]}
+                              onChange={(e) => {
+                                const value = e.target.value;
+                                setSalesReport((prev) => ({ ...prev, [field.key]: value }));
+                                if (checkoutErrorFieldIds.has(field.key)) {
+                                  setCheckoutErrors((prev) => prev.filter((error) => error.fieldId !== field.key));
+                                }
+                              }}
+                              placeholder={field.placeholder}
+                              className={cn(
+                                "flex h-9 w-full rounded-xl border border-input bg-background px-3 py-1 text-xs shadow-sm transition-colors placeholder:text-muted-foreground focus-visible:outline-none focus-visible:ring-1 focus-visible:ring-ring",
+                                checkoutErrorFieldIds.has(field.key) && "border-destructive ring-1 ring-destructive/50",
+                              )}
+                            />
+                          )}
                         </div>
-                      ) : field.key.endsWith("Links") ? (
-                        <Textarea
-                          value={salesReport[field.key] as unknown as string}
-                          onChange={(e) => {
-                            const value = e.target.value;
-                            setSalesReport((prev) => ({ ...prev, [field.key]: value }));
-                            if (checkoutErrorFieldIds.has(field.key)) {
-                              setCheckoutErrors((prev) => prev.filter((error) => error.fieldId !== field.key));
-                            }
-                          }}
-                          placeholder={field.placeholder}
-                          className={cn(
-                            "min-h-[68px] w-full min-w-0 resize-none rounded-xl text-xs",
-                            checkoutErrorFieldIds.has(field.key) && "border-destructive ring-1 ring-destructive/50",
-                          )}
-                        />
-                      ) : (
-                        <input
-                          type="number"
-                          min={0}
-                          value={salesReport[field.key]}
-                          onChange={(e) => {
-                            const value = e.target.value;
-                            setSalesReport((prev) => ({ ...prev, [field.key]: value }));
-                            if (checkoutErrorFieldIds.has(field.key)) {
-                              setCheckoutErrors((prev) => prev.filter((error) => error.fieldId !== field.key));
-                            }
-                          }}
-                          placeholder={field.placeholder}
-                          className={cn(
-                            "flex h-9 w-full rounded-xl border border-input bg-background px-3 py-1 text-xs shadow-sm transition-colors placeholder:text-muted-foreground focus-visible:outline-none focus-visible:ring-1 focus-visible:ring-ring",
-                            checkoutErrorFieldIds.has(field.key) && "border-destructive ring-1 ring-destructive/50",
-                          )}
-                        />
-                      )}
-                    </div>
-                  ))}
+                      );
+                    })}
+                  </div>
                 </div>
-              </div>
-            )}
+              );
+            })()}
 
             {userHasRole(user, "sales") && (
               <div className="min-w-0 space-y-3 rounded-2xl border border-border/80 bg-muted/20 p-3 sm:p-4">

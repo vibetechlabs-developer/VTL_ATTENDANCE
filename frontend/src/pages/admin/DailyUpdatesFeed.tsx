@@ -75,14 +75,8 @@ const [bdeReportData, setBdeReportData] = useState<Record<string, any>>({
     void run();
   }, [run]);
 
-  const [postDate, setPostDate] = useState<string>(today);
-
   const handlePost = async () => {
     if (!accessToken || !text.trim()) return;
-    if (postDate > today) {
-      toast.error("Selected date cannot be in the future.");
-      return;
-    }
     // BDE validation
     if (user?.role === "sales") {
       const missing = Object.entries(bdeReportData).filter(([key, value]) => {
@@ -97,8 +91,7 @@ const [bdeReportData, setBdeReportData] = useState<Record<string, any>>({
     const res = await updatesPostRequest(
       accessToken,
       text.trim(),
-      user?.role === "sales" ? bdeReportData : undefined,
-      postDate !== today ? postDate : undefined
+      user?.role === "sales" ? bdeReportData : undefined
     );
     const body = (await res.json().catch(() => ({}))) as { error?: string; message?: string };
     if (!res.ok) {
@@ -106,7 +99,6 @@ const [bdeReportData, setBdeReportData] = useState<Record<string, any>>({
       return;
     }
     setText("");
-    setPostDate(today);
     // Reset BDE fields after successful post
     if (user?.role === "sales") setBdeReportData({
       blog_posts: "",
@@ -337,21 +329,6 @@ const [bdeReportData, setBdeReportData] = useState<Record<string, any>>({
             </AvatarFallback>
           </Avatar>
           <div className="flex-1 space-y-3">
-            <div className="flex items-center gap-2">
-              <span className="text-xs font-semibold text-muted-foreground flex items-center gap-1">
-                <CalendarIcon className="h-3.5 w-3.5" /> Select Date:
-              </span>
-              <input
-                type="date"
-                value={postDate}
-                max={today}
-                onChange={(e) => {
-                  const next = e.target.value;
-                  setPostDate(next > today ? today : next);
-                }}
-                className="px-3 py-1 bg-card border border-border/60 rounded-lg text-xs font-medium focus:outline-none focus:ring-1 focus:ring-primary"
-              />
-            </div>
             <Textarea
               placeholder="Share an update with the team..."
               value={text}

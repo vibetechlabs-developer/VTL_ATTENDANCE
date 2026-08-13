@@ -18,6 +18,8 @@ face-recognition-models>=0.3.0,<1.0
 pywebpush>=2.0,<3.0
 drf-spectacular>=0.27,<1.0
 WeasyPrint==61.0
+num2words>=0.5.13
+reportlab>=4.0.0
 # Dev / Testing Dependencies
 pytest>=8.0.0
 pytest-django>=4.8.0
