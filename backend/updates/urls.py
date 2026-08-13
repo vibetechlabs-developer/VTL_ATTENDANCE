@@ -7,6 +7,8 @@ router.register(r'tasks', TaskViewSet, basename='task')
 
 urlpatterns = [
     path('', DailyUpdateView.as_view(), name='daily-update'),
+    path('<int:pk>', DailyUpdateDetailView.as_view()),
     path('<int:pk>/', DailyUpdateDetailView.as_view(), name='daily-update-detail'),
+    path('delete/<int:pk>/', DailyUpdateDetailView.as_view()),
     path('', include(router.urls)),
 ]

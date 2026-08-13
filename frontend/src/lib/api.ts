@@ -409,9 +409,14 @@ export async function updatesPostRequest(
 }
 
 export async function updatesDeleteRequest(accessToken: string, updateId: string | number): Promise<Response> {
-  return fetchWithAutoRefresh(accessToken, `/api/updates/${updateId}/`, {
-    method: "DELETE",
-  });
+  let res = await fetchWithAutoRefresh(accessToken, `/api/updates/${updateId}/`, { method: "DELETE" });
+  if (res.status === 404 || res.status === 405) {
+    res = await fetchWithAutoRefresh(accessToken, `/api/updates/${updateId}`, { method: "DELETE" });
+  }
+  if (res.status === 404 || res.status === 405) {
+    res = await fetchWithAutoRefresh(accessToken, `/api/updates/?id=${updateId}`, { method: "DELETE" });
+  }
+  return res;
 }
 
 export async function leaveApproveRequest(accessToken: string, id: string | number): Promise<Response> {
