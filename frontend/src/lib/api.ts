@@ -394,12 +394,23 @@ export async function updatesRequest(accessToken: string, params?: { all?: boole
 export async function updatesPostRequest(
   accessToken: string,
   updateText: string,
-  reportData?: Record<string, string | number | boolean>
+  reportData?: Record<string, any>,
+  date?: string
 ): Promise<Response> {
   return fetchWithAutoRefresh(accessToken, "/api/updates/", {
     method: "POST",
     headers: { "Content-Type": "application/json" },
-    body: JSON.stringify({ update_text: updateText, report_data: reportData }),
+    body: JSON.stringify({
+      update_text: updateText,
+      report_data: reportData,
+      ...(date ? { date } : {}),
+    }),
+  });
+}
+
+export async function updatesDeleteRequest(accessToken: string, updateId: string | number): Promise<Response> {
+  return fetchWithAutoRefresh(accessToken, `/api/updates/${updateId}/`, {
+    method: "DELETE",
   });
 }
 

@@ -1,6 +1,6 @@
 import { useEffect, useState } from "react";
 import { format } from "date-fns";
-import { Send, Calendar as CalendarIcon } from "lucide-react";
+import { Send, Calendar as CalendarIcon, Trash2 } from "lucide-react";
 import { Card } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
@@ -12,7 +12,7 @@ import { useAuthStore } from "@/store/authStore";
 import { userInitials } from "@/lib/utils";
 import { toast } from "sonner";
 import { safeFormatDistanceToNow } from "@/utils/safeDate";
-import { updatesPostRequest, updatesRequest } from "@/lib/api";
+import { updatesDeleteRequest, updatesPostRequest, updatesRequest } from "@/lib/api";
 
 export default function EmployeeUpdates() {
   const today = format(new Date(), "yyyy-MM-dd");
@@ -39,15 +39,27 @@ export default function EmployeeUpdates() {
       toast.error("Selected date cannot be in the future.");
       return;
     }
-    const res = await updatesPostRequest(accessToken, text.trim(), undefined, postDate !== today ? postDate : undefined);
+    const res = await updatesPostRequest(accessToken, text.trim(), undefined, postDate);
     const body = (await res.json().catch(() => ({}))) as { error?: string; message?: string };
     if (!res.ok) {
       toast.error(body.error || "Could not post update");
       return;
     }
     setText("");
-    setPostDate(today);
     toast.success(body.message || "Update posted");
+    await load();
+  };
+
+  const handleDelete = async (updateId: number | string) => {
+    if (!accessToken) return;
+    if (!confirm("Are you sure you want to delete this update?")) return;
+    const res = await updatesDeleteRequest(accessToken, updateId);
+    if (!res.ok) {
+      const body = (await res.json().catch(() => ({}))) as { error?: string };
+      toast.error(body.error || "Could not delete update");
+      return;
+    }
+    toast.success("Update deleted");
     await load();
   };
 
@@ -111,13 +123,22 @@ export default function EmployeeUpdates() {
                     <p className="font-semibold text-sm">{u.employee_name}</p>
                     <StatusPill label={u.role} variant="muted" />
                     {u.date && (
-                      <Badge variant="outline" className="text-[10px] px-1.5 py-0">
+                      <Badge variant="outline" className="text-[10px] px-1.5 py-0 font-medium">
                         {u.date}
                       </Badge>
                     )}
                     <span className="text-xs text-muted-foreground ml-auto">
                       {safeFormatDistanceToNow(u.created_at, { addSuffix: true })}
                     </span>
+                    <Button
+                      variant="ghost"
+                      size="icon"
+                      className="h-7 w-7 text-muted-foreground hover:text-destructive transition-colors shrink-0"
+                      title="Delete update"
+                      onClick={() => handleDelete(u.id)}
+                    >
+                      <Trash2 className="h-4 w-4" />
+                    </Button>
                   </div>
                   <p className="text-sm mt-2 leading-relaxed">{u.update_text}</p>
                 </div>

@@ -270,6 +270,26 @@ class DailyUpdateView(APIView):
         return Response(serializer.data)
 
 
+class DailyUpdateDetailView(APIView):
+    permission_classes = [IsAuthenticated]
+
+    def delete(self, request, pk):
+        try:
+            update = DailyUpdate.objects.get(pk=pk)
+        except DailyUpdate.DoesNotExist:
+            return Response({'error': 'Update not found.'}, status=404)
+
+        is_owner = hasattr(request.user, 'employee') and update.employee == request.user.employee
+        is_admin_or_manager = request.user.role in ['admin', 'manager', 'hr'] or request.user.is_superuser
+
+        if is_owner or is_admin_or_manager:
+            update.delete()
+            return Response({'message': 'Update deleted successfully.'})
+        else:
+            return Response({'error': 'You do not have permission to delete this update.'}, status=403)
+
+
+
 from datetime import timedelta
 from rest_framework import viewsets, permissions, serializers, exceptions
 from rest_framework.decorators import action

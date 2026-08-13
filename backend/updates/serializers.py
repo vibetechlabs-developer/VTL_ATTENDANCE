@@ -5,11 +5,13 @@ from users.models import Employee
 
 class DailyUpdateSerializer(serializers.ModelSerializer):
     employee_name = serializers.CharField(source='employee.name', read_only=True)
+    employee_id = serializers.IntegerField(source='employee.id', read_only=True)
+    user_id = serializers.IntegerField(source='employee.user.id', read_only=True)
     role = serializers.CharField(source='employee.user.role', read_only=True)
 
     class Meta:
         model = DailyUpdate
-        fields = ['id', 'date', 'update_text', 'report_data', 'created_at', 'employee_name', 'role']
+        fields = ['id', 'employee_id', 'user_id', 'date', 'update_text', 'report_data', 'created_at', 'employee_name', 'role']
 
 
 class TaskSerializer(serializers.ModelSerializer):

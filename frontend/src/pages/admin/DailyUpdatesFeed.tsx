@@ -1,13 +1,13 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { format, parseISO } from "date-fns";
-import { Calendar as CalendarIcon, Pencil, Send, Users, LayoutList } from "lucide-react";
+import { Calendar as CalendarIcon, Pencil, Send, Users, LayoutList, Trash2 } from "lucide-react";
 import { Card } from "@/components/ui/card";
 import { Avatar, AvatarFallback } from "@/components/ui/avatar";
 import { StatusPill } from "@/components/StatusPill";
 import { Badge } from "@/components/ui/badge";
 import { safeFormatDistanceToNow } from "@/utils/safeDate";
 import { useAuthStore } from "@/store/authStore";
-import { updatesPostRequest, updatesRequest, usersListRequest } from "@/lib/api";
+import { updatesDeleteRequest, updatesPostRequest, updatesRequest, usersListRequest } from "@/lib/api";
 import { Textarea } from "@/components/ui/textarea";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
@@ -133,6 +133,19 @@ const [bdeReportData, setBdeReportData] = useState<Record<string, any>>({
     await run();
   };
 
+  const handleDelete = async (updateId: number | string) => {
+    if (!accessToken) return;
+    if (!confirm("Are you sure you want to delete this update?")) return;
+    const res = await updatesDeleteRequest(accessToken, updateId);
+    if (!res.ok) {
+      const body = (await res.json().catch(() => ({}))) as { error?: string };
+      toast.error(body.error || "Could not delete update");
+      return;
+    }
+    toast.success("Update deleted");
+    await run();
+  };
+
   // Group updates by date when showing all dates
   const groupedByDate = useMemo(() => {
     if (!showAllDates) return null;
@@ -171,14 +184,23 @@ const [bdeReportData, setBdeReportData] = useState<Record<string, any>>({
           <div className="flex flex-wrap items-center gap-2">
             <p className="font-semibold text-sm">{u.employee_name}</p>
             <StatusPill label={u.role} variant="muted" />
-            {showAllDates && u.date && (
-              <Badge variant="outline" className="text-[10px] px-1.5 py-0">
+            {u.date && (
+              <Badge variant="outline" className="text-[10px] px-1.5 py-0 font-medium">
                 {u.date}
               </Badge>
             )}
             <span className="text-xs text-muted-foreground ml-auto">
               {safeFormatDistanceToNow(u.created_at, { addSuffix: true })}
             </span>
+            <Button
+              variant="ghost"
+              size="icon"
+              className="h-7 w-7 text-muted-foreground hover:text-destructive transition-colors shrink-0"
+              title="Delete update"
+              onClick={() => handleDelete(u.id)}
+            >
+              <Trash2 className="h-4 w-4" />
+            </Button>
           </div>
           <p className="text-sm mt-2 leading-relaxed">{u.update_text}</p>
 
