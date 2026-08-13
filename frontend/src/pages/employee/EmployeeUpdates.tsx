@@ -1,10 +1,13 @@
 import { useEffect, useState } from "react";
-import { Send } from "lucide-react";
+import { format } from "date-fns";
+import { Send, Calendar as CalendarIcon } from "lucide-react";
 import { Card } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
+import { Input } from "@/components/ui/input";
 import { Textarea } from "@/components/ui/textarea";
 import { Avatar, AvatarFallback } from "@/components/ui/avatar";
 import { StatusPill } from "@/components/StatusPill";
+import { Badge } from "@/components/ui/badge";
 import { useAuthStore } from "@/store/authStore";
 import { userInitials } from "@/lib/utils";
 import { toast } from "sonner";
@@ -12,8 +15,10 @@ import { safeFormatDistanceToNow } from "@/utils/safeDate";
 import { updatesPostRequest, updatesRequest } from "@/lib/api";
 
 export default function EmployeeUpdates() {
+  const today = format(new Date(), "yyyy-MM-dd");
   const { user, accessToken } = useAuthStore();
   const [text, setText] = useState("");
+  const [postDate, setPostDate] = useState<string>(today);
   const [updates, setUpdates] = useState<any[]>([]);
 
   const load = async () => {
@@ -30,13 +35,18 @@ export default function EmployeeUpdates() {
 
   const handlePost = async () => {
     if (!text.trim() || !user || !accessToken) return;
-    const res = await updatesPostRequest(accessToken, text.trim());
+    if (postDate > today) {
+      toast.error("Selected date cannot be in the future.");
+      return;
+    }
+    const res = await updatesPostRequest(accessToken, text.trim(), undefined, postDate !== today ? postDate : undefined);
     const body = (await res.json().catch(() => ({}))) as { error?: string; message?: string };
     if (!res.ok) {
       toast.error(body.error || "Could not post update");
       return;
     }
     setText("");
+    setPostDate(today);
     toast.success(body.message || "Update posted");
     await load();
   };
@@ -57,6 +67,21 @@ export default function EmployeeUpdates() {
               </AvatarFallback>
             </Avatar>
             <div className="flex-1 space-y-3">
+              <div className="flex items-center gap-2">
+                <span className="text-xs font-semibold text-muted-foreground flex items-center gap-1">
+                  <CalendarIcon className="h-3.5 w-3.5" /> Select Date:
+                </span>
+                <input
+                  type="date"
+                  value={postDate}
+                  max={today}
+                  onChange={(e) => {
+                    const next = e.target.value;
+                    setPostDate(next > today ? today : next);
+                  }}
+                  className="px-3 py-1 bg-card border border-border/60 rounded-lg text-xs font-medium focus:outline-none focus:ring-1 focus:ring-primary"
+                />
+              </div>
               <Textarea
                 placeholder="Write your daily update..."
                 value={text}
@@ -85,6 +110,11 @@ export default function EmployeeUpdates() {
                   <div className="flex flex-wrap items-center gap-2">
                     <p className="font-semibold text-sm">{u.employee_name}</p>
                     <StatusPill label={u.role} variant="muted" />
+                    {u.date && (
+                      <Badge variant="outline" className="text-[10px] px-1.5 py-0">
+                        {u.date}
+                      </Badge>
+                    )}
                     <span className="text-xs text-muted-foreground ml-auto">
                       {safeFormatDistanceToNow(u.created_at, { addSuffix: true })}
                     </span>

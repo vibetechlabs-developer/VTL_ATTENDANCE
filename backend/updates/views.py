@@ -87,6 +87,18 @@ class DailyUpdateView(APIView):
         if report_data is not None and not isinstance(report_data, dict):
             return Response({'error': 'report_data must be an object.'}, status=400)
 
+        custom_date = None
+        date_str = request.data.get('date')
+        if date_str:
+            try:
+                from datetime import datetime
+                parsed = datetime.strptime(str(date_str).strip(), '%Y-%m-%d').date()
+                if parsed > timezone.now().date():
+                    return Response({'error': 'Update date cannot be in the future.'}, status=400)
+                custom_date = parsed
+            except ValueError:
+                return Response({'error': 'Invalid date format. Use YYYY-MM-DD.'}, status=400)
+
         from users.role_utils import user_has_role
 
         if user_has_role(request.user, 'sales'):
@@ -221,11 +233,15 @@ class DailyUpdateView(APIView):
                     'invalid_fields': invalid_fields,
                 }, status=400)
 
-        update = DailyUpdate.objects.create(
-            employee=request.user.employee,
-            update_text=text,
-            report_data=report_data if isinstance(report_data, dict) else None,
-        )
+        create_kwargs = {
+            'employee': request.user.employee,
+            'update_text': text,
+            'report_data': report_data if isinstance(report_data, dict) else None,
+        }
+        if custom_date:
+            create_kwargs['date'] = custom_date
+
+        update = DailyUpdate.objects.create(**create_kwargs)
         return Response({
             'message': 'Update submitted successfully.',
             'date': update.date

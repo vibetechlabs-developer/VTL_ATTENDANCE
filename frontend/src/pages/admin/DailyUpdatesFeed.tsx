@@ -10,6 +10,7 @@ import { useAuthStore } from "@/store/authStore";
 import { updatesPostRequest, updatesRequest, usersListRequest } from "@/lib/api";
 import { Textarea } from "@/components/ui/textarea";
 import { Button } from "@/components/ui/button";
+import { Input } from "@/components/ui/input";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { toast } from "sonner";
 
@@ -26,6 +27,27 @@ export default function DailyUpdatesFeed() {
   const [updates, setUpdates] = useState<any[]>([]);
   const [loading, setLoading] = useState(false);
   const [text, setText] = useState("");
+const [bdeReportData, setBdeReportData] = useState<Record<string, any>>({
+  blog_posts: "",
+  ppt_posts: "",
+  business_listings: "",
+  classified_ads: "",
+  total_calls: "",
+  calls_received: "",
+  meetings: "",
+  clients_done: "",
+  data_extracted_india: "",
+  data_extracted_abroad: "",
+  mail_sent_bde: "",
+  mail_sent_general: "",
+  linkedin_post: false,
+  linkedin_connections: "",
+  linkedin_messages: "",
+  linkedin_data_extracted: "",
+  newspaper_read: false,
+  newspaper_important_news: "",
+  group_photos_added: false,
+});
 
   // Load employees for filter dropdown (admin only)
   useEffect(() => {
@@ -53,15 +75,60 @@ export default function DailyUpdatesFeed() {
     void run();
   }, [run]);
 
+  const [postDate, setPostDate] = useState<string>(today);
+
   const handlePost = async () => {
     if (!accessToken || !text.trim()) return;
-    const res = await updatesPostRequest(accessToken, text.trim());
+    if (postDate > today) {
+      toast.error("Selected date cannot be in the future.");
+      return;
+    }
+    // BDE validation
+    if (user?.role === "sales") {
+      const missing = Object.entries(bdeReportData).filter(([key, value]) => {
+        if (typeof value === "boolean") return false; // booleans are optional boolean defaults
+        return !String(value).trim();
+      });
+      if (missing.length) {
+        toast.error("Please fill all report fields before posting.");
+        return;
+      }
+    }
+    const res = await updatesPostRequest(
+      accessToken,
+      text.trim(),
+      user?.role === "sales" ? bdeReportData : undefined,
+      postDate !== today ? postDate : undefined
+    );
     const body = (await res.json().catch(() => ({}))) as { error?: string; message?: string };
     if (!res.ok) {
       toast.error(body.error || "Could not post update");
       return;
     }
     setText("");
+    setPostDate(today);
+    // Reset BDE fields after successful post
+    if (user?.role === "sales") setBdeReportData({
+      blog_posts: "",
+      ppt_posts: "",
+      business_listings: "",
+      classified_ads: "",
+      total_calls: "",
+      calls_received: "",
+      meetings: "",
+      clients_done: "",
+      data_extracted_india: "",
+      data_extracted_abroad: "",
+      mail_sent_bde: "",
+      mail_sent_general: "",
+      linkedin_post: false,
+      linkedin_connections: "",
+      linkedin_messages: "",
+      linkedin_data_extracted: "",
+      newspaper_read: false,
+      newspaper_important_news: "",
+      group_photos_added: false,
+    });
     toast.success(body.message || "Update posted");
     await run();
   };
@@ -248,6 +315,21 @@ export default function DailyUpdatesFeed() {
             </AvatarFallback>
           </Avatar>
           <div className="flex-1 space-y-3">
+            <div className="flex items-center gap-2">
+              <span className="text-xs font-semibold text-muted-foreground flex items-center gap-1">
+                <CalendarIcon className="h-3.5 w-3.5" /> Select Date:
+              </span>
+              <input
+                type="date"
+                value={postDate}
+                max={today}
+                onChange={(e) => {
+                  const next = e.target.value;
+                  setPostDate(next > today ? today : next);
+                }}
+                className="px-3 py-1 bg-card border border-border/60 rounded-lg text-xs font-medium focus:outline-none focus:ring-1 focus:ring-primary"
+              />
+            </div>
             <Textarea
               placeholder="Share an update with the team..."
               value={text}
@@ -260,6 +342,38 @@ export default function DailyUpdatesFeed() {
               </Button>
             </div>
           </div>
+{user?.role === "sales" && (
+  <div className="grid grid-cols-1 sm:grid-cols-2 gap-2 mt-4">
+    <Input placeholder="Blog posts" value={bdeReportData.blog_posts} onChange={e => setBdeReportData({ ...bdeReportData, blog_posts: e.target.value })} />
+    <Input placeholder="PPT posts" value={bdeReportData.ppt_posts} onChange={e => setBdeReportData({ ...bdeReportData, ppt_posts: e.target.value })} />
+    <Input placeholder="Business listings" value={bdeReportData.business_listings} onChange={e => setBdeReportData({ ...bdeReportData, business_listings: e.target.value })} />
+    <Input placeholder="Classified ads" value={bdeReportData.classified_ads} onChange={e => setBdeReportData({ ...bdeReportData, classified_ads: e.target.value })} />
+    <Input placeholder="Total calls" value={bdeReportData.total_calls} onChange={e => setBdeReportData({ ...bdeReportData, total_calls: e.target.value })} />
+    <Input placeholder="Calls received" value={bdeReportData.calls_received} onChange={e => setBdeReportData({ ...bdeReportData, calls_received: e.target.value })} />
+    <Input placeholder="Meetings" value={bdeReportData.meetings} onChange={e => setBdeReportData({ ...bdeReportData, meetings: e.target.value })} />
+    <Input placeholder="Clients done" value={bdeReportData.clients_done} onChange={e => setBdeReportData({ ...bdeReportData, clients_done: e.target.value })} />
+    <Input placeholder="Data extracted (India)" value={bdeReportData.data_extracted_india} onChange={e => setBdeReportData({ ...bdeReportData, data_extracted_india: e.target.value })} />
+    <Input placeholder="Data extracted (Abroad)" value={bdeReportData.data_extracted_abroad} onChange={e => setBdeReportData({ ...bdeReportData, data_extracted_abroad: e.target.value })} />
+    <Input placeholder="Mail sent (BDE)" value={bdeReportData.mail_sent_bde} onChange={e => setBdeReportData({ ...bdeReportData, mail_sent_bde: e.target.value })} />
+    <Input placeholder="Mail sent (General)" value={bdeReportData.mail_sent_general} onChange={e => setBdeReportData({ ...bdeReportData, mail_sent_general: e.target.value })} />
+    <label className="flex items-center space-x-2">
+      <input type="checkbox" checked={bdeReportData.linkedin_post} onChange={e => setBdeReportData({ ...bdeReportData, linkedin_post: e.target.checked })} className="h-4 w-4" />
+      <span>LinkedIn post</span>
+    </label>
+    <Input placeholder="LinkedIn connections" value={bdeReportData.linkedin_connections} onChange={e => setBdeReportData({ ...bdeReportData, linkedin_connections: e.target.value })} />
+    <Input placeholder="LinkedIn messages" value={bdeReportData.linkedin_messages} onChange={e => setBdeReportData({ ...bdeReportData, linkedin_messages: e.target.value })} />
+    <Input placeholder="LinkedIn data extracted" value={bdeReportData.linkedin_data_extracted} onChange={e => setBdeReportData({ ...bdeReportData, linkedin_data_extracted: e.target.value })} />
+    <label className="flex items-center space-x-2">
+      <input type="checkbox" checked={bdeReportData.newspaper_read} onChange={e => setBdeReportData({ ...bdeReportData, newspaper_read: e.target.checked })} className="h-4 w-4" />
+      <span>Newspaper read</span>
+    </label>
+    <Input placeholder="Important news" value={bdeReportData.newspaper_important_news} onChange={e => setBdeReportData({ ...bdeReportData, newspaper_important_news: e.target.value })} />
+    <label className="flex items-center space-x-2">
+      <input type="checkbox" checked={bdeReportData.group_photos_added} onChange={e => setBdeReportData({ ...bdeReportData, group_photos_added: e.target.checked })} className="h-4 w-4" />
+      <span>Group photos added</span>
+    </label>
+  </div>
+)}
         </div>
       </Card>
 

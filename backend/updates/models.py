@@ -9,7 +9,8 @@ User = get_user_model()
 
 class DailyUpdate(models.Model):
     employee = models.ForeignKey(Employee, on_delete=models.CASCADE)
-    date = models.DateField(auto_now_add=True)
+    # Date of the update. Editable to allow posting for past dates.
+    date = models.DateField(default=timezone.now)
     update_text = models.TextField()
     report_data = models.JSONField(null=True, blank=True)
     created_at = models.DateTimeField(auto_now_add=True)
