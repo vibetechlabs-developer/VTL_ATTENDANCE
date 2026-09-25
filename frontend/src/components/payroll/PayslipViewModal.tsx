@@ -110,7 +110,7 @@ export default function PayslipViewModal({
             .net-label { font-size: 13px; font-weight: 700; color: #047857; text-transform: uppercase; letter-spacing: 1px; }
             .net-words { font-size: 11px; color: #6b7280; font-style: italic; margin-top: 4px; }
             .net-amount { font-size: 26px; font-weight: 900; color: #047857; }
-            .footer { font-size: 10.5px; color: #9ca3af; text-align: center; margin-top: 24px; border-top: 1px dashed #d1d5db; padding-top: 12px; }
+            .footer { font-size: 10.5px; color: #9ca3af; text-align: center; margin-top: 24px; border-top: 1px solid #e5e7eb; padding-top: 12px; }
             @media print { body { padding: 0; } }
           </style>
         </head>
@@ -256,49 +256,11 @@ export default function PayslipViewModal({
             </div>
           </div>
 
-          {/* Employer Contributions & YTD Summary */}
-          {(Number(payslip.ytd_gross || 0) > 0 || Number(payslip.employer_pf || 0) > 0) && (
-            <div className="border border-border/40 rounded-lg overflow-hidden text-xs">
-              <div className="bg-emerald-600 text-white font-semibold px-4 py-2 uppercase text-[11px] tracking-wider">
-                Employer Contributions & YTD Summary
-              </div>
-              <table className="w-full">
-                <thead className="bg-muted/30 text-muted-foreground font-semibold">
-                  <tr>
-                    <th className="py-2 px-4 text-left">Employer Contribution</th>
-                    <th className="py-2 px-4 text-right">Amount (₹)</th>
-                    <th className="py-2 px-4 text-left border-l border-border/30">YTD Component</th>
-                    <th className="py-2 px-4 text-right">YTD Total (₹)</th>
-                  </tr>
-                </thead>
-                <tbody className="divide-y divide-border/20">
-                  <tr>
-                    <td className="py-2 px-4">Employer PF (12%)</td>
-                    <td className="py-2 px-4 text-right font-medium">₹{Number(payslip.employer_pf || 0).toLocaleString("en-IN", { minimumFractionDigits: 2 })}</td>
-                    <td className="py-2 px-4 border-l border-border/20">YTD Gross Earnings</td>
-                    <td className="py-2 px-4 text-right font-medium">₹{Number(payslip.ytd_gross || 0).toLocaleString("en-IN", { minimumFractionDigits: 2 })}</td>
-                  </tr>
-                  <tr>
-                    <td className="py-2 px-4">Employer ESI (3.25%)</td>
-                    <td className="py-2 px-4 text-right font-medium">₹{Number(payslip.employer_esi || 0).toLocaleString("en-IN", { minimumFractionDigits: 2 })}</td>
-                    <td className="py-2 px-4 border-l border-border/20">YTD PF Contribution</td>
-                    <td className="py-2 px-4 text-right font-medium">₹{Number(payslip.ytd_pf || 0).toLocaleString("en-IN", { minimumFractionDigits: 2 })}</td>
-                  </tr>
-                  <tr>
-                    <td className="py-2 px-4">Employer Gratuity (4.81%)</td>
-                    <td className="py-2 px-4 text-right font-medium">₹{Number(payslip.employer_gratuity || 0).toLocaleString("en-IN", { minimumFractionDigits: 2 })}</td>
-                    <td className="py-2 px-4 border-l border-border/20">YTD Total Deductions</td>
-                    <td className="py-2 px-4 text-right font-medium">₹{Number(payslip.ytd_tds || 0).toLocaleString("en-IN", { minimumFractionDigits: 2 })}</td>
-                  </tr>
-                </tbody>
-              </table>
-            </div>
-          )}
-
           {/* Footer */}
-          <div className="footer text-[11px] text-center text-muted-foreground pt-3 border-t border-dashed border-border/40">
-            This is a computer-generated salary slip issued by{" "}
-            <strong>Vibe Tech Labs Smart HR System</strong>. No physical signature is required.
+          <div className="footer text-[11px] text-center text-muted-foreground pt-3 border-t border-border/40 leading-relaxed">
+            This is a system-generated salary slip and does not require a signature.
+            <br />
+            <strong>Vibe Tech Labs</strong> &mdash; Confidential HR Document
           </div>
         </div>
       </DialogContent>

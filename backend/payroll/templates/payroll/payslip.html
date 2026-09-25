@@ -254,40 +254,6 @@
         </div>
     </div>
 
-    {% if payslip.employer_pf or payslip.employer_esi %}
-    <div class="section-title">Employer Contributions & YTD Summary</div>
-    <table class="details-table">
-        <thead>
-            <tr>
-                <th>Employer Contribution</th>
-                <th class="text-right">Amount (₹)</th>
-                <th>YTD Component</th>
-                <th class="text-right">YTD Total (₹)</th>
-            </tr>
-        </thead>
-        <tbody>
-            <tr>
-                <td>Employer PF</td>
-                <td class="text-right">{{ payslip.employer_pf }}</td>
-                <td>YTD Gross Earnings</td>
-                <td class="text-right">{{ payslip.ytd_gross }}</td>
-            </tr>
-            <tr>
-                <td>Employer ESI</td>
-                <td class="text-right">{{ payslip.employer_esi }}</td>
-                <td>YTD PF Contribution</td>
-                <td class="text-right">{{ payslip.ytd_pf }}</td>
-            </tr>
-            <tr>
-                <td>Employer Gratuity</td>
-                <td class="text-right">{{ payslip.employer_gratuity }}</td>
-                <td>YTD Deductions</td>
-                <td class="text-right">{{ payslip.ytd_tds }}</td>
-            </tr>
-        </tbody>
-    </table>
-    {% endif %}
-
     <div class="footer">
         This is a computer-generated salary slip and does not require a physical signature.<br>
         Vibe Tech Labs — Confidential HR Document
