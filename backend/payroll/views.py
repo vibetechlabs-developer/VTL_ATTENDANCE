@@ -3,7 +3,7 @@ from django.db import models
 from decimal import Decimal, InvalidOperation, ROUND_UP, ROUND_DOWN, ROUND_HALF_UP
 
 from django.utils import timezone
-from rest_framework import viewsets, permissions, status
+from rest_framework import viewsets, permissions, status, mixins
 from rest_framework.decorators import action
 from rest_framework.response import Response
 from .models import (
@@ -521,10 +521,15 @@ class PayrollRunViewSet(viewsets.ModelViewSet):
         )
 
 
-class PayslipViewSet(viewsets.ReadOnlyModelViewSet):
+class PayslipViewSet(mixins.DestroyModelMixin, viewsets.ReadOnlyModelViewSet):
     queryset = Payslip.objects.select_related('payroll_run', 'employee').all()
     serializer_class = PayslipSerializer
     permission_classes = [permissions.IsAuthenticated]
+
+    def destroy(self, request, *args, **kwargs):
+        if not is_hr_or_admin(request.user):
+            return Response({'error': 'Only HR/Admin can delete a salary slip.'}, status=status.HTTP_403_FORBIDDEN)
+        return super().destroy(request, *args, **kwargs)
 
     def get_queryset(self):
         qs = Payslip.objects.select_related('payroll_run', 'employee').all()

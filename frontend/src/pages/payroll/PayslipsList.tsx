@@ -2,9 +2,9 @@
 import { useState } from "react";
 import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
 import {
-  FileText, Banknote, Calendar, Download, Eye, Plus, CheckCircle2, Clock, Search, Filter, RefreshCw
+  FileText, Banknote, Calendar, Download, Eye, Plus, CheckCircle2, Clock, Search, Filter, RefreshCw, Trash2, Loader2
 } from "lucide-react";
-import { fetchPayslips, generatePayrollRun, finalizePayrollRun, fetchPayrollRuns } from "@/api/payroll";
+import { fetchPayslips, generatePayrollRun, finalizePayrollRun, fetchPayrollRuns, deletePayslip } from "@/api/payroll";
 import { useAuthStore, userHasRole } from "@/store/authStore";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
@@ -12,9 +12,14 @@ import { Input } from "@/components/ui/input";
 import { Badge } from "@/components/ui/badge";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogFooter } from "@/components/ui/dialog";
+import {
+  AlertDialog, AlertDialogAction, AlertDialogCancel, AlertDialogContent, AlertDialogDescription,
+  AlertDialogFooter, AlertDialogHeader, AlertDialogTitle,
+} from "@/components/ui/alert-dialog";
 import { Label } from "@/components/ui/label";
 import { toast } from "sonner";
 import PayslipViewModal from "@/components/payroll/PayslipViewModal";
+import { downloadPayslipPdf } from "@/lib/payslipDownload";
 
 const MONTHS = [
   { value: "1", label: "January" },
@@ -40,6 +45,8 @@ export default function PayslipsList() {
   const [selectedMonth, setSelectedMonth] = useState<string>("all");
   const [selectedYear, setSelectedYear] = useState<string>("2026");
   const [selectedPayslip, setSelectedPayslip] = useState<any | null>(null);
+  const [downloadingId, setDownloadingId] = useState<number | null>(null);
+  const [deleteTarget, setDeleteTarget] = useState<any | null>(null);
 
   // Modal for HR payroll generation
   const [genModal, setGenModal] = useState(false);
@@ -85,6 +92,34 @@ export default function PayslipsList() {
       year: Number(genYear),
     });
   };
+
+  const handleDownload = async (p: any) => {
+    if (downloadingId) return;
+    setDownloadingId(p.id);
+    try {
+      await downloadPayslipPdf(p);
+      toast.success("Salary slip downloaded successfully.");
+    } catch (err) {
+      console.error("Payslip download failed:", err);
+      toast.error("Could not download the salary slip. Please try again.");
+    } finally {
+      setDownloadingId(null);
+    }
+  };
+
+  // Delete payslip mutation (HR/Admin only)
+  const deleteMutation = useMutation({
+    mutationFn: (id: number) => deletePayslip(id),
+    onSuccess: () => {
+      toast.success("Salary slip deleted successfully.");
+      queryClient.invalidateQueries({ queryKey: ["payslips"] });
+      setDeleteTarget(null);
+    },
+    onError: (err: any) => {
+      toast.error(err?.response?.data?.error || "Failed to delete the salary slip.");
+      setDeleteTarget(null);
+    },
+  });
 
   // Stats calculation
   const totalGross = payslips.reduce((acc: number, p: any) => acc + Number(p.gross_earnings || 0), 0);
@@ -271,16 +306,43 @@ export default function PayslipsList() {
                           Generated
                         </Badge>
                       </td>
-                      <td className="px-5 py-3.5 text-right">
-                        <Button
-                          size="sm"
-                          variant="outline"
-                          className="gap-1 text-xs"
-                          onClick={() => setSelectedPayslip(p)}
-                        >
-                          <Eye className="h-3.5 w-3.5" />
-                          View Salary Slip
-                        </Button>
+                      <td className="px-5 py-3.5">
+                        <div className="flex items-center justify-end gap-1.5">
+                          <Button
+                            size="sm"
+                            variant="outline"
+                            className="gap-1 text-xs"
+                            onClick={() => setSelectedPayslip(p)}
+                          >
+                            <Eye className="h-3.5 w-3.5" />
+                            View
+                          </Button>
+                          <Button
+                            size="sm"
+                            variant="outline"
+                            className="gap-1 text-xs"
+                            disabled={downloadingId === p.id}
+                            onClick={() => handleDownload(p)}
+                          >
+                            {downloadingId === p.id ? (
+                              <Loader2 className="h-3.5 w-3.5 animate-spin" />
+                            ) : (
+                              <Download className="h-3.5 w-3.5" />
+                            )}
+                            Download
+                          </Button>
+                          {isAdminOrHR && (
+                            <Button
+                              size="sm"
+                              variant="outline"
+                              className="gap-1 text-xs text-rose-600 border-rose-200 hover:bg-rose-50 hover:text-rose-700 dark:border-rose-900/40 dark:hover:bg-rose-950/30"
+                              onClick={() => setDeleteTarget(p)}
+                            >
+                              <Trash2 className="h-3.5 w-3.5" />
+                              Delete
+                            </Button>
+                          )}
+                        </div>
                       </td>
                     </tr>
                   );
@@ -360,6 +422,35 @@ export default function PayslipsList() {
         onOpenChange={(open) => !open && setSelectedPayslip(null)}
         payslip={selectedPayslip}
       />
+
+      {/* Delete Confirmation */}
+      <AlertDialog open={deleteTarget !== null} onOpenChange={(open) => !open && setDeleteTarget(null)}>
+        <AlertDialogContent>
+          <AlertDialogHeader>
+            <AlertDialogTitle>Delete this salary slip?</AlertDialogTitle>
+            <AlertDialogDescription>
+              {deleteTarget && (
+                <>
+                  This will permanently delete the {MONTHS.find((m) => m.value === String(deleteTarget.month))?.label || deleteTarget.month}{" "}
+                  {deleteTarget.year} salary slip for{" "}
+                  <span className="font-semibold text-foreground">{deleteTarget.employee_name || `Employee #${deleteTarget.employee}`}</span>.
+                  This action cannot be undone.
+                </>
+              )}
+            </AlertDialogDescription>
+          </AlertDialogHeader>
+          <AlertDialogFooter>
+            <AlertDialogCancel disabled={deleteMutation.isPending}>Cancel</AlertDialogCancel>
+            <AlertDialogAction
+              className="bg-rose-600 hover:bg-rose-700 focus:ring-rose-600"
+              disabled={deleteMutation.isPending}
+              onClick={() => deleteTarget && deleteMutation.mutate(deleteTarget.id)}
+            >
+              {deleteMutation.isPending ? "Deleting..." : "Delete Salary Slip"}
+            </AlertDialogAction>
+          </AlertDialogFooter>
+        </AlertDialogContent>
+      </AlertDialog>
     </div>
   );
 }

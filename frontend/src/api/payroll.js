@@ -8,6 +8,9 @@ export const fetchPayslips = (params) =>
 export const fetchPayslipDetail = (id) =>
   axios.get(`/api/payroll/payslips/${id}/`);
 
+export const deletePayslip = (id) =>
+  axios.delete(`/api/payroll/payslips/${id}/`);
+
 // Payroll Runs
 export const fetchPayrollRuns = (params) =>
   axios.get("/api/payroll/payroll-runs/", { params });

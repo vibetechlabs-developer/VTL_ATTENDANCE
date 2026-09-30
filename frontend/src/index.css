@@ -1599,3 +1599,240 @@
     scroll-behavior: auto !important;
   }
 }
+
+/* Official salary slip document — plain, fixed-layout markup (tables with
+   table-layout: fixed, explicit widths, no flexbox) so it renders
+   identically on screen, in native print, and in an off-screen
+   html2canvas/html2pdf capture used for direct PDF download. */
+.vtl-payslip {
+  width: 700px;
+  max-width: 100%;
+  margin: 0 auto;
+  background: #ffffff;
+  color: #1f2937;
+  font-family: 'Segoe UI', Arial, sans-serif;
+  font-size: 12px;
+  line-height: 1.45;
+  padding: 24px;
+  box-sizing: border-box;
+}
+.vtl-payslip * {
+  box-sizing: border-box;
+}
+.vtl-payslip table {
+  width: 100%;
+  border-collapse: collapse;
+  table-layout: fixed;
+}
+.vtl-ps-header {
+  margin-bottom: 16px;
+  border-bottom: 3px solid #059669;
+}
+.vtl-ps-header-left {
+  width: 65%;
+  padding-bottom: 16px;
+  vertical-align: middle;
+  white-space: nowrap;
+}
+.vtl-ps-header-right {
+  width: 35%;
+  padding-bottom: 16px;
+  vertical-align: top;
+  text-align: right;
+}
+.vtl-ps-logo {
+  display: inline-block;
+  width: 44px;
+  height: 44px;
+  object-fit: contain;
+  vertical-align: middle;
+  border-radius: 10px;
+}
+.vtl-ps-brand {
+  display: inline-block;
+  vertical-align: middle;
+  margin-left: 10px;
+  white-space: normal;
+}
+.vtl-ps-brand-name {
+  font-size: 19px;
+  font-weight: 700;
+  color: #111827;
+  line-height: 1.2;
+}
+.vtl-ps-brand-tag {
+  font-size: 10.5px;
+  color: #6b7280;
+  margin-top: 1px;
+}
+.vtl-ps-doc-title {
+  font-size: 14px;
+  font-weight: 700;
+  text-transform: uppercase;
+  letter-spacing: 0.5px;
+  color: #1f2937;
+}
+.vtl-ps-doc-period {
+  font-size: 12px;
+  color: #6b7280;
+  margin-top: 2px;
+}
+.vtl-ps-badge {
+  display: inline-block;
+  margin-top: 6px;
+  padding: 2px 10px;
+  border-radius: 999px;
+  font-size: 10px;
+  font-weight: 700;
+  border: 1px solid transparent;
+}
+.vtl-ps-badge-final,
+.vtl-ps-badge-draft {
+  background: #ecfdf5;
+  color: #047857;
+  border-color: #a7f3d0;
+}
+.vtl-ps-info {
+  margin-bottom: 16px;
+  font-size: 11px;
+}
+.vtl-ps-label {
+  width: 20%;
+  padding: 7px 10px;
+  font-weight: 600;
+  color: #065f46;
+  background: #f0fdf4;
+  border: 1px solid #d1fae5;
+}
+.vtl-ps-val {
+  width: 30%;
+  padding: 7px 10px;
+  font-weight: 500;
+  color: #111827;
+  border: 1px solid #d1fae5;
+  word-wrap: break-word;
+  overflow-wrap: break-word;
+}
+.vtl-ps-breakdown {
+  margin-bottom: 16px;
+  font-size: 11px;
+  border: 1px solid #e5e7eb;
+}
+.vtl-ps-th {
+  width: 25%;
+  padding: 9px 12px;
+  text-align: left;
+  background: #047857;
+  color: #ffffff;
+  font-weight: 600;
+  font-size: 11px;
+}
+.vtl-ps-td {
+  padding: 8px 12px;
+  border-top: 1px solid #f1f5f9;
+  color: #1f2937;
+  word-wrap: break-word;
+  overflow-wrap: break-word;
+}
+.vtl-ps-col-border {
+  border-left: 1px solid #f1f5f9;
+}
+.vtl-ps-amt {
+  text-align: right;
+  font-variant-numeric: tabular-nums;
+  font-weight: 500;
+}
+.vtl-ps-earning {
+  color: #047857;
+}
+.vtl-ps-deduction {
+  color: #dc2626;
+}
+.vtl-ps-total-row {
+  font-weight: 700;
+  background: #f8fafc;
+}
+.vtl-ps-total-row .vtl-ps-td {
+  border-top: 2px solid #cbd5e1;
+}
+.vtl-ps-net {
+  margin-bottom: 16px;
+  border: 2px solid #059669;
+  border-radius: 8px;
+  background: #ecfdf5;
+  overflow: hidden;
+}
+.vtl-ps-net-left {
+  padding: 14px 16px;
+  vertical-align: middle;
+}
+.vtl-ps-net-title {
+  font-size: 11px;
+  font-weight: 700;
+  text-transform: uppercase;
+  letter-spacing: 0.5px;
+  color: #065f46;
+}
+.vtl-ps-net-words {
+  font-size: 10.5px;
+  color: #6b7280;
+  font-style: italic;
+  margin-top: 4px;
+}
+.vtl-ps-net-right {
+  width: 38%;
+  padding: 14px 16px;
+  text-align: right;
+  vertical-align: middle;
+  font-size: 22px;
+  font-weight: 800;
+  color: #047857;
+  white-space: nowrap;
+}
+.vtl-ps-footer {
+  padding-top: 12px;
+  border-top: 1px solid #e5e7eb;
+  text-align: center;
+  font-size: 10px;
+  color: #9ca3af;
+  line-height: 1.6;
+}
+.vtl-ps-footer strong {
+  color: #6b7280;
+}
+
+/* Salary slip printing: isolate #payslip-print-area on the page and hide
+   everything else (the dialog chrome, sidebar, overlay, etc). */
+@media print {
+  body * {
+    visibility: hidden !important;
+  }
+
+  #payslip-print-area,
+  #payslip-print-area * {
+    visibility: visible !important;
+  }
+
+  #payslip-print-area {
+    position: fixed !important;
+    inset: 0 !important;
+    width: 100% !important;
+    margin: 0 !important;
+    padding: 12mm !important;
+    border: none !important;
+    border-radius: 0 !important;
+    overflow: visible !important;
+    background: #fff !important;
+  }
+
+  #payslip-print-area .vtl-payslip {
+    width: 100% !important;
+    max-width: 700px !important;
+    padding: 0 !important;
+  }
+
+  @page {
+    size: A4;
+    margin: 12mm;
+  }
+}
