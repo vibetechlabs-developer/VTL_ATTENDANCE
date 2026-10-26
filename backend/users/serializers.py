@@ -3,23 +3,7 @@ from django.db import transaction
 from django.utils.crypto import get_random_string
 from .models import User, Employee
 from .role_utils import apply_roles_to_user, all_roles, normalize_roles
-
-
-def _apply_employee_fields(user, employee_fields):
-    """Write employee details without a second INSERT (signal already created the row)."""
-    employee = Employee.objects.filter(user_id=user.pk).first()
-    if employee:
-        for field, value in employee_fields.items():
-            setattr(employee, field, value)
-        employee.save()
-        return employee
-    Employee.objects.bulk_create(
-        [Employee(user=user, **employee_fields)],
-        update_conflicts=True,
-        unique_fields=["user"],
-        update_fields=list(employee_fields.keys()),
-    )
-    return Employee.objects.get(user_id=user.pk)
+from .employee_upsert import upsert_employee
 
 
 def _manager_users_from_employee_ids(employee_ids):
@@ -242,7 +226,7 @@ class EmployeeCreateSerializer(serializers.Serializer):
         )
         user.set_password(temp_password)
         user.save()
-        employee = _apply_employee_fields(user, employee_fields)
+        employee = upsert_employee(user, **employee_fields)
         _apply_managers(
             employee,
             manager_employee_ids=validated_data.get('manager_employee_ids'),

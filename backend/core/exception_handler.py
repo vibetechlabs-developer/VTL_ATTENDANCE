@@ -5,16 +5,24 @@ from django.db import IntegrityError
 from django.db.utils import IntegrityError as DbIntegrityError
 
 
-def api_exception_handler(exc, context):
-    response = exception_handler(exc, context)
-    if response is not None:
-        return response
+def _is_duplicate_employee(exc):
+    seen = []
+    current = exc
+    while current is not None and current not in seen:
+        seen.append(current)
+        if isinstance(current, (IntegrityError, DbIntegrityError)):
+            return True
+        text = str(current)
+        if "users_employee_user_id_key" in text or "duplicate key" in text.lower():
+            return True
+        current = getattr(current, "__cause__", None) or getattr(current, "__context__", None)
+    return False
 
-    text = str(exc)
-    cause = getattr(exc, "__cause__", None)
-    if isinstance(exc, (IntegrityError, DbIntegrityError)) or isinstance(cause, (IntegrityError, DbIntegrityError)) or "users_employee_user_id_key" in text:
+
+def api_exception_handler(exc, context):
+    if _is_duplicate_employee(exc):
         return Response(
-            {"error": "Could not create employee. Please try again with a different email."},
+            {"error": "Could not create employee. Please try again."},
             status=status.HTTP_400_BAD_REQUEST,
         )
-    return None
+    return exception_handler(exc, context)
