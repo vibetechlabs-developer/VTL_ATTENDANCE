@@ -241,10 +241,11 @@ export function AppSidebar() {
   let nav: SidebarNavSection[];
   if (userHasRole(user, "admin")) {
     nav = appendCrmNav([...adminNav, ...payrollHrNav, ...essNav, ...documentNav, ...recruitmentNav, ...performanceNav, ...trainingNav, ...exitAdminNav]);
+  } else if (userHasRole(user, "hr")) {
+    // HR before manager so HR+manager still gets salary structures / generate nav
+    nav = appendCrmNav([...hrNav, ...payrollHrNav, ...essNav, ...documentNav, ...recruitmentNav, ...trainingNav, ...exitAdminNav]);
   } else if (userHasRole(user, "manager")) {
     nav = [...managerNav, ...payrollNav, ...essNav, ...performanceNav, ...trainingNav, ...exitAdminNav];
-  } else if (userHasRole(user, "hr")) {
-    nav = appendCrmNav([...hrNav, ...payrollHrNav, ...essNav, ...documentNav, ...recruitmentNav, ...trainingNav, ...exitAdminNav]);
   } else if (userHasRole(user, "sales")) {
     nav = appendCrmNav([...employeeNav, ...payrollNav, ...essNav, ...myAppraisalNav, ...trainingNav, ...exitNav]);
   } else {

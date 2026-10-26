@@ -10,19 +10,19 @@ def ensure_employee_profile(sender, instance, created, **kwargs):
     """Ensure every User always has a corresponding Employee profile."""
     from .models import Employee
 
-    try:
-        employee = instance.employee
-    except Employee.DoesNotExist:
-        name = (
-            instance.get_full_name().strip()
-            or (instance.username or '').strip()
-            or (instance.email.split('@')[0] if instance.email else "Employee")
-        )
-        Employee.objects.get_or_create(
-            user=instance,
-            defaults={
-                'name': name,
-                'department': 'Administration' if getattr(instance, 'role', '') == 'admin' else 'General',
-            }
-        )
+    if Employee.objects.filter(user_id=instance.pk).exists():
+        return
+
+    name = (
+        instance.get_full_name().strip()
+        or (instance.username or '').strip()
+        or (instance.email.split('@')[0] if instance.email else "Employee")
+    )
+    Employee.objects.get_or_create(
+        user=instance,
+        defaults={
+            'name': name,
+            'department': 'Administration' if getattr(instance, 'role', '') == 'admin' else 'General',
+        },
+    )
 

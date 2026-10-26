@@ -18,28 +18,16 @@ from .serializers import (
     TicketCommentSerializer
 )
 from users.models import Employee
+from users.role_utils import is_hr_or_admin
+from users.utils import get_or_create_employee
 from attendance.models import AttendanceLog
 from leave.models import LeaveBalance, LeaveApplication
-
-
-from users.utils import get_or_create_employee
 
 
 def get_employee(request):
     if not request.user or not request.user.is_authenticated:
         return None
     return get_or_create_employee(request.user)
-
-
-
-def is_hr_or_admin(user):
-    if not user or not user.is_authenticated:
-        return False
-    if user.is_staff or user.is_superuser:
-        return True
-    if getattr(user, 'role', '') in ['admin', 'hr']:
-        return True
-    return False
 
 
 class ESSDashboardView(APIView):

@@ -218,13 +218,20 @@ class EmployeeCreateSerializer(serializers.Serializer):
             role=validated_data['role'],
             extra_roles=[r for r in validated_data['roles'] if r != validated_data['role']],
         )
-        employee = Employee.objects.create(
-            user=user,
-            name=validated_data['name'],
-            department=validated_data['department'],
-            phone=validated_data.get('phone', '').strip(),
-            is_wfh=bool(validated_data.get('is_wfh', False)),
-        )
+        # User post_save already creates a stub Employee; update it instead of inserting again.
+        employee_fields = {
+            'name': validated_data['name'],
+            'department': validated_data['department'],
+            'phone': validated_data.get('phone', '').strip(),
+            'is_wfh': bool(validated_data.get('is_wfh', False)),
+        }
+        employee = Employee.objects.filter(user=user).first()
+        if employee:
+            for field, value in employee_fields.items():
+                setattr(employee, field, value)
+            employee.save()
+        else:
+            employee = Employee.objects.create(user=user, **employee_fields)
         _apply_managers(
             employee,
             manager_employee_ids=validated_data.get('manager_employee_ids'),

@@ -7,6 +7,7 @@ from django.db.models import Q
 from notifications.models import Notification, AuditLog
 from notifications.serializers import NotificationSerializer, AuditLogSerializer
 from notifications.helpers import log_action
+from users.role_utils import is_hr_or_admin
 
 
 def get_employee(request):
@@ -15,14 +16,6 @@ def get_employee(request):
     if hasattr(request.user, 'employee'):
         return request.user.employee
     return getattr(request, 'employee', None)
-
-
-def is_hr_or_admin(user):
-    return (
-        user
-        and user.is_authenticated
-        and getattr(user, 'role', '') in ('admin', 'hr')
-    )
 
 
 class NotificationViewSet(viewsets.ReadOnlyModelViewSet):

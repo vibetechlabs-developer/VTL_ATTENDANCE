@@ -11,6 +11,7 @@ from .serializers import (
     HolidaySerializer
 )
 from users.models import Employee
+from users.role_utils import is_hr_or_admin
 # Notification + Audit helpers (Module 10 wiring demonstration)
 from notifications.helpers import notify, log_action
 
@@ -21,16 +22,6 @@ def get_employee(request):
     if hasattr(request.user, 'employee'):
         return request.user.employee
     return getattr(request, 'employee', None)
-
-
-def is_hr_or_admin(user):
-    if not user or not user.is_authenticated:
-        return False
-    if user.is_staff or user.is_superuser:
-        return True
-    if getattr(user, 'role', '') in ['admin', 'hr']:
-        return True
-    return False
 
 
 def is_manager_of(manager_user, employee):

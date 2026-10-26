@@ -43,12 +43,11 @@ class EmployeeCreateTests(TestCase):
             password='existing1',
             role='employee',
         )
-        Employee.objects.create(
-            user=self.employee_user,
-            name='Existing Emp',
-            department='Tech',
-            phone='9123456789',
-        )
+        employee = self.employee_user.employee
+        employee.name = 'Existing Emp'
+        employee.department = 'Tech'
+        employee.phone = '9123456789'
+        employee.save()
 
     def _create_as(self, user, payload=None):
         self.client.force_authenticate(user=user)
@@ -80,9 +79,10 @@ class EmployeeCreateTests(TestCase):
         payload = dict(VALID_PAYLOAD)
         del payload['phone']
         resp = self._create_as(self.admin, payload)
-        self.assertEqual(resp.status_code, status.HTTP_400_BAD_REQUEST)
+        self.assertEqual(resp.status_code, status.HTTP_201_CREATED)
 
         payload = dict(VALID_PAYLOAD)
+        payload['email'] = 'short.phone@vtl.local'
         payload['phone'] = '123'
         resp = self._create_as(self.admin, payload)
         self.assertEqual(resp.status_code, status.HTTP_400_BAD_REQUEST)

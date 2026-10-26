@@ -47,6 +47,15 @@ def user_has_role(user, *roles):
     return any(r in user_roles for r in roles)
 
 
+def is_hr_or_admin(user):
+    """True when user is staff/superuser or holds admin/hr in primary or extra_roles."""
+    if not user or not getattr(user, "is_authenticated", False):
+        return False
+    if getattr(user, "is_staff", False) or getattr(user, "is_superuser", False):
+        return True
+    return user_has_role(user, "admin", "hr")
+
+
 def apply_roles_to_user(user, roles):
     primary, extras = normalize_roles(roles)
     user.role = primary

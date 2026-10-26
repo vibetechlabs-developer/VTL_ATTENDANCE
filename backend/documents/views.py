@@ -11,6 +11,7 @@ from .serializers import (
     GeneratedLetterSerializer
 )
 from users.models import Employee
+from users.role_utils import is_hr_or_admin
 
 
 def get_employee(request):
@@ -19,16 +20,6 @@ def get_employee(request):
     if hasattr(request.user, 'employee'):
         return request.user.employee
     return getattr(request, 'employee', None)
-
-
-def is_hr_or_admin(user):
-    if not user or not user.is_authenticated:
-        return False
-    if user.is_staff or user.is_superuser:
-        return True
-    if getattr(user, 'role', '') in ['admin', 'hr']:
-        return True
-    return False
 
 
 class PolicyDocumentViewSet(viewsets.ModelViewSet):
