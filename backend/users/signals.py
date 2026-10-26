@@ -1,3 +1,4 @@
+from django.db import IntegrityError
 from django.db.models.signals import post_save
 from django.dispatch import receiver
 from django.contrib.auth import get_user_model
@@ -18,11 +19,15 @@ def ensure_employee_profile(sender, instance, created, **kwargs):
         or (instance.username or '').strip()
         or (instance.email.split('@')[0] if instance.email else "Employee")
     )
-    Employee.objects.get_or_create(
-        user=instance,
-        defaults={
-            'name': name,
-            'department': 'Administration' if getattr(instance, 'role', '') == 'admin' else 'General',
-        },
-    )
+    try:
+        Employee.objects.get_or_create(
+            user=instance,
+            defaults={
+                'name': name,
+                'department': 'Administration' if getattr(instance, 'role', '') == 'admin' else 'General',
+            },
+        )
+    except IntegrityError:
+        # Concurrent insert from serializer/create_user — profile already exists.
+        return
 

@@ -108,3 +108,11 @@ class EmployeeCreateTests(TestCase):
         payload['email'] = 'newhire@vtl.local'
         resp = self._create_as(manager, payload)
         self.assertEqual(resp.status_code, status.HTTP_201_CREATED)
+
+    def test_create_does_not_duplicate_signal_stub(self):
+        resp = self._create_as(self.admin)
+        self.assertEqual(resp.status_code, status.HTTP_201_CREATED)
+        user = User.objects.get(email=VALID_PAYLOAD['email'])
+        self.assertEqual(Employee.objects.filter(user=user).count(), 1)
+        self.assertEqual(user.employee.name, VALID_PAYLOAD['name'])
+        self.assertEqual(user.employee.department, VALID_PAYLOAD['department'])

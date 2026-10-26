@@ -6,6 +6,7 @@ from rest_framework_simplejwt.tokens import RefreshToken
 from rest_framework_simplejwt.serializers import TokenRefreshSerializer
 from django.contrib.auth import authenticate
 from django.conf import settings
+from django.db import IntegrityError
 from django.utils import timezone
 from django.core.files.base import ContentFile
 import base64
@@ -234,7 +235,13 @@ class EmployeesCreateView(APIView):
                 {'error': _first_serializer_error(serializer.errors) or 'Invalid employee details.'},
                 status=status.HTTP_400_BAD_REQUEST
             )
-        employee, temp_password, email_sent = serializer.save()
+        try:
+            employee, temp_password, email_sent = serializer.save()
+        except IntegrityError:
+            return Response(
+                {'error': 'This user already has an employee profile. Try a different email.'},
+                status=status.HTTP_400_BAD_REQUEST,
+            )
 
         row = EmployeeListSerializer(employee, context={'request': request}).data
         return Response(

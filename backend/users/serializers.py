@@ -1,5 +1,5 @@
 from rest_framework import serializers
-from django.db import transaction
+from django.db import IntegrityError, transaction
 from django.utils.crypto import get_random_string
 from .models import User, Employee
 from .role_utils import apply_roles_to_user, all_roles, normalize_roles
@@ -218,20 +218,23 @@ class EmployeeCreateSerializer(serializers.Serializer):
             role=validated_data['role'],
             extra_roles=[r for r in validated_data['roles'] if r != validated_data['role']],
         )
-        # User post_save already creates a stub Employee; update it instead of inserting again.
+        # User post_save may already create a stub Employee (OneToOne). Never insert a second row.
         employee_fields = {
             'name': validated_data['name'],
             'department': validated_data['department'],
             'phone': validated_data.get('phone', '').strip(),
             'is_wfh': bool(validated_data.get('is_wfh', False)),
         }
-        employee = Employee.objects.filter(user=user).first()
-        if employee:
+        try:
+            employee, _ = Employee.objects.update_or_create(
+                user=user,
+                defaults=employee_fields,
+            )
+        except IntegrityError:
+            employee = Employee.objects.get(user=user)
             for field, value in employee_fields.items():
                 setattr(employee, field, value)
             employee.save()
-        else:
-            employee = Employee.objects.create(user=user, **employee_fields)
         _apply_managers(
             employee,
             manager_employee_ids=validated_data.get('manager_employee_ids'),
