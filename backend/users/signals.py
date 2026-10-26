@@ -16,6 +16,8 @@ def ensure_employee_profile(sender, instance, created, **kwargs):
     """Ensure every User always has a corresponding Employee profile."""
     from .models import Employee
 
+    if getattr(instance, "_skip_employee_profile", False):
+        return
     if skip_auto_employee.get():
         return
 

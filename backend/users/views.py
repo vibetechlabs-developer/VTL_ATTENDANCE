@@ -7,6 +7,7 @@ from rest_framework_simplejwt.serializers import TokenRefreshSerializer
 from django.contrib.auth import authenticate
 from django.conf import settings
 from django.db import IntegrityError
+from django.db.utils import IntegrityError as DbIntegrityError
 from django.utils import timezone
 from django.core.files.base import ContentFile
 import base64
@@ -44,6 +45,21 @@ def _first_serializer_error(errors):
     elif isinstance(errors, str):
         return errors
     return None
+
+
+def _is_duplicate_employee_error(exc):
+    seen = []
+    current = exc
+    while current and current not in seen:
+        seen.append(current)
+        if isinstance(current, (IntegrityError, DbIntegrityError)):
+            return True
+        text = str(current)
+        if 'users_employee_user_id_key' in text or 'duplicate key' in text.lower():
+            return True
+        current = getattr(current, '__cause__', None) or getattr(current, '__context__', None)
+    return False
+
 
 class LoginView(APIView):
     permission_classes = []  
@@ -237,11 +253,13 @@ class EmployeesCreateView(APIView):
             )
         try:
             employee, temp_password, email_sent = serializer.save()
-        except IntegrityError:
-            return Response(
-                {'error': 'This user already has an employee profile. Try a different email.'},
-                status=status.HTTP_400_BAD_REQUEST,
-            )
+        except Exception as exc:
+            if _is_duplicate_employee_error(exc):
+                return Response(
+                    {'error': 'This user already has an employee profile. Try a different email.'},
+                    status=status.HTTP_400_BAD_REQUEST,
+                )
+            raise
 
         row = EmployeeListSerializer(employee, context={'request': request}).data
         return Response(

@@ -1,9 +1,31 @@
 from rest_framework import serializers
 from django.db import IntegrityError, transaction
+from django.db.models.signals import post_save
 from django.utils.crypto import get_random_string
 from .models import User, Employee
 from .role_utils import apply_roles_to_user, all_roles, normalize_roles
-from .signals import skip_auto_employee
+from .signals import ensure_employee_profile, skip_auto_employee
+
+
+def _upsert_employee(user, employee_fields):
+    """Insert or update Employee without raising on the OneToOne user_id unique key."""
+    existing = Employee.objects.filter(user_id=user.pk).first()
+    if existing:
+        for field, value in employee_fields.items():
+            setattr(existing, field, value)
+        existing.save()
+        return existing
+    try:
+        with transaction.atomic():
+            return Employee.objects.create(user=user, **employee_fields)
+    except IntegrityError:
+        existing = Employee.objects.filter(user_id=user.pk).first()
+        if not existing:
+            raise
+        for field, value in employee_fields.items():
+            setattr(existing, field, value)
+        existing.save()
+        return existing
 
 
 def _manager_users_from_employee_ids(employee_ids):
@@ -219,28 +241,20 @@ class EmployeeCreateSerializer(serializers.Serializer):
             'is_wfh': bool(validated_data.get('is_wfh', False)),
         }
         skip_token = skip_auto_employee.set(True)
+        post_save.disconnect(ensure_employee_profile, sender=User)
         try:
-            user = User.objects.create_user(
+            user = User(
                 username=username,
                 email=email,
-                password=temp_password,
                 role=validated_data['role'],
                 extra_roles=[r for r in validated_data['roles'] if r != validated_data['role']],
             )
-            try:
-                with transaction.atomic():
-                    employee, _ = Employee.objects.update_or_create(
-                        user=user,
-                        defaults=employee_fields,
-                    )
-            except IntegrityError:
-                employee = Employee.objects.filter(user=user).first()
-                if not employee:
-                    raise
-                for field, value in employee_fields.items():
-                    setattr(employee, field, value)
-                employee.save()
+            user.set_password(temp_password)
+            user._skip_employee_profile = True
+            user.save()
+            employee = _upsert_employee(user, employee_fields)
         finally:
+            post_save.connect(ensure_employee_profile, sender=User)
             skip_auto_employee.reset(skip_token)
         _apply_managers(
             employee,
