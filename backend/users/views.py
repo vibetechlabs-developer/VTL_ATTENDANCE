@@ -9,6 +9,7 @@ from django.conf import settings
 from django.db import IntegrityError
 from django.db.utils import IntegrityError as DbIntegrityError
 from django.utils import timezone
+import logging
 from django.core.files.base import ContentFile
 import base64
 import uuid
@@ -30,6 +31,8 @@ from attendance.models import AttendanceLog
 from leaves.models import LeaveRequest
 from updates.models import DailyUpdate
 from .push_utils import send_push_message
+
+logger = logging.getLogger(__name__)
 from .serializers_notifications import AppNotificationSerializer
 import mimetypes
 
@@ -52,10 +55,13 @@ def _is_duplicate_employee_error(exc):
     current = exc
     while current and current not in seen:
         seen.append(current)
-        if isinstance(current, (IntegrityError, DbIntegrityError)):
-            return True
-        text = str(current)
-        if 'users_employee_user_id_key' in text or 'duplicate key' in text.lower():
+        text = str(current).lower()
+        if (
+            'users_employee_user_id_key' in text
+            or 'users_user_email' in text
+            or ('duplicate key' in text and 'email' in text)
+            or ('duplicate key' in text and 'user_id' in text)
+        ):
             return True
         current = getattr(current, '__cause__', None) or getattr(current, '__context__', None)
     return False
@@ -260,10 +266,14 @@ class EmployeesCreateView(APIView):
         except Exception as exc:
             if _is_duplicate_employee_error(exc):
                 return Response(
-                    {'error': 'This user already has an employee profile. Try a different email.'},
+                    {'error': 'This email is already in use. Try a different email.'},
                     status=status.HTTP_400_BAD_REQUEST,
                 )
-            raise
+            logger.exception("Employee create failed")
+            return Response(
+                {'error': 'Could not create employee. Please try again.'},
+                status=status.HTTP_400_BAD_REQUEST,
+            )
 
         row = EmployeeListSerializer(employee, context={'request': request}).data
         return Response(

@@ -23,7 +23,7 @@ class AttendanceLogSerializer(serializers.ModelSerializer):
         model = AttendanceLog
         fields = [
             'id', 'employee_name', 'date',
-            'check_in', 'check_out',
+            'check_in', 'check_out',    
             'total_hours', 'overtime_hours',
             'status', 'checkout_mode', 'checkout_note'
         ]

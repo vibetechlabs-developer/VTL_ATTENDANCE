@@ -127,6 +127,21 @@ class EmployeeCreateTests(TestCase):
         self.assertEqual(str(employee.date_of_joining), '2026-06-15')
         self.assertEqual(resp.data['employee']['joiningDate'], '2026-06-15')
 
+    def test_create_two_employees_back_to_back(self):
+        first = dict(VALID_PAYLOAD)
+        first['email'] = 'first.hire@vtl.local'
+        first['joining_date'] = '2026-05-01'
+        second = dict(VALID_PAYLOAD)
+        second['email'] = 'second.hire@vtl.local'
+        second['name'] = 'Second Hire'
+        second['joining_date'] = '2026-06-15'
+        resp1 = self._create_as(self.admin, first)
+        resp2 = self._create_as(self.admin, second)
+        self.assertEqual(resp1.status_code, status.HTTP_201_CREATED, resp1.data)
+        self.assertEqual(resp2.status_code, status.HTTP_201_CREATED, resp2.data)
+        self.assertEqual(Employee.objects.filter(user__email='first.hire@vtl.local').count(), 1)
+        self.assertEqual(Employee.objects.filter(user__email='second.hire@vtl.local').count(), 1)
+
     def test_update_joining_date(self):
         employee = self.employee_user.employee
         self.client.force_authenticate(user=self.admin)

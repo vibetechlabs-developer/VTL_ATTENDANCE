@@ -1,6 +1,8 @@
 from rest_framework import serializers
 from django.db import transaction
+from django.db.models.signals import post_save
 from django.utils.crypto import get_random_string
+from django.utils import timezone
 from .models import User, Employee
 from .role_utils import apply_roles_to_user, all_roles, normalize_roles
 from .employee_upsert import upsert_employee
@@ -179,7 +181,7 @@ class EmployeeCreateSerializer(serializers.Serializer):
 
     def validate_email(self, value):
         email = (value or "").strip().lower()
-        if User.objects.filter(email=email).exists():
+        if User.objects.filter(email__iexact=email).exists():
             raise serializers.ValidationError("This email is already in use.")
         return email
 
@@ -241,23 +243,26 @@ class EmployeeCreateSerializer(serializers.Serializer):
             extra_roles=[r for r in validated_data['roles'] if r != validated_data['role']],
         )
         user.set_password(temp_password)
-        user.save()
-        employee = upsert_employee(user, **employee_fields)
+
+        from .signals import ensure_employee_profile
+        post_save.disconnect(ensure_employee_profile, sender=User)
+        try:
+            user.save()
+            employee = upsert_employee(user, **employee_fields)
+        finally:
+            post_save.connect(ensure_employee_profile, sender=User)
+
         _apply_managers(
             employee,
             manager_employee_ids=validated_data.get('manager_employee_ids'),
             legacy_manager_id=validated_data.get('manager_id'),
             legacy_manager_employee_id=validated_data.get('manager_employee_id'),
         )
-        employee.save()
         if joining_date:
-            Employee.objects.filter(pk=employee.pk).update(date_of_joining=joining_date)
             employee.date_of_joining = joining_date
         elif not employee.date_of_joining:
-            from django.utils import timezone
-            today = timezone.localdate()
-            Employee.objects.filter(pk=employee.pk).update(date_of_joining=today)
-            employee.date_of_joining = today
+            employee.date_of_joining = timezone.localdate()
+        employee.save()
         ensure_leave_balance(employee)
         email_sent = send_employee_welcome_email(employee, temp_password)
         return employee, temp_password, email_sent
