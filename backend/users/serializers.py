@@ -219,12 +219,11 @@ class EmployeeCreateSerializer(serializers.Serializer):
     @transaction.atomic
     def create(self, validated_data):
         email = validated_data['email']
-        local = email.split('@')[0]
-        username = local
+        username = email
         suffix = 1
         while User.objects.filter(username=username).exists():
             suffix += 1
-            username = f"{local}{suffix}"
+            username = f"{email}{suffix}"
 
         provided_password = (validated_data.get('password') or '').strip()
         temp_password = provided_password if provided_password else get_random_string(10)
