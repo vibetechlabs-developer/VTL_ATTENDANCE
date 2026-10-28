@@ -225,9 +225,13 @@ class EmployeesListView(APIView):
                 'managerEmployeeIds': [str(i) for i in _manager_employee_ids(employee)],
                 'reportsTo': _format_reports_to(employee),
                 'joiningDate': (
-                    employee.created_at.strftime('%Y-%m-%d')
-                    if employee.created_at
-                    else user.date_joined.strftime('%Y-%m-%d')
+                    employee.date_of_joining.strftime('%Y-%m-%d')
+                    if getattr(employee, 'date_of_joining', None)
+                    else (
+                        employee.created_at.strftime('%Y-%m-%d')
+                        if employee.created_at
+                        else user.date_joined.strftime('%Y-%m-%d')
+                    )
                 ),
                 'faceStatus': 'registered' if is_valid_stored_encoding(employee.face_encoding) else 'pending',
                 'avatar': avatar,

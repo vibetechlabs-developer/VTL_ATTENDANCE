@@ -1,17 +1,25 @@
 from django.db import models
+from django.utils import timezone
 from users.models import Employee, User  # ← users thi import
+
+
+def _current_year():
+    return timezone.now().year
+
 
 class LeaveBalance(models.Model):
     employee = models.OneToOneField(Employee, on_delete=models.CASCADE)
-    casual_total = models.DecimalField(max_digits=5, decimal_places=1, default=12)
+    year = models.PositiveIntegerField(default=_current_year)
+    casual_total = models.DecimalField(max_digits=5, decimal_places=1, default=10)
     casual_used = models.DecimalField(max_digits=5, decimal_places=1, default=0)
     sick_total = models.DecimalField(max_digits=5, decimal_places=1, default=10)
     sick_used = models.DecimalField(max_digits=5, decimal_places=1, default=0)
     earned_total = models.DecimalField(max_digits=5, decimal_places=1, default=15)
     earned_used = models.DecimalField(max_digits=5, decimal_places=1, default=0)
+    pl_carried_forward = models.DecimalField(max_digits=5, decimal_places=1, default=0)
 
     def __str__(self):
-        return f"Balance - {self.employee.name}"
+        return f"Balance - {self.employee.name} ({self.year})"
 
 
 class LeaveRequest(models.Model):
@@ -23,7 +31,7 @@ class LeaveRequest(models.Model):
     LEAVE_TYPES = [
         ('casual', 'Casual'),
         ('sick', 'Sick'),
-        ('earned', 'Earned'),
+        ('earned', 'Paid'),
         ('exam', 'Exam'),
         ('college', 'College'),
         ('other', 'Other'),

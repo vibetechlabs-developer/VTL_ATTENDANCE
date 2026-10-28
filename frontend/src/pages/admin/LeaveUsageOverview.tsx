@@ -41,7 +41,7 @@ export default function LeaveUsageOverview() {
       <div className="flex flex-wrap items-end justify-between gap-3">
         <div>
           <h1 className="text-2xl sm:text-3xl font-bold tracking-tight">Leave Usage</h1>
-          <p className="text-muted-foreground mt-1">All employees with approved and pending leave stats.</p>
+          <p className="text-muted-foreground mt-1">Balances follow joining month. Unused paid leave carries to the next year.</p>
         </div>
         <div className="w-full sm:w-[280px]">
           <Input
@@ -80,11 +80,11 @@ export default function LeaveUsageOverview() {
           <div className="col-span-3">Employee</div>
           <div className="col-span-2 text-center">Overall Used/Total</div>
           <div className="col-span-1 text-center">Approved Days</div>
-          <div className="col-span-2 text-center">Pending</div>
-          <div className="col-span-1 text-center">Casual (U/T)</div>
-          <div className="col-span-1 text-center">Sick (U/T)</div>
-          <div className="col-span-1 text-center">Earned (U/T)</div>
-          <div className="col-span-2 text-center">Requests</div>
+          <div className="col-span-1 text-center">Pending</div>
+          <div className="col-span-1 text-center">CL</div>
+          <div className="col-span-1 text-center">SL</div>
+          <div className="col-span-2 text-center">PL (U/T · carry)</div>
+          <div className="col-span-1 text-center">Requests</div>
         </div>
 
         <div className="max-h-[520px] overflow-y-auto divide-y divide-border/60">
@@ -96,7 +96,9 @@ export default function LeaveUsageOverview() {
                 <div className="hidden md:grid grid-cols-12 gap-2 items-center">
                   <div className="col-span-3 min-w-0">
                     <p className="font-semibold truncate">{row.employee_name}</p>
-                    <p className="text-xs text-muted-foreground">#{idx + 1}</p>
+                    <p className="text-xs text-muted-foreground">
+                      {row.joining_date || "—"} · {row.joining_month_name || ""}
+                    </p>
                   </div>
                   <div className="col-span-2 text-center text-sm">
                     <span className="font-semibold">{row.total_used || 0}</span>
@@ -106,7 +108,7 @@ export default function LeaveUsageOverview() {
                   <div className="col-span-1 text-center">
                     <StatusPill label={`${row.approved_days || 0}`} variant="info" />
                   </div>
-                  <div className="col-span-2 text-center">
+                  <div className="col-span-1 text-center">
                     <StatusPill label={`${row.pending_requests || 0} req`} variant="warning" />
                   </div>
                   <div className="col-span-1 text-center text-sm font-medium">
@@ -115,11 +117,14 @@ export default function LeaveUsageOverview() {
                   <div className="col-span-1 text-center text-sm font-medium">
                     {row.sick_used || 0}/{row.sick_total || 0}
                   </div>
-                  <div className="col-span-1 text-center text-sm font-medium">
+                  <div className="col-span-2 text-center text-sm font-medium">
                     {row.earned_used || 0}/{row.earned_total || 0}
+                    {Number(row.pl_carried_forward) > 0 ? (
+                      <span className="block text-[11px] font-normal text-muted-foreground">+{row.pl_carried_forward} carried</span>
+                    ) : null}
                   </div>
-                  <div className="col-span-2 text-center text-sm text-muted-foreground">
-                    {row.total_requests || 0} total
+                  <div className="col-span-1 text-center text-sm text-muted-foreground">
+                    {row.total_requests || 0}
                   </div>
                 </div>
 
@@ -127,7 +132,7 @@ export default function LeaveUsageOverview() {
                   <div className="flex items-start justify-between gap-3">
                     <div className="min-w-0">
                       <p className="font-semibold truncate">{row.employee_name}</p>
-                      <p className="text-xs text-muted-foreground">#{idx + 1}</p>
+                      <p className="text-xs text-muted-foreground">{row.joining_date || "—"} · {row.joining_month_name || ""}</p>
                     </div>
                     <StatusPill label={`${row.approved_days || 0} days`} variant="info" />
                   </div>
@@ -149,7 +154,7 @@ export default function LeaveUsageOverview() {
                       <p className="font-semibold text-sm">{row.sick_used || 0}/{row.sick_total || 0}</p>
                     </div>
                     <div className="col-span-2 rounded-md bg-muted/40 px-2 py-1.5">
-                      <p className="text-muted-foreground">Earned / Requests</p>
+                      <p className="text-muted-foreground">Paid leave / Requests</p>
                       <p className="font-semibold text-sm">{row.earned_used || 0}/{row.earned_total || 0} • {row.total_requests || 0} total</p>
                     </div>
                   </div>

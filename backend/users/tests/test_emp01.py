@@ -116,3 +116,26 @@ class EmployeeCreateTests(TestCase):
         self.assertEqual(Employee.objects.filter(user=user).count(), 1)
         self.assertEqual(user.employee.name, VALID_PAYLOAD['name'])
         self.assertEqual(user.employee.department, VALID_PAYLOAD['department'])
+
+    def test_create_saves_joining_date(self):
+        payload = dict(VALID_PAYLOAD)
+        payload['email'] = 'june.join@vtl.local'
+        payload['joining_date'] = '2026-06-15'
+        resp = self._create_as(self.admin, payload)
+        self.assertEqual(resp.status_code, status.HTTP_201_CREATED)
+        employee = Employee.objects.get(user__email='june.join@vtl.local')
+        self.assertEqual(str(employee.date_of_joining), '2026-06-15')
+        self.assertEqual(resp.data['employee']['joiningDate'], '2026-06-15')
+
+    def test_update_joining_date(self):
+        employee = self.employee_user.employee
+        self.client.force_authenticate(user=self.admin)
+        resp = self.client.patch(
+            f'/api/users/employees/{employee.id}/update/',
+            {'joining_date': '2025-08-03'},
+            format='json',
+        )
+        self.assertEqual(resp.status_code, status.HTTP_200_OK)
+        employee.refresh_from_db()
+        self.assertEqual(str(employee.date_of_joining), '2025-08-03')
+        self.assertEqual(resp.data['employee']['joiningDate'], '2025-08-03')

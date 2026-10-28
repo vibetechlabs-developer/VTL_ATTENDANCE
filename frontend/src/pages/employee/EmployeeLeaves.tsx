@@ -16,7 +16,6 @@ import {
 } from "@/components/ui/select";
 import { useAuthStore } from "@/store/authStore";
 import { toast } from "sonner";
-import { differenceInCalendarDays } from "date-fns";
 import { leaveApplyRequest, leaveBalanceRequest, leaveHistoryRequest, type LeaveTypeApi } from "@/lib/api";
 
 export default function EmployeeLeaves() {
@@ -49,9 +48,9 @@ export default function EmployeeLeaves() {
   const balances = useMemo(() => {
     if (!balance) return [];
     return [
-      { label: "Casual", used: balance.casual_used, total: balance.casual_total, remaining: balance.casual_remaining, accent: "bg-gradient-primary" },
-      { label: "Sick", used: balance.sick_used, total: balance.sick_total, remaining: balance.sick_remaining, accent: "bg-gradient-warm" },
-      { label: "Earned", used: balance.earned_used, total: balance.earned_total, remaining: balance.earned_remaining, accent: "bg-gradient-success" },
+      { label: "Casual (CL)", used: balance.casual_used, total: balance.casual_total, remaining: balance.casual_remaining, accent: "bg-gradient-primary" },
+      { label: "Sick (SL)", used: balance.sick_used, total: balance.sick_total, remaining: balance.sick_remaining, accent: "bg-gradient-warm" },
+      { label: "Paid (PL)", used: balance.earned_used, total: balance.earned_total, remaining: balance.earned_remaining, accent: "bg-gradient-success" },
     ];
   }, [balance]);
 
@@ -115,9 +114,9 @@ export default function EmployeeLeaves() {
                 <Select value={type} onValueChange={(v: any) => setType(v)}>
                   <SelectTrigger><SelectValue /></SelectTrigger>
                   <SelectContent>
-                    <SelectItem value="casual">Casual</SelectItem>
-                    <SelectItem value="sick">Sick</SelectItem>
-                    <SelectItem value="earned">Earned</SelectItem>
+                    <SelectItem value="casual">Casual (CL)</SelectItem>
+                    <SelectItem value="sick">Sick (SL)</SelectItem>
+                    <SelectItem value="earned">Paid leave (PL)</SelectItem>
                     <SelectItem value="exam">Exam</SelectItem>
                     <SelectItem value="college">College</SelectItem>
                     <SelectItem value="other">Other</SelectItem>
@@ -157,7 +156,7 @@ export default function EmployeeLeaves() {
         </Dialog>
       </div>
 
-      <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-4">
+      <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-3">
         {balances.map((b: any) => (
           <Card key={b.label} className="p-4 hover:shadow-md transition-smooth">
             <div className="flex items-center justify-between mb-3">
@@ -178,7 +177,9 @@ export default function EmployeeLeaves() {
           ) : history.map((l: any) => (
             <div key={l.id} className="p-4 flex flex-col sm:flex-row sm:items-center sm:justify-between gap-3">
               <div>
-                <p className="font-medium text-sm">{String(l.leave_type).toUpperCase()} leave</p>
+                <p className="font-medium text-sm">
+                  {l.leave_type === "earned" ? "PAID" : String(l.leave_type).toUpperCase()} leave
+                </p>
                 <p className="text-xs text-muted-foreground">{l.start_date} → {l.end_date}</p>
                 <p className="text-xs text-muted-foreground mt-0.5">{l.reason}</p>
               </div>

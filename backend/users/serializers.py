@@ -46,6 +46,10 @@ def _manager_employee_ids(employee):
     return []
 
 
+def _joining_date_value(data):
+    return data.get('joining_date') or data.get('joiningDate')
+
+
 def _apply_managers(employee, manager_employee_ids=None, manager_user=None, legacy_manager_id=None, legacy_manager_employee_id=None):
     """Set managers M2M and sync primary manager FK from employee id list or legacy single fields."""
     ids = list(manager_employee_ids or [])
@@ -61,7 +65,7 @@ def _apply_managers(employee, manager_employee_ids=None, manager_user=None, lega
     employee.managers.set(manager_users)
     employee.manager = manager_users[0] if manager_users else None
 from attendance.face_utils import is_valid_stored_encoding
-from leaves.models import LeaveBalance
+from leaves.services import ensure_leave_balance
 from users.services.email import send_employee_welcome_email
 from users.utils import format_employee_id
 
@@ -91,7 +95,7 @@ class EmployeeListSerializer(serializers.ModelSerializer):
     faceStatus = serializers.SerializerMethodField()
     status = serializers.SerializerMethodField()
     reportsTo = serializers.SerializerMethodField()
-    joiningDate = serializers.DateTimeField(source='created_at', format='%Y-%m-%d', read_only=True)
+    joiningDate = serializers.SerializerMethodField()
     isWfh = serializers.BooleanField(source='is_wfh', read_only=True)
 
     class Meta:
@@ -133,6 +137,14 @@ class EmployeeListSerializer(serializers.ModelSerializer):
     def get_reportsTo(self, obj):
         return _format_reports_to(obj)
 
+    def get_joiningDate(self, obj):
+        joining = getattr(obj, 'date_of_joining', None)
+        if joining:
+            return joining.strftime('%Y-%m-%d')
+        if obj.created_at:
+            return obj.created_at.strftime('%Y-%m-%d')
+        return None
+
 
 class EmployeeCreateSerializer(serializers.Serializer):
     name = serializers.CharField(max_length=100)
@@ -154,6 +166,8 @@ class EmployeeCreateSerializer(serializers.Serializer):
         allow_empty=True,
     )
     is_wfh = serializers.BooleanField(required=False, default=False)
+    joining_date = serializers.DateField(required=False, allow_null=True)
+    joiningDate = serializers.DateField(required=False, allow_null=True)
 
     def validate_name(self, value):
         name = (value or "").strip()
@@ -212,11 +226,13 @@ class EmployeeCreateSerializer(serializers.Serializer):
 
         provided_password = (validated_data.get('password') or '').strip()
         temp_password = provided_password if provided_password else get_random_string(10)
+        joining_date = _joining_date_value(validated_data)
         employee_fields = {
             'name': validated_data['name'],
             'department': validated_data['department'],
             'phone': validated_data.get('phone', '').strip(),
             'is_wfh': bool(validated_data.get('is_wfh', False)),
+            'date_of_joining': joining_date,
         }
         user = User(
             username=username,
@@ -234,7 +250,15 @@ class EmployeeCreateSerializer(serializers.Serializer):
             legacy_manager_employee_id=validated_data.get('manager_employee_id'),
         )
         employee.save()
-        LeaveBalance.objects.get_or_create(employee=employee)
+        if joining_date:
+            Employee.objects.filter(pk=employee.pk).update(date_of_joining=joining_date)
+            employee.date_of_joining = joining_date
+        elif not employee.date_of_joining:
+            from django.utils import timezone
+            today = timezone.localdate()
+            Employee.objects.filter(pk=employee.pk).update(date_of_joining=today)
+            employee.date_of_joining = today
+        ensure_leave_balance(employee)
         email_sent = send_employee_welcome_email(employee, temp_password)
         return employee, temp_password, email_sent
 
@@ -259,6 +283,8 @@ class EmployeeUpdateSerializer(serializers.Serializer):
         allow_empty=True,
     )
     is_wfh = serializers.BooleanField(required=False)
+    joining_date = serializers.DateField(required=False, allow_null=True)
+    joiningDate = serializers.DateField(required=False, allow_null=True)
 
     def validate(self, attrs):
         if 'roles' in attrs or 'role' in attrs:
@@ -295,6 +321,8 @@ class EmployeeUpdateSerializer(serializers.Serializer):
             instance.phone = validated_data['phone'].strip()
         if 'is_wfh' in validated_data:
             instance.is_wfh = bool(validated_data['is_wfh'])
+        if 'joining_date' in validated_data or 'joiningDate' in validated_data:
+            instance.date_of_joining = _joining_date_value(validated_data)
 
         has_me_ids = 'manager_employee_ids' in validated_data
         has_me = 'manager_employee_id' in validated_data
@@ -308,4 +336,6 @@ class EmployeeUpdateSerializer(serializers.Serializer):
             )
 
         instance.save()
+        if 'joining_date' in validated_data or 'joiningDate' in validated_data:
+            ensure_leave_balance(instance)
         return instance

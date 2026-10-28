@@ -108,6 +108,7 @@ export interface CreateEmployeePayload {
   phone?: string;
   password?: string;
   is_wfh?: boolean;
+  joining_date?: string;
 }
 
 export async function usersCreateRequest(accessToken: string, payload: CreateEmployeePayload): Promise<Response> {
@@ -130,6 +131,7 @@ export interface UpdateEmployeePayload {
   phone?: string;
   password?: string;
   is_wfh?: boolean;
+  joining_date?: string;
 }
 
 export async function usersUpdateRequest(accessToken: string, employeeId: string, payload: UpdateEmployeePayload): Promise<Response> {

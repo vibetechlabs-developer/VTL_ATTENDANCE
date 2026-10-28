@@ -52,6 +52,7 @@ class Employee(models.Model):
     aadhaar_number = models.CharField(max_length=30, blank=True, default='')
     salary = models.CharField(max_length=50, blank=True, default='')
     grade = models.CharField(max_length=50, blank=True, default='')
+    date_of_joining = models.DateField(null=True, blank=True)
     created_at = models.DateTimeField(auto_now_add=True)
 
     def __str__(self):

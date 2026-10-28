@@ -265,7 +265,7 @@ export const useDataStore = create<DataState>((set) => ({
             : []
         ).map(String),
         reportsTo: item.reportsTo || "—",
-        joiningDate: item.joiningDate || iso(new Date()),
+        joiningDate: item.joiningDate || "",
         faceStatus: item.faceStatus || "pending",
         avatar: item.avatar || undefined,
         status: item.status || "active",

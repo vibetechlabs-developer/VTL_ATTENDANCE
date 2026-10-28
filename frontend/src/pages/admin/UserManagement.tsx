@@ -26,9 +26,21 @@ import { exportCsv } from "@/utils/csv";
 import { usersCreateRequest, usersDeleteRequest, usersFaceDataRequest, usersListRequest, usersRegisterFaceRequest, usersUpdateRequest, type ApiEmployee } from "@/lib/api";
 import { captureFaceDataUrl, drawFaceFrame, MIRROR_CAMERA_PREVIEW } from "@/utils/faceCapture";
 
+function localYmd(value?: string | Date | null) {
+  if (typeof value === "string") {
+    const match = value.match(/^(\d{4}-\d{2}-\d{2})/);
+    if (match) return match[1];
+  }
+  const d = value instanceof Date ? value : new Date();
+  const y = d.getFullYear();
+  const m = String(d.getMonth() + 1).padStart(2, "0");
+  const day = String(d.getDate()).padStart(2, "0");
+  return `${y}-${m}-${day}`;
+}
+
 const emptyForm: Omit<Employee, "id"> = {
   name: "", email: "", empId: "", role: "employee", roles: ["employee"], department: "Tech",
-  reportsTo: "—", managerEmployeeIds: [], joiningDate: new Date().toISOString().slice(0, 10),
+  reportsTo: "—", managerEmployeeIds: [], joiningDate: localYmd(),
   faceStatus: "pending", status: "active", isWfh: false,
 };
 
@@ -38,6 +50,7 @@ interface FormFieldErrors {
   roles?: string;
   department?: string;
   password?: string;
+  joiningDate?: string;
 }
 
 export default function UserManagement() {
@@ -224,6 +237,10 @@ export default function UserManagement() {
       errors.password = "Password must be at least 8 characters";
     }
 
+    if (!form.joiningDate) {
+      errors.joiningDate = "Joining date is required";
+    }
+
     setFormErrors(errors);
 
     if (Object.keys(errors).length > 0) {
@@ -251,6 +268,7 @@ export default function UserManagement() {
         manager_employee_ids: managerEmployeeIds,
         password: password || undefined,
         is_wfh: Boolean(form.isWfh),
+        joining_date: localYmd(form.joiningDate),
       });
       const body = (await res.json().catch(() => ({}))) as {
         error?: string;
@@ -283,7 +301,7 @@ export default function UserManagement() {
   };
 
   const openEdit = (employee: Employee) => {
-    setSelectedEmployee(employee);
+    setSelectedEmployee({ ...employee, joiningDate: localYmd(employee.joiningDate) });
     setEditPassword("");
     setShowEditPassword(false);
     setEditErrors({});
@@ -357,6 +375,10 @@ export default function UserManagement() {
       errors.password = "Password must be at least 8 characters";
     }
 
+    if (!selectedEmployee.joiningDate) {
+      errors.joiningDate = "Joining date is required";
+    }
+
     setEditErrors(errors);
 
     if (Object.keys(errors).length > 0) {
@@ -380,6 +402,7 @@ export default function UserManagement() {
         manager_employee_ids: managerEmployeeIds,
         password: password || undefined,
         is_wfh: Boolean(selectedEmployee.isWfh),
+        joining_date: localYmd(selectedEmployee.joiningDate),
       });
       const body = (await res.json().catch(() => ({}))) as { error?: string };
       if (!res.ok) {
@@ -608,10 +631,23 @@ export default function UserManagement() {
                     />
                   </div>
                   <div className="space-y-1.5">
-                    <Label className="text-muted-foreground">
-                      Joining date <span className="text-[11px] font-normal text-muted-foreground/80">(optional)</span>
+                    <Label>
+                      Joining date <span className="text-destructive font-medium ml-0.5">*</span>
                     </Label>
-                    <Input type="date" value={form.joiningDate} onChange={(e) => setForm({ ...form, joiningDate: e.target.value })} />
+                    <Input
+                      type="date"
+                      value={form.joiningDate || ""}
+                      onChange={(e) => {
+                        setForm({ ...form, joiningDate: e.target.value });
+                        if (formErrors.joiningDate) setFormErrors((prev) => ({ ...prev, joiningDate: undefined }));
+                      }}
+                      className={formErrors.joiningDate ? "border-destructive focus-visible:ring-destructive" : ""}
+                    />
+                    {formErrors.joiningDate ? (
+                      <p className="text-xs text-destructive font-medium mt-1">{formErrors.joiningDate}</p>
+                    ) : (
+                      <p className="text-[11px] text-muted-foreground">Leave quota (CL/SL/PL) is calculated from this month.</p>
+                    )}
                   </div>
                 </div>
                 <div className="space-y-1.5">
@@ -1029,6 +1065,25 @@ export default function UserManagement() {
                     .map((opt) => ({ value: opt.value, label: opt.label }))}
                   placeholder="Select reporting managers"
                 />
+              </div>
+              <div className="space-y-1.5">
+                <Label>
+                  Joining date <span className="text-destructive font-medium ml-0.5">*</span>
+                </Label>
+                <Input
+                  type="date"
+                  value={selectedEmployee.joiningDate || ""}
+                  onChange={(e) => {
+                    setSelectedEmployee({ ...selectedEmployee, joiningDate: e.target.value });
+                    if (editErrors.joiningDate) setEditErrors((prev) => ({ ...prev, joiningDate: undefined }));
+                  }}
+                  className={editErrors.joiningDate ? "border-destructive focus-visible:ring-destructive" : ""}
+                />
+                {editErrors.joiningDate ? (
+                  <p className="text-xs text-destructive font-medium mt-1">{editErrors.joiningDate}</p>
+                ) : (
+                  <p className="text-[11px] text-muted-foreground">Changing this date updates CL, SL and PL for the joining year.</p>
+                )}
               </div>
               <div className="space-y-1.5">
                 <Label className="text-muted-foreground">

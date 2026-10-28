@@ -10,6 +10,7 @@ from .serializers import (
 from users.models import Employee
 from users.utils import get_or_create_employee
 from decimal import Decimal
+from .services import ensure_leave_balance
 # Notification + Audit helpers (Module 10 wiring demonstration)
 from notifications.helpers import notify, log_action
 
@@ -56,8 +57,7 @@ class LeaveApplyView(APIView):
                 status=400,
             )
 
-        # Balance check karo (safely get_or_create balance)
-        balance, _ = LeaveBalance.objects.get_or_create(employee=employee)
+        balance = ensure_leave_balance(employee)
         leave_type = data['leave_type']
 
         if leave_type in ['casual', 'sick', 'earned']:
@@ -136,7 +136,7 @@ class LeaveApproveView(APIView):
         else:
             delta = leave.end_date - leave.start_date
             days = Decimal(delta.days + 1)
-        balance, _ = LeaveBalance.objects.get_or_create(employee=leave.employee)
+        balance = ensure_leave_balance(leave.employee)
 
         if leave.leave_type == 'casual':
             balance.casual_used += days
@@ -212,9 +212,7 @@ class LeaveBalanceView(APIView):
         employee = get_or_create_employee(request.user)
         if not employee:
             return Response({'error': 'Employee profile not found.'}, status=400)
-        balance, _ = LeaveBalance.objects.get_or_create(
-            employee=employee
-        )
+        balance = ensure_leave_balance(employee)
         serializer = LeaveBalanceSerializer(balance)
         return Response(serializer.data)
 
@@ -261,6 +259,8 @@ class LeaveUsageSummaryView(APIView):
             return Response({'error': 'Permission denied.'}, status=403)
 
         employees = Employee.objects.select_related('user').all().order_by('name')
+        for emp in employees:
+            ensure_leave_balance(emp)
         summary = {
             emp.id: {
                 'employee_id': emp.id,
@@ -280,6 +280,9 @@ class LeaveUsageSummaryView(APIView):
                 'casual_used': 0,
                 'sick_used': 0,
                 'earned_used': 0,
+                'pl_carried_forward': 0,
+                'joining_date': None,
+                'joining_month_name': '',
                 'total_entitled': 0,
                 'total_used': 0,
                 'total_remaining': 0,
@@ -291,6 +294,13 @@ class LeaveUsageSummaryView(APIView):
             b.employee_id: b
             for b in LeaveBalance.objects.filter(employee_id__in=summary.keys())
         }
+        from .policy import get_joining_date, policy_snapshot
+        for emp in employees:
+            row = summary[emp.id]
+            jd = get_joining_date(emp)
+            row['joining_date'] = jd.isoformat()
+            snap = policy_snapshot(emp)
+            row['joining_month_name'] = snap['joining_month_name']
         for emp_id, row in summary.items():
             bal = balances.get(emp_id)
             if bal:
@@ -300,11 +310,12 @@ class LeaveUsageSummaryView(APIView):
                 row['casual_used'] = bal.casual_used
                 row['sick_used'] = bal.sick_used
                 row['earned_used'] = bal.earned_used
+                row['pl_carried_forward'] = bal.pl_carried_forward
                 row['total_entitled'] = bal.casual_total + bal.sick_total + bal.earned_total
                 row['total_used'] = bal.casual_used + bal.sick_used + bal.earned_used
                 row['total_remaining'] = row['total_entitled'] - row['total_used']
             else:
-                row['total_entitled'] = 12 + 10 + 15
+                row['total_entitled'] = 10 + 10 + 15
                 row['total_used'] = row['casual_used'] + row['sick_used'] + row['earned_used']
                 row['total_remaining'] = row['total_entitled'] - row['total_used']
 
@@ -340,7 +351,7 @@ class LeaveUsageSummaryView(APIView):
         decimal_fields = {
             'approved_days', 'pending_days', 'casual_days', 'sick_days', 'earned_days',
             'casual_total', 'sick_total', 'earned_total', 'casual_used', 'sick_used',
-            'earned_used', 'total_entitled', 'total_used', 'total_remaining'
+            'earned_used', 'pl_carried_forward', 'total_entitled', 'total_used', 'total_remaining'
         }
         normalized_rows = []
         for row in rows:

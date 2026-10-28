@@ -7,6 +7,12 @@ export type LeaveBalanceShape = {
   sick_total?: number;
   earned_remaining?: number;
   earned_total?: number;
+  pl_carried_forward?: number;
+  joining_date?: string;
+  joining_month_name?: string;
+  is_joining_year?: boolean;
+  policy_note?: string;
+  year?: number;
 };
 
 function Ring({
@@ -20,8 +26,8 @@ function Ring({
   total: number;
   accentClass: string;
 }) {
-  const t = Math.max(1, total || 1);
-  const pct = Math.min(100, Math.max(0, (remaining / t) * 100));
+  const t = Math.max(0, total || 0);
+  const pct = t <= 0 ? 0 : Math.min(100, Math.max(0, (remaining / t) * 100));
   const dash = 2 * Math.PI * 36;
   const offset = dash - (pct / 100) * dash;
 
@@ -76,7 +82,7 @@ export function LeaveBalanceRings({ balance, className }: { balance: LeaveBalanc
     <div className={cn("flex flex-wrap items-end justify-center gap-6 sm:gap-8", className)}>
       <Ring label="Casual" remaining={casualR} total={casualT} accentClass="stroke-primary" />
       <Ring label="Sick" remaining={sickR} total={sickT} accentClass="stroke-[hsl(var(--warning))]" />
-      <Ring label="Paid" remaining={earnedR} total={earnedT} accentClass="stroke-[hsl(var(--info))]" />
+      <Ring label="Paid (PL)" remaining={earnedR} total={earnedT} accentClass="stroke-[hsl(var(--info))]" />
     </div>
   );
 }
