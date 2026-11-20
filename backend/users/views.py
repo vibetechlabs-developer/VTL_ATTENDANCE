@@ -870,103 +870,125 @@ class EmployeeOverviewView(APIView):
 
             # 2. Today's attendance
             today = timezone.now().date()
-            today_log = AttendanceLog.objects.filter(employee=emp, date=today).first()
-            late_cutoff = timezone.make_aware(
-                datetime.combine(today, time(10, 15)),
-                timezone.get_current_timezone()
-            )
-            today_status = 'Absent'
-            if LeaveRequest.objects.filter(employee=emp, status='approved', start_date__lte=today, end_date__gte=today).exists():
-                today_status = 'On Leave'
-            elif today_log and today_log.check_in:
-                c_in = today_log.check_in
-                if timezone.is_naive(c_in):
-                    c_in = timezone.make_aware(c_in, timezone.get_current_timezone())
-                today_status = 'Late' if c_in > late_cutoff else 'Present'
-
             today_attendance = {
-                'status': today_status,
-                'check_in': today_log.check_in.isoformat() if today_log and today_log.check_in else None,
-                'check_out': today_log.check_out.isoformat() if today_log and today_log.check_out else None,
-                'hours': float(today_log.total_hours or 0) if today_log else 0,
-                'overtime_hours': float(today_log.overtime_hours or 0) if today_log else 0,
+                'status': 'Absent',
+                'check_in': None,
+                'check_out': None,
+                'hours': 0,
+                'overtime_hours': 0,
             }
-
-            # 3. Attendance history (last 14 days)
-            fourteen_days_ago = today - timedelta(days=14)
-            history_logs = AttendanceLog.objects.filter(
-                employee=emp,
-                date__gte=fourteen_days_ago,
-                date__lte=today
-            ).order_by('-date')
-
-            attendance_history = []
-            for l in history_logs:
-                l_cutoff = timezone.make_aware(
-                    datetime.combine(l.date, time(10, 15)),
+            try:
+                today_log = AttendanceLog.objects.filter(employee=emp, date=today).first()
+                late_cutoff = timezone.make_aware(
+                    datetime.combine(today, time(10, 15)),
                     timezone.get_current_timezone()
                 )
-                s = 'Absent'
-                if l.check_in:
-                    c_in = l.check_in
+                today_status = 'Absent'
+                if LeaveRequest.objects.filter(employee=emp, status='approved', start_date__lte=today, end_date__gte=today).exists():
+                    today_status = 'On Leave'
+                elif today_log and today_log.check_in:
+                    c_in = today_log.check_in
                     if timezone.is_naive(c_in):
                         c_in = timezone.make_aware(c_in, timezone.get_current_timezone())
-                    s = 'Late' if c_in > l_cutoff else 'Present'
-                attendance_history.append({
-                    'id': str(l.id),
-                    'date': l.date.isoformat(),
-                    'status': s,
-                    'check_in': l.check_in.isoformat() if l.check_in else None,
-                    'check_out': l.check_out.isoformat() if l.check_out else None,
-                    'hours': float(l.total_hours or 0),
-                    'overtime_hours': float(l.overtime_hours or 0),
-                })
+                    today_status = 'Late' if c_in > late_cutoff else 'Present'
+
+                today_attendance = {
+                    'status': today_status,
+                    'check_in': today_log.check_in.isoformat() if today_log and today_log.check_in else None,
+                    'check_out': today_log.check_out.isoformat() if today_log and today_log.check_out else None,
+                    'hours': float(today_log.total_hours or 0) if today_log else 0,
+                    'overtime_hours': float(today_log.overtime_hours or 0) if today_log else 0,
+                }
+            except Exception as att_err:
+                logger.warning("Could not calculate today attendance for %s: %s", emp.id, att_err)
+
+            # 3. Attendance history (last 14 days)
+            attendance_history = []
+            try:
+                fourteen_days_ago = today - timedelta(days=14)
+                history_logs = AttendanceLog.objects.filter(
+                    employee=emp,
+                    date__gte=fourteen_days_ago,
+                    date__lte=today
+                ).order_by('-date')
+
+                for l in history_logs:
+                    l_cutoff = timezone.make_aware(
+                        datetime.combine(l.date, time(10, 15)),
+                        timezone.get_current_timezone()
+                    )
+                    s = 'Absent'
+                    if l.check_in:
+                        c_in = l.check_in
+                        if timezone.is_naive(c_in):
+                            c_in = timezone.make_aware(c_in, timezone.get_current_timezone())
+                        s = 'Late' if c_in > l_cutoff else 'Present'
+                    attendance_history.append({
+                        'id': str(l.id),
+                        'date': l.date.isoformat(),
+                        'status': s,
+                        'check_in': l.check_in.isoformat() if l.check_in else None,
+                        'check_out': l.check_out.isoformat() if l.check_out else None,
+                        'hours': float(l.total_hours or 0),
+                        'overtime_hours': float(l.overtime_hours or 0),
+                    })
+            except Exception as hist_err:
+                logger.warning("Could not fetch attendance history for %s: %s", emp.id, hist_err)
 
             # 4. Tasks assigned to this employee
-            tasks_qs = Task.objects.filter(
-                Q(assigned_to=emp) | Q(assigned_to__user=emp.user)
-            ).order_by('-created_at')[:50]
             tasks_list = []
-            for t in tasks_qs:
-                tasks_list.append({
-                    'id': t.id,
-                    'title': t.title,
-                    'description': t.description,
-                    'priority': t.priority,
-                    'status': t.status,
-                    'due_datetime': t.due_datetime.isoformat() if t.due_datetime else None,
-                    'is_overdue': t.is_overdue,
-                    'incomplete_reason': t.incomplete_reason or '',
-                    'completion_notes': t.completion_notes or '',
-                    'completed_at': t.completed_at.isoformat() if t.completed_at else None,
-                    'created_at': t.created_at.isoformat() if t.created_at else None,
-                })
+            try:
+                tasks_qs = Task.objects.filter(
+                    Q(assigned_to=emp) | Q(assigned_to__user=emp.user)
+                ).order_by('-created_at')[:50]
+                for t in tasks_qs:
+                    tasks_list.append({
+                        'id': t.id,
+                        'title': t.title,
+                        'description': t.description,
+                        'priority': t.priority,
+                        'status': t.status,
+                        'due_datetime': t.due_datetime.isoformat() if t.due_datetime else None,
+                        'is_overdue': getattr(t, 'is_overdue', False),
+                        'incomplete_reason': getattr(t, 'incomplete_reason', '') or '',
+                        'completion_notes': getattr(t, 'completion_notes', '') or '',
+                        'completed_at': t.completed_at.isoformat() if getattr(t, 'completed_at', None) else None,
+                        'created_at': t.created_at.isoformat() if getattr(t, 'created_at', None) else None,
+                    })
+            except Exception as task_err:
+                logger.warning("Could not fetch tasks for %s: %s", emp.id, task_err)
 
             # 5. Recent daily updates (last 10)
-            updates_qs = DailyUpdate.objects.filter(employee=emp).order_by('-date', '-created_at')[:10]
             updates_list = []
-            for u in updates_qs:
-                updates_list.append({
-                    'id': u.id,
-                    'date': u.date.isoformat() if u.date else None,
-                    'update_text': u.update_text,
-                    'report_data': u.report_data,
-                    'created_at': u.created_at.isoformat() if u.created_at else None,
-                })
+            try:
+                updates_qs = DailyUpdate.objects.filter(employee=emp).order_by('-date', '-created_at')[:10]
+                for u in updates_qs:
+                    updates_list.append({
+                        'id': u.id,
+                        'date': u.date.isoformat() if u.date else None,
+                        'update_text': u.update_text,
+                        'report_data': u.report_data,
+                        'created_at': u.created_at.isoformat() if getattr(u, 'created_at', None) else None,
+                    })
+            except Exception as update_err:
+                logger.warning("Could not fetch daily updates for %s: %s", emp.id, update_err)
 
             # 6. Leaves summary
-            recent_leaves = LeaveRequest.objects.filter(employee=emp).order_by('-applied_at')[:5]
             leaves_list = []
-            for lr in recent_leaves:
-                leaves_list.append({
-                    'id': lr.id,
-                    'leave_type': lr.leave_type,
-                    'start_date': lr.start_date.isoformat() if lr.start_date else None,
-                    'end_date': lr.end_date.isoformat() if lr.end_date else None,
-                    'status': lr.status,
-                    'reason': lr.reason,
-                    'applied_at': lr.applied_at.isoformat() if lr.applied_at else None,
-                })
+            try:
+                recent_leaves = LeaveRequest.objects.filter(employee=emp).order_by('-applied_at')[:5]
+                for lr in recent_leaves:
+                    leaves_list.append({
+                        'id': lr.id,
+                        'leave_type': lr.leave_type,
+                        'start_date': lr.start_date.isoformat() if lr.start_date else None,
+                        'end_date': lr.end_date.isoformat() if lr.end_date else None,
+                        'status': lr.status,
+                        'reason': lr.reason,
+                        'applied_at': lr.applied_at.isoformat() if getattr(lr, 'applied_at', None) else None,
+                    })
+            except Exception as leave_err:
+                logger.warning("Could not fetch leaves for %s: %s", emp.id, leave_err)
 
             return Response({
                 'employee': emp_data,
