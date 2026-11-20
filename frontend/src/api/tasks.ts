@@ -4,10 +4,18 @@ import axios from "@/api/axios";
 export type TaskPriority = "low" | "medium" | "high" | "urgent";
 export type TaskStatus = "pending" | "in_progress" | "completed" | "reviewed" | "reopened" | "cancelled";
 
+export interface TaskChecklistItem {
+  id: string;
+  prefix?: string;
+  text: string;
+  completed: boolean;
+}
+
 export interface TaskItem {
   id: number;
   title: string;
   description: string;
+  checklist?: TaskChecklistItem[];
   assigned_to: number;
   assigned_to_name: string;
   assigned_to_email?: string;
@@ -29,6 +37,7 @@ export interface TaskItem {
 export interface CreateTaskPayload {
   title: string;
   description?: string;
+  checklist?: TaskChecklistItem[];
   assigned_to: number;
   priority: TaskPriority;
   due_datetime: string;
@@ -41,6 +50,7 @@ export interface UpdateTaskPayload {
   priority?: TaskPriority;
   title?: string;
   description?: string;
+  checklist?: TaskChecklistItem[];
 }
 
 export interface AssignableEmployee {

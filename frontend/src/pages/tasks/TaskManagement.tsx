@@ -2,18 +2,20 @@ import { useState } from "react";
 import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
 import {
   CheckSquare, Plus, Clock, AlertTriangle, CheckCircle2,
-  Calendar, Search, MoreVertical,
+  Calendar, Search, MoreVertical, ListTodo, Check
 } from "lucide-react";
 import { toast } from "sonner";
 import { format, formatDistanceToNow, isPast } from "date-fns";
 
-
+import { cn } from "@/lib/utils";
 import { Card, CardHeader, CardTitle, CardContent, CardDescription } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
 import { Input } from "@/components/ui/input";
 import { Textarea } from "@/components/ui/textarea";
 import { Tabs, TabsList, TabsTrigger, TabsContent } from "@/components/ui/tabs";
+import { Checkbox } from "@/components/ui/checkbox";
+import { Progress } from "@/components/ui/progress";
 import {
   Dialog, DialogContent, DialogHeader, DialogTitle,
   DialogDescription, DialogFooter
@@ -27,9 +29,129 @@ import {
 
 import {
   fetchTasks, createTask, updateTask, deleteTask, fetchAssignableEmployees,
-  TaskItem, TaskPriority, TaskStatus
+  TaskItem, TaskPriority, TaskStatus, TaskChecklistItem
 } from "@/api/tasks";
 import { useAuthStore, userHasRole } from "@/store/authStore";
+
+export function parseChecklistAndNotes(
+  text: string,
+  structuredChecklist?: TaskChecklistItem[]
+): { intro: string; items: TaskChecklistItem[] } {
+  if (Array.isArray(structuredChecklist) && structuredChecklist.length > 0) {
+    return {
+      intro: "",
+      items: structuredChecklist.map((it, idx) => ({
+        id: String(it.id || idx + 1),
+        prefix: it.prefix || `${idx + 1}.`,
+        text: String(it.text || ""),
+        completed: Boolean(it.completed),
+      })),
+    };
+  }
+
+  if (!text || typeof text !== "string") return { intro: "", items: [] };
+  const trimmed = text.trim();
+  if (!trimmed) return { intro: "", items: [] };
+
+  // 1. Check if it has markdown checkboxes: - [ ] or - [x]
+  const lines = trimmed.split(/\r?\n/).map((l) => l.trim()).filter(Boolean);
+  const hasMdCheckbox = lines.some((l) => /^(?:[-*]\s*)?\[([ xX])\]\s*(.+)$/.test(l));
+  if (hasMdCheckbox) {
+    const introLines: string[] = [];
+    const items: TaskChecklistItem[] = [];
+    let foundFirstItem = false;
+
+    lines.forEach((line) => {
+      const match = line.match(/^(?:[-*]\s*)?\[([ xX])\]\s*(.+)$/);
+      if (match) {
+        foundFirstItem = true;
+        items.push({
+          id: String(items.length + 1),
+          prefix: `${items.length + 1}.`,
+          text: match[2].trim(),
+          completed: match[1].toLowerCase() === "x",
+        });
+      } else if (!foundFirstItem && !line.startsWith("-") && !line.startsWith("*")) {
+        introLines.push(line);
+      } else {
+        foundFirstItem = true;
+        items.push({
+          id: String(items.length + 1),
+          prefix: `${items.length + 1}.`,
+          text: line.replace(/^[-*•]\s*/, "").trim(),
+          completed: false,
+        });
+      }
+    });
+
+    return { intro: introLines.join("\n"), items };
+  }
+
+  // 2. Check if numbered list (e.g. '1. ... 2. ...' or multiline '1. ...\n2. ...')
+  const numberedMatch = trimmed.match(/(?:^|\s+)\d+[\.\)]\s+/);
+  if (numberedMatch) {
+    let intro = "";
+    let listText = trimmed;
+    const firstNumIdx = trimmed.search(/(?:^|\s+)\d+[\.\)]\s+/);
+    if (firstNumIdx > 0) {
+      intro = trimmed.slice(0, firstNumIdx).trim();
+      listText = trimmed.slice(firstNumIdx).trim();
+    }
+
+    const parts = listText.split(/(?:^|\s+)(?=\d+[\.\)]\s+)/).map((p) => p.trim()).filter(Boolean);
+    if (parts.length > 0) {
+      const items: TaskChecklistItem[] = parts.map((part, idx) => {
+        let completed = false;
+        let cleanText = part.replace(/^\d+[\.\)]\s*/, "").trim();
+        const cbMatch = cleanText.match(/^\[([ xX])\]\s*(.+)$/);
+        if (cbMatch) {
+          completed = cbMatch[1].toLowerCase() === "x";
+          cleanText = cbMatch[2].trim();
+        }
+        return {
+          id: String(idx + 1),
+          prefix: `${idx + 1}.`,
+          text: cleanText,
+          completed,
+        };
+      });
+      return { intro, items };
+    }
+  }
+
+  // 3. Multiline bullets or lines
+  if (lines.length > 1) {
+    const items: TaskChecklistItem[] = lines.map((line, idx) => {
+      let completed = false;
+      let cleanText = line.replace(/^[-*•]\s*/, "").trim();
+      const cbMatch = cleanText.match(/^\[([ xX])\]\s*(.+)$/);
+      if (cbMatch) {
+        completed = cbMatch[1].toLowerCase() === "x";
+        cleanText = cbMatch[2].trim();
+      }
+      return {
+        id: String(idx + 1),
+        prefix: "•",
+        text: cleanText,
+        completed,
+      };
+    });
+    return { intro: "", items };
+  }
+
+  // Fallback: Not a checklist, just plain text description
+  return { intro: trimmed, items: [] };
+}
+
+export function serializeChecklistAndNotes(intro: string, items: TaskChecklistItem[]): string {
+  const listMd = items
+    .map((item) => `- [${item.completed ? "x" : " "}] ${item.text}`)
+    .join("\n");
+  if (intro && intro.trim()) {
+    return `${intro.trim()}\n\n${listMd}`;
+  }
+  return listMd;
+}
 
 
 export default function TaskManagement() {
@@ -123,6 +245,59 @@ export default function TaskManagement() {
     },
   });
 
+  const checklistMutation = useMutation({
+    mutationFn: ({ id, payload }: { id: number; payload: any }) => updateTask(id, payload),
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ["tasks"] });
+    },
+    onError: (err: any) => {
+      queryClient.invalidateQueries({ queryKey: ["tasks"] });
+      toast.error(err.response?.data?.detail || "Failed to update checklist item.");
+    },
+  });
+
+  const handleToggleChecklistItem = (task: TaskItem, itemId: string) => {
+    const { intro, items } = parseChecklistAndNotes(task.description, task.checklist);
+    if (!items.length) return;
+
+    const updatedItems = items.map((it) =>
+      it.id === itemId ? { ...it, completed: !it.completed } : it
+    );
+    const updatedDescription = serializeChecklistAndNotes(intro, updatedItems);
+    const allDone = updatedItems.every((it) => it.completed);
+
+    // Optimistically update React Query cache for instant responsive feel
+    queryClient.setQueryData(["tasks"], (old: any) => {
+      if (!Array.isArray(old)) return old;
+      return old.map((t: TaskItem) => {
+        if (t.id === task.id) {
+          return {
+            ...t,
+            description: updatedDescription,
+            checklist: updatedItems,
+            status: t.status === "pending" ? "in_progress" : t.status,
+          };
+        }
+        return t;
+      });
+    });
+
+    checklistMutation.mutate({
+      id: task.id,
+      payload: {
+        description: updatedDescription,
+        checklist: updatedItems,
+        ...(task.status === "pending" ? { status: "in_progress" } : {}),
+      },
+    });
+
+    if (allDone) {
+      toast.success("All checklist items completed! Ready to mark completed.", {
+        duration: 3000,
+      });
+    }
+  };
+
   const handleCreateSubmit = (e: React.FormEvent) => {
     e.preventDefault();
     if (!createForm.title.trim()) {
@@ -139,10 +314,12 @@ export default function TaskManagement() {
     }
 
     const due_datetime = new Date(`${createForm.due_date}T${createForm.due_time}:00`).toISOString();
+    const { items: parsedItems } = parseChecklistAndNotes(createForm.description);
 
     createMutation.mutate({
       title: createForm.title,
       description: createForm.description,
+      checklist: parsedItems.length > 0 ? parsedItems : undefined,
       assigned_to: Number(createForm.assigned_to),
       priority: createForm.priority,
       due_datetime,
@@ -414,11 +591,118 @@ export default function TaskManagement() {
                     </CardHeader>
 
                     <CardContent className="p-4 pt-2 space-y-4">
-                      {task.description && (
-                        <p className="text-xs text-muted-foreground line-clamp-2">
-                          {task.description}
-                        </p>
-                      )}
+                      {(() => {
+                        const { intro, items } = parseChecklistAndNotes(task.description, task.checklist);
+                        const isAssignedToMe = user?.email && task.assigned_to_email
+                          ? user.email.toLowerCase() === task.assigned_to_email.toLowerCase()
+                          : false;
+                        const canToggleChecklist = (isAssignedToMe || isManagerOrAdmin) &&
+                          task.status !== "completed" && task.status !== "reviewed" && task.status !== "cancelled";
+
+                        const completedCount = items.filter((it) => it.completed).length;
+                        const totalItems = items.length;
+                        const progressPercent = totalItems > 0 ? Math.round((completedCount / totalItems) * 100) : 0;
+
+                        return (
+                          <div className="space-y-3">
+                            {/* Intro / context note if present */}
+                            {intro && (
+                              <p className="text-xs text-muted-foreground whitespace-pre-wrap leading-relaxed">
+                                {intro}
+                              </p>
+                            )}
+
+                            {/* Checklist Container */}
+                            {totalItems > 0 ? (
+                              <div className="rounded-lg border border-border/50 bg-background/60 p-3 space-y-2.5">
+                                <div className="flex items-center justify-between gap-2">
+                                  <div className="flex items-center gap-1.5 text-xs font-semibold text-foreground">
+                                    <ListTodo className="h-3.5 w-3.5 text-primary" />
+                                    <span>Task Checklist</span>
+                                  </div>
+                                  <Badge
+                                    variant="outline"
+                                    className={cn(
+                                      "text-[10px] font-mono px-1.5 py-0",
+                                      progressPercent === 100
+                                        ? "border-emerald-500/40 text-emerald-600 dark:text-emerald-400 bg-emerald-500/10 font-bold"
+                                        : "text-muted-foreground"
+                                    )}
+                                  >
+                                    {completedCount}/{totalItems} Done ({progressPercent}%)
+                                  </Badge>
+                                </div>
+
+                                <Progress value={progressPercent} className="h-1.5 bg-muted/60" />
+
+                                <div className="space-y-1.5 pt-1">
+                                  {items.map((item) => (
+                                    <div
+                                      key={item.id}
+                                      onClick={() => {
+                                        if (canToggleChecklist) {
+                                          handleToggleChecklistItem(task, item.id);
+                                        }
+                                      }}
+                                      className={cn(
+                                        "flex items-start gap-2.5 p-2 rounded-md transition-all text-xs border border-transparent",
+                                        item.completed
+                                          ? "bg-emerald-500/5 border-emerald-500/15 text-muted-foreground"
+                                          : "bg-muted/20 hover:bg-muted/40 text-foreground",
+                                        canToggleChecklist ? "cursor-pointer" : "cursor-default"
+                                      )}
+                                    >
+                                      <Checkbox
+                                        checked={item.completed}
+                                        disabled={!canToggleChecklist}
+                                        onCheckedChange={() => {
+                                          if (canToggleChecklist) {
+                                            handleToggleChecklistItem(task, item.id);
+                                          }
+                                        }}
+                                        className={cn(
+                                          "mt-0.5 shrink-0 transition-colors",
+                                          item.completed && "data-[state=checked]:bg-emerald-600 data-[state=checked]:border-emerald-600 text-white"
+                                        )}
+                                      />
+                                      <div className="flex-1 select-none leading-snug">
+                                        {item.prefix && (
+                                          <span className="font-semibold text-muted-foreground mr-1.5">
+                                            {item.prefix}
+                                          </span>
+                                        )}
+                                        <span
+                                          className={cn(
+                                            "transition-all",
+                                            item.completed
+                                              ? "line-through text-muted-foreground/75"
+                                              : "text-foreground font-medium"
+                                          )}
+                                        >
+                                          {item.text}
+                                        </span>
+                                      </div>
+                                    </div>
+                                  ))}
+                                </div>
+
+                                {progressPercent === 100 && (
+                                  <div className="text-[11px] text-emerald-600 dark:text-emerald-400 font-medium flex items-center gap-1.5 pt-1">
+                                    <Check className="h-3.5 w-3.5 text-emerald-500" />
+                                    <span>All checklist tasks completed! Ready to mark completed.</span>
+                                  </div>
+                                )}
+                              </div>
+                            ) : (
+                              !intro && task.description && (
+                                <p className="text-xs text-muted-foreground whitespace-pre-wrap leading-relaxed">
+                                  {task.description}
+                                </p>
+                              )
+                            )}
+                          </div>
+                        );
+                      })()}
 
                       {/* Timeline Deadline Indicator */}
                       <div className="p-2.5 rounded-lg bg-muted/40 border border-border/30 text-xs space-y-1">
@@ -631,13 +915,41 @@ export default function TaskManagement() {
               </div>
 
               <div className="space-y-1.5">
-                <label className="text-xs font-semibold text-foreground">Description / Instructions</label>
+                <div className="flex items-center justify-between">
+                  <label className="text-xs font-semibold text-foreground">
+                    Description & Checklist Tasks
+                  </label>
+                  <span className="text-[10px] text-muted-foreground">
+                    💡 Numbered (1., 2.) or bullet points turn into checklists
+                  </span>
+                </div>
                 <Textarea
-                  placeholder="Enter specific instructions or deliverables expected by the deadline..."
+                  placeholder="Enter instructions or numbered items:&#10;1. Finish CMHP&#10;2. Connect Feril's WhatsApp&#10;3. Interior SAAS testing"
                   value={createForm.description}
                   onChange={(e) => setCreateForm({ ...createForm, description: e.target.value })}
-                  rows={3}
+                  rows={4}
                 />
+                {(() => {
+                  const preview = parseChecklistAndNotes(createForm.description);
+                  if (preview.items.length > 0) {
+                    return (
+                      <div className="p-2.5 rounded-md bg-muted/40 border border-border/40 text-[11px] space-y-1.5">
+                        <span className="text-[10px] font-semibold text-muted-foreground uppercase tracking-wider block">
+                          Checklist Preview ({preview.items.length} items detected):
+                        </span>
+                        <div className="space-y-1">
+                          {preview.items.map((it) => (
+                            <div key={it.id} className="flex items-start gap-1.5 text-foreground">
+                              <span className="mt-0.5 h-3.5 w-3.5 rounded-sm border border-primary/40 shrink-0" />
+                              <span className="leading-snug">{it.prefix} {it.text}</span>
+                            </div>
+                          ))}
+                        </div>
+                      </div>
+                    );
+                  }
+                  return null;
+                })()}
               </div>
 
               <DialogFooter className="pt-2">
