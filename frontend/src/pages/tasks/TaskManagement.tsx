@@ -2,7 +2,7 @@ import { useState } from "react";
 import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
 import {
   CheckSquare, Plus, Clock, AlertTriangle, CheckCircle2,
-  Calendar, Search, MoreVertical, ListTodo, Check
+  Calendar, Search, MoreVertical, ListTodo, Check, AlertCircle
 } from "lucide-react";
 import { toast } from "sonner";
 import { format, formatDistanceToNow, isPast } from "date-fns";
@@ -402,6 +402,7 @@ export default function TaskManagement() {
 
     if (activeTab === "mine") return t.assigned_to === user?.id || t.assigned_to_email === user?.email;
     if (activeTab === "overdue") return t.is_overdue;
+    if (activeTab === "delayed") return Boolean(t.incomplete_reason) && t.status !== "completed" && t.status !== "reviewed";
     if (activeTab === "pending") return t.status === "pending" || t.status === "in_progress" || t.status === "reopened";
     if (activeTab === "completed") return t.status === "completed" || t.status === "reviewed";
 
@@ -411,6 +412,7 @@ export default function TaskManagement() {
   // Calculate statistics
   const totalCount = tasks.length;
   const inProgressCount = tasks.filter((t) => t.status === "in_progress" || t.status === "reopened").length;
+  const delayedCount = tasks.filter((t) => Boolean(t.incomplete_reason) && t.status !== "completed" && t.status !== "reviewed").length;
   const overdueCount = tasks.filter((t) => t.is_overdue).length;
   const completedCount = tasks.filter((t) => t.status === "completed" || t.status === "reviewed").length;
 
@@ -499,7 +501,7 @@ export default function TaskManagement() {
       </div>
 
       {/* Overview Metric Stats */}
-      <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4">
+      <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-5 gap-3">
         <Card className="border border-border/40 shadow-sm">
           <CardHeader className="flex flex-row items-center justify-between pb-2">
             <CardTitle className="text-xs font-semibold uppercase text-muted-foreground">Total Tasks</CardTitle>
@@ -519,6 +521,17 @@ export default function TaskManagement() {
           <CardContent>
             <div className="text-2xl font-bold text-blue-600 dark:text-blue-400">{inProgressCount}</div>
             <p className="text-xs text-muted-foreground mt-1">Active / Pending tasks</p>
+          </CardContent>
+        </Card>
+
+        <Card className="border border-orange-500/30 bg-orange-500/5 dark:bg-orange-950/10 shadow-sm">
+          <CardHeader className="flex flex-row items-center justify-between pb-2">
+            <CardTitle className="text-xs font-semibold uppercase text-orange-600 dark:text-orange-400">Delayed / Incomplete</CardTitle>
+            <AlertCircle className="h-4 w-4 text-orange-500" />
+          </CardHeader>
+          <CardContent>
+            <div className="text-2xl font-bold text-orange-600 dark:text-orange-400">{delayedCount}</div>
+            <p className="text-xs text-muted-foreground mt-1">Timeline extended reasons</p>
           </CardContent>
         </Card>
 
@@ -550,9 +563,13 @@ export default function TaskManagement() {
         <CardHeader className="pb-4 border-b border-border/40">
           <div className="flex flex-col md:flex-row justify-between items-start md:items-center gap-4">
             <Tabs value={activeTab} onValueChange={setActiveTab} className="w-full md:w-auto">
-              <TabsList>
+              <TabsList className="flex flex-wrap h-auto p-1 gap-1">
                 <TabsTrigger value="all">All Tasks ({totalCount})</TabsTrigger>
                 <TabsTrigger value="pending">Active ({totalCount - completedCount})</TabsTrigger>
+                <TabsTrigger value="delayed" className="text-orange-600 data-[state=active]:text-orange-600 font-semibold gap-1.5">
+                  <AlertCircle className="h-3.5 w-3.5" />
+                  Delayed / Incomplete ({delayedCount})
+                </TabsTrigger>
                 <TabsTrigger value="overdue" className="text-red-500 data-[state=active]:text-red-600">
                   Overdue ({overdueCount})
                 </TabsTrigger>
@@ -603,6 +620,8 @@ export default function TaskManagement() {
               {filteredTasks.map((task) => {
                 const dueDate = new Date(task.due_datetime);
                 const isPastDue = isPast(dueDate) && task.status !== "completed" && task.status !== "reviewed";
+                const { intro, items } = parseChecklistAndNotes(task.description, task.checklist);
+                const pendingChecklistItems = items.filter((it) => !it.completed);
 
                 return (
                   <Card
@@ -610,6 +629,8 @@ export default function TaskManagement() {
                     className={`border transition-all hover:shadow-md overflow-hidden flex flex-col justify-between ${
                       task.is_overdue
                         ? "border-red-500/50 bg-red-500/5 dark:bg-red-950/10"
+                        : task.incomplete_reason && task.status !== "completed" && task.status !== "reviewed"
+                        ? "border-orange-500/50 bg-orange-500/[0.03] dark:bg-orange-950/10"
                         : task.status === "reviewed"
                         ? "border-purple-500/30 bg-purple-500/5"
                         : task.status === "completed"
@@ -622,6 +643,11 @@ export default function TaskManagement() {
                         <div className="flex items-center gap-2 flex-wrap">
                           {getPriorityBadge(task.priority)}
                           {getStatusBadge(task)}
+                          {task.incomplete_reason && task.status !== "completed" && task.status !== "reviewed" && (
+                            <Badge variant="outline" className="border-orange-500/50 text-orange-600 dark:text-orange-400 bg-orange-500/10 gap-1 text-[10px] font-semibold">
+                              <AlertCircle className="h-3 w-3" /> Incomplete / Extended
+                            </Badge>
+                          )}
                         </div>
                         <h3 className="font-semibold text-base text-foreground leading-tight mt-1">
                           {task.title}
@@ -702,10 +728,12 @@ export default function TaskManagement() {
                                         }
                                       }}
                                       className={cn(
-                                        "flex items-start gap-2.5 p-2 rounded-md transition-all text-xs border border-transparent",
+                                        "flex items-start gap-2.5 p-2 rounded-md transition-all text-xs border",
                                         item.completed
                                           ? "bg-emerald-500/5 border-emerald-500/15 text-muted-foreground"
-                                          : "bg-muted/20 hover:bg-muted/40 text-foreground",
+                                          : task.incomplete_reason
+                                          ? "bg-orange-500/10 border-orange-500/30 text-foreground"
+                                          : "bg-muted/20 hover:bg-muted/40 border-transparent text-foreground",
                                         canToggleChecklist ? "cursor-pointer" : "cursor-default"
                                       )}
                                     >
@@ -723,21 +751,32 @@ export default function TaskManagement() {
                                         )}
                                       />
                                       <div className="flex-1 select-none leading-snug">
-                                        {item.prefix && (
-                                          <span className="font-semibold text-muted-foreground mr-1.5">
-                                            {item.prefix}
-                                          </span>
-                                        )}
-                                        <span
-                                          className={cn(
-                                            "transition-all",
-                                            item.completed
-                                              ? "line-through text-muted-foreground/75"
-                                              : "text-foreground font-medium"
+                                        <div className="flex items-center justify-between gap-1">
+                                          <div>
+                                            {item.prefix && (
+                                              <span className="font-semibold text-muted-foreground mr-1.5">
+                                                {item.prefix}
+                                              </span>
+                                            )}
+                                            <span
+                                              className={cn(
+                                                "transition-all",
+                                                item.completed
+                                                  ? "line-through text-muted-foreground/75"
+                                                  : task.incomplete_reason
+                                                  ? "text-orange-950 dark:text-orange-200 font-semibold"
+                                                  : "text-foreground font-medium"
+                                              )}
+                                            >
+                                              {item.text}
+                                            </span>
+                                          </div>
+                                          {!item.completed && task.incomplete_reason && (
+                                            <Badge variant="outline" className="text-[9px] border-orange-500/40 text-orange-600 bg-orange-500/15 shrink-0 px-1 py-0 font-medium">
+                                              Incomplete
+                                            </Badge>
                                           )}
-                                        >
-                                          {item.text}
-                                        </span>
+                                        </div>
                                       </div>
                                     </div>
                                   ))}
@@ -796,11 +835,60 @@ export default function TaskManagement() {
                         </div>
                       )}
 
-                      {/* Show incomplete reason if present */}
+                      {/* Show incomplete reason with full rich details */}
                       {task.incomplete_reason && (
-                        <div className="p-2.5 bg-orange-500/10 rounded-lg border border-orange-500/20 text-xs text-foreground space-y-1">
-                          <span className="font-semibold text-orange-600 block">Delay / Incomplete Reason:</span>
-                          <p className="whitespace-pre-line text-muted-foreground leading-relaxed">{task.incomplete_reason}</p>
+                        <div className="p-3.5 bg-orange-500/10 dark:bg-orange-950/20 rounded-xl border border-orange-500/30 text-xs space-y-2.5">
+                          <div className="flex items-center justify-between gap-2 border-b border-orange-500/20 pb-2">
+                            <span className="font-bold text-orange-600 dark:text-orange-400 flex items-center gap-1.5 text-xs">
+                              <AlertCircle className="h-4 w-4 shrink-0" />
+                              Delayed / Incomplete Task Details
+                            </span>
+                            <Badge variant="outline" className="text-[10px] border-orange-500/40 text-orange-600 bg-orange-500/15 font-semibold px-2">
+                              {pendingChecklistItems.length > 0 ? `${pendingChecklistItems.length} Pending Item${pendingChecklistItems.length > 1 ? "s" : ""}` : "Deadline Extended"}
+                            </Badge>
+                          </div>
+
+                          {/* 1. Which task / checklist items are incomplete */}
+                          <div className="rounded-lg bg-background/80 dark:bg-background/50 border border-orange-500/20 p-2.5 space-y-1">
+                            <span className="text-[10px] font-bold text-orange-700 dark:text-orange-400 uppercase tracking-wider block">
+                              Incomplete / Unfinished Work:
+                            </span>
+                            {pendingChecklistItems.length > 0 ? (
+                              <div className="space-y-1 pt-0.5">
+                                {pendingChecklistItems.map((pi) => (
+                                  <div key={pi.id} className="flex items-start gap-1.5 text-foreground font-medium text-xs">
+                                    <span className="text-orange-500 font-bold">•</span>
+                                    <span>
+                                      {pi.prefix ? <span className="font-semibold text-muted-foreground mr-1">{pi.prefix}</span> : null}
+                                      {pi.text}
+                                    </span>
+                                  </div>
+                                ))}
+                              </div>
+                            ) : (
+                              <p className="text-foreground font-medium text-xs">
+                                Task: {task.title} (Incomplete)
+                              </p>
+                            )}
+                          </div>
+
+                          {/* 2. Reason why it did not finish */}
+                          <div className="space-y-1">
+                            <span className="text-[10px] font-bold text-muted-foreground uppercase tracking-wider block">
+                              Reason Why Incomplete / Delayed:
+                            </span>
+                            <p className="whitespace-pre-line text-foreground font-medium bg-background/60 p-2.5 rounded-lg border border-border/40 leading-relaxed text-xs">
+                              {task.incomplete_reason}
+                            </p>
+                          </div>
+
+                          {/* 3. New Due Date & Timeline */}
+                          <div className="flex items-center justify-between pt-1 border-t border-orange-500/20 text-xs">
+                            <span className="text-muted-foreground">New Target Due Date:</span>
+                            <span className="font-bold text-orange-600 dark:text-orange-400">
+                              {task.due_datetime ? format(new Date(task.due_datetime), "PPP 'at' p") : "Not set"}
+                            </span>
+                          </div>
                         </div>
                       )}
 
@@ -1225,6 +1313,33 @@ export default function TaskManagement() {
                     </span>
                   </div>
                 </div>
+
+                {/* Incomplete checklist items preview inside extend modal */}
+                {(() => {
+                  const { items: modalItems } = parseChecklistAndNotes(delayTask.description, delayTask.checklist);
+                  const pending = modalItems.filter((it) => !it.completed);
+                  if (pending.length > 0) {
+                    return (
+                      <div className="pt-2 border-t border-orange-500/20 text-xs">
+                        <span className="text-[10px] font-bold text-orange-700 dark:text-orange-400 uppercase tracking-wider block mb-1">
+                          Incomplete Checklist Items ({pending.length} pending):
+                        </span>
+                        <div className="space-y-1 max-h-32 overflow-y-auto pr-1">
+                          {pending.map((p) => (
+                            <div key={p.id} className="text-foreground text-[11px] flex items-start gap-1.5 font-medium">
+                              <span className="text-orange-500 font-bold">•</span>
+                              <span>
+                                {p.prefix ? <span className="font-semibold text-muted-foreground mr-1">{p.prefix}</span> : null}
+                                {p.text}
+                              </span>
+                            </div>
+                          ))}
+                        </div>
+                      </div>
+                    );
+                  }
+                  return null;
+                })()}
               </div>
             )}
 
