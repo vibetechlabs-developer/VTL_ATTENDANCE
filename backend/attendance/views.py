@@ -6,6 +6,7 @@ from rest_framework.response import Response
 from rest_framework.permissions import IsAuthenticated
 
 logger = logging.getLogger(__name__)
+from django.db.models import Q
 from django.utils import timezone
 from django.core.files.base import ContentFile
 from django.conf import settings
@@ -353,12 +354,8 @@ class CheckOutView(APIView):
     permission_classes = [IsAuthenticated]
 
     def post(self, request):
-        # 1️⃣ Enforce open‑task reason if needed
         open_tasks = get_open_tasks(request.user.employee)
-        if open_tasks.exists():
-            reason = request.data.get('reason')
-            if not reason:
-                return Response({'error': 'Reason required due to open task(s).', 'open_tasks': [t.title for t in open_tasks]}, status=400)
+        reason = request.data.get('reason') or request.data.get('outside_note') or 'Check out'
 
         serializer = CheckOutSerializer(data=request.data)
         if not serializer.is_valid():
@@ -565,7 +562,12 @@ class AdminAttendanceView(APIView):
     permission_classes = [IsAuthenticated]
 
     def get(self, request):
-        if request.user.role not in ['admin', 'manager', 'hr']:
+        managed_emps = Employee.objects.filter(Q(manager=request.user) | Q(managers=request.user))
+        is_admin = request.user.role == 'admin' or request.user.is_superuser
+        is_hr = request.user.role == 'hr'
+        is_mgr = request.user.role == 'manager' or managed_emps.exists()
+
+        if not (is_admin or is_hr or is_mgr):
             return Response({'error': 'Permission denied.'}, status=403)
 
         query_date = request.query_params.get('date')
@@ -586,9 +588,11 @@ class AdminAttendanceView(APIView):
         log_map = {l.employee_id: l for l in logs}
         leave_emp_ids = {l.employee_id for l in leaves_today}
         employees = Employee.objects.select_related('user').all()
-        if request.user.role == 'manager':
-            # Manager can only see employees who report to them
-            employees = employees.filter(managers=request.user).distinct()
+        if not is_admin:
+            if managed_emps.exists():
+                employees = managed_emps.distinct()
+            elif is_mgr and getattr(request.user, 'employee', None) and request.user.employee.department:
+                employees = employees.filter(department=request.user.employee.department).distinct()
 
         rows = []
         late_cutoff = timezone.datetime.combine(
@@ -756,7 +760,12 @@ class AdminEmployeeAttendanceHistoryView(APIView):
     permission_classes = [IsAuthenticated]
 
     def get(self, request):
-        if request.user.role not in ['admin', 'hr', 'manager']:
+        managed_emps = Employee.objects.filter(Q(manager=request.user) | Q(managers=request.user))
+        is_admin = request.user.role == 'admin' or request.user.is_superuser
+        is_hr = request.user.role == 'hr'
+        is_mgr = request.user.role == 'manager' or managed_emps.exists()
+
+        if not (is_admin or is_hr or is_mgr):
             return Response({'error': 'Permission denied.'}, status=403)
 
         employee_id = request.query_params.get('employee_id')
@@ -774,10 +783,10 @@ class AdminEmployeeAttendanceHistoryView(APIView):
         if start_date > end_date:
             start_date, end_date = end_date, start_date
 
-        if request.user.role == 'manager':
+        if not is_admin and not is_hr:
             # Manager can only query history of employees assigned to them.
             emp_obj = Employee.objects.filter(id=employee_id).prefetch_related('managers').first()
-            if not emp_obj or not emp_obj.managers.filter(id=request.user.id).exists():
+            if not emp_obj or not (emp_obj.manager == request.user or emp_obj.managers.filter(id=request.user.id).exists() or emp_obj in managed_emps):
                 return Response({'error': 'Permission denied.'}, status=403)
 
         logs = (
@@ -834,12 +843,8 @@ class BreakStartView(APIView):
     permission_classes = [IsAuthenticated]
 
     def post(self, request):
-        # 1️⃣ Check for open tasks
         open_tasks = get_open_tasks(request.user.employee)
-        if open_tasks.exists():
-            reason = request.data.get('reason')
-            if not reason:
-                return Response({'error': 'Reason required due to open task(s).', 'open_tasks': [t.title for t in open_tasks]}, status=400)
+        reason = request.data.get('reason') or 'Break'
         
         today = timezone.now().date()
         log = (
@@ -895,12 +900,8 @@ class BreakEndView(APIView):
     permission_classes = [IsAuthenticated]
 
     def post(self, request):
-        # 1️⃣ Check for open tasks
         open_tasks = get_open_tasks(request.user.employee)
-        if open_tasks.exists():
-            reason = request.data.get('reason')
-            if not reason:
-                return Response({'error': 'Reason required due to open task(s).', 'open_tasks': [t.title for t in open_tasks]}, status=400)
+        reason = request.data.get('reason') or 'Break ended'
 
         today = timezone.now().date()
         log = (

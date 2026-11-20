@@ -160,6 +160,10 @@ export async function usersFaceDataRequest(accessToken: string, employeeId: stri
   return fetchWithAutoRefresh(accessToken, `/api/users/employees/${employeeId}/face-data/`);
 }
 
+export async function employeeOverviewRequest(accessToken: string, employeeId: string | number): Promise<Response> {
+  return fetchWithAutoRefresh(accessToken, `/api/users/employees/${employeeId}/overview/`);
+}
+
 export async function registerFaceRequest(accessToken: string, imageBase64: string): Promise<Response> {
   return fetchWithAutoRefresh(accessToken, "/api/attendance/register-face/", {
     method: "POST",

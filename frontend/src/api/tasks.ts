@@ -27,6 +27,7 @@ export interface TaskItem {
   priority: TaskPriority;
   status: TaskStatus;
   due_datetime: string;
+  incomplete_reason?: string;
   completion_notes?: string;
   completed_at?: string;
   is_overdue: boolean;
@@ -46,6 +47,7 @@ export interface CreateTaskPayload {
 export interface UpdateTaskPayload {
   status?: TaskStatus;
   completion_notes?: string;
+  incomplete_reason?: string;
   due_datetime?: string;
   priority?: TaskPriority;
   title?: string;

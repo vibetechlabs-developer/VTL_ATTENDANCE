@@ -38,6 +38,7 @@ class TaskSerializer(serializers.ModelSerializer):
             'priority',
             'status',
             'due_datetime',
+            'incomplete_reason',
             'completion_notes',
             'completed_at',
             'is_overdue',

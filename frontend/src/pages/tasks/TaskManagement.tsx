@@ -159,7 +159,6 @@ export default function TaskManagement() {
   const { user } = useAuthStore();
   const isSuperAdmin = userHasRole(user, "admin");
   const isManager = userHasRole(user, "manager", "hr");
-  const isManagerOrAdmin = isSuperAdmin || isManager;
 
   const [activeTab, setActiveTab] = useState<string>("all");
   const [searchQuery, setSearchQuery] = useState("");
@@ -179,19 +178,27 @@ export default function TaskManagement() {
   // Complete Task Modal State
   const [completeTaskId, setCompleteTaskId] = useState<number | null>(null);
   const [completionNotes, setCompletionNotes] = useState("");
+  const [incompleteReason, setIncompleteReason] = useState("");
 
   // Review / Revision Modal State
   const [reviewTaskId, setReviewTaskId] = useState<number | null>(null);
   const [revisionNotes, setRevisionNotes] = useState("");
 
+  // Extend Due Date / Delay Reason Modal State
+  const [delayTask, setDelayTask] = useState<TaskItem | null>(null);
+  const [delayReason, setDelayReason] = useState("");
+  const [newDueDate, setNewDueDate] = useState("");
+  const [newDueTime, setNewDueTime] = useState("18:00");
+
   // Fetch employees list for task assignment dropdown
   const { data: employeesData, isLoading: isLoadingEmployees } = useQuery({
     queryKey: ["assignable-employees"],
     queryFn: () => fetchAssignableEmployees().then((res) => res.data),
-    enabled: isManagerOrAdmin,
   });
 
   const employees = Array.isArray(employeesData) ? employeesData : [];
+  const hasSubordinates = employees.length > 0;
+  const isManagerOrAdmin = isSuperAdmin || isManager || hasSubordinates;
 
   // Fetch tasks
   const { data: tasksData, isLoading, error } = useQuery({
@@ -200,6 +207,12 @@ export default function TaskManagement() {
   });
 
   const tasks: TaskItem[] = Array.isArray(tasksData) ? tasksData : [];
+
+  const eligibleExtendTasks = tasks.filter((t) => {
+    if (t.status === "completed" || t.status === "reviewed" || t.status === "cancelled") return false;
+    if (isManagerOrAdmin) return true;
+    return user?.email && t.assigned_to_email ? user.email.toLowerCase() === t.assigned_to_email.toLowerCase() : false;
+  });
 
   // Mutations
   const createMutation = useMutation({
@@ -229,8 +242,10 @@ export default function TaskManagement() {
       toast.success("Task status updated!");
       setCompleteTaskId(null);
       setCompletionNotes("");
+      setIncompleteReason("");
       setReviewTaskId(null);
       setRevisionNotes("");
+      setDelayTask(null);
     },
     onError: (err: any) => {
       toast.error(err.response?.data?.detail || "Failed to update task.");
@@ -333,8 +348,24 @@ export default function TaskManagement() {
       payload: {
         status: "completed",
         completion_notes: completionNotes,
+        incomplete_reason: incompleteReason,
       },
     });
+  };
+
+  const handleExtendDueDate = () => {
+    if (!delayTask || !newDueDate) return;
+    updateMutation.mutate({
+      id: delayTask.id,
+      payload: {
+        due_datetime: new Date(`${newDueDate}T${newDueTime}:00`).toISOString(),
+        incomplete_reason: delayReason,
+      },
+    });
+    setDelayTask(null);
+    setDelayReason("");
+    setNewDueDate("");
+    setNewDueTime("18:00");
   };
 
   const handleApproveReview = (taskId: number) => {
@@ -434,11 +465,37 @@ export default function TaskManagement() {
               : "View tasks assigned to you, update timeline progress, and submit completion reports."}
           </p>
         </div>
-        {isManagerOrAdmin && (
-          <Button onClick={() => setIsCreateOpen(true)} className="gap-2 shadow">
-            <Plus className="h-4 w-4" /> Assign New Task
+        <div className="flex items-center gap-2 flex-wrap">
+          <Button
+            variant="outline"
+            className="gap-2 border-orange-500/40 text-orange-600 hover:bg-orange-50 dark:hover:bg-orange-950/20 shadow-sm"
+            onClick={() => {
+              if (eligibleExtendTasks.length > 0) {
+                const first = eligibleExtendTasks[0];
+                setDelayTask(first);
+                setDelayReason(first.incomplete_reason || "");
+                if (first.due_datetime) {
+                  const d = new Date(first.due_datetime);
+                  setNewDueDate(format(d, "yyyy-MM-dd"));
+                  setNewDueTime(format(d, "HH:mm"));
+                } else {
+                  setNewDueDate("");
+                  setNewDueTime("18:00");
+                }
+              } else {
+                toast.info("No active tasks available to extend.");
+              }
+            }}
+          >
+            <Clock className="h-4 w-4 text-orange-500" /> Extend Due Date
           </Button>
-        )}
+
+          {isManagerOrAdmin && (
+            <Button onClick={() => setIsCreateOpen(true)} className="gap-2 shadow">
+              <Plus className="h-4 w-4" /> Assign New Task
+            </Button>
+          )}
+        </div>
       </div>
 
       {/* Overview Metric Stats */}
@@ -550,7 +607,7 @@ export default function TaskManagement() {
                 return (
                   <Card
                     key={task.id}
-                    className={`border transition-all hover:shadow-md ${
+                    className={`border transition-all hover:shadow-md overflow-hidden flex flex-col justify-between ${
                       task.is_overdue
                         ? "border-red-500/50 bg-red-500/5 dark:bg-red-950/10"
                         : task.status === "reviewed"
@@ -731,30 +788,49 @@ export default function TaskManagement() {
                         </div>
                       </div>
 
-                      {/* Employee Details & Action Buttons */}
-                      <div className="flex flex-col sm:flex-row justify-between items-start sm:items-center gap-2 pt-2 border-t border-border/30 text-xs">
-                        <div>
-                          <span className="text-muted-foreground">Assigned to: </span>
-                          <span className="font-semibold text-foreground">{task.assigned_to_name}</span>
-                          <span className="text-muted-foreground"> ({task.assigned_to_department})</span>
+                      {/* Show completion notes if submitted */}
+                      {task.completion_notes && (
+                        <div className="p-2.5 bg-emerald-500/10 rounded-lg border border-emerald-500/20 text-xs text-foreground space-y-1">
+                          <span className="font-semibold text-emerald-600 block">Completion Report / Deliverables:</span>
+                          <p className="whitespace-pre-line text-muted-foreground leading-relaxed">{task.completion_notes}</p>
+                        </div>
+                      )}
+
+                      {/* Show incomplete reason if present */}
+                      {task.incomplete_reason && (
+                        <div className="p-2.5 bg-orange-500/10 rounded-lg border border-orange-500/20 text-xs text-foreground space-y-1">
+                          <span className="font-semibold text-orange-600 block">Delay / Incomplete Reason:</span>
+                          <p className="whitespace-pre-line text-muted-foreground leading-relaxed">{task.incomplete_reason}</p>
+                        </div>
+                      )}
+
+                      {/* Card Footer: Assignee & Action Buttons */}
+                      <div className="pt-3 border-t border-border/40 space-y-2 mt-auto">
+                        <div className="flex items-center justify-between text-xs">
+                          <div className="flex items-center gap-1.5 min-w-0">
+                            <span className="text-muted-foreground shrink-0">Assigned to:</span>
+                            <span className="font-semibold text-foreground truncate">{task.assigned_to_name}</span>
+                            <span className="text-muted-foreground/75 text-[11px] shrink-0">({task.assigned_to_department})</span>
+                          </div>
                         </div>
 
-                        {/* Employee Interactive Buttons */}
+                        {/* Employee / Manager Interactive Buttons */}
                         {task.status !== "completed" && task.status !== "reviewed" && task.status !== "cancelled" && (
                           (() => {
                             const isAssignedToMe = user?.email && task.assigned_to_email
                               ? user.email.toLowerCase() === task.assigned_to_email.toLowerCase()
                               : false;
 
-                            if (!isAssignedToMe) return null;
+                            const canManage = isAssignedToMe || isManagerOrAdmin;
+                            if (!canManage) return null;
 
                             return (
-                              <div className="flex gap-2 w-full sm:w-auto">
-                                {(task.status === "pending" || task.status === "reopened") && (
+                              <div className="flex flex-wrap items-center gap-2 pt-0.5">
+                                {isAssignedToMe && (task.status === "pending" || task.status === "reopened") && (
                                   <Button
                                     size="sm"
                                     variant="outline"
-                                    className="h-7 text-xs w-full sm:w-auto"
+                                    className="h-8 text-xs flex-1 min-w-[85px] font-medium"
                                     onClick={() =>
                                       updateMutation.mutate({
                                         id: task.id,
@@ -768,14 +844,37 @@ export default function TaskManagement() {
 
                                 <Button
                                   size="sm"
-                                  className="h-7 text-xs bg-emerald-600 hover:bg-emerald-700 text-white w-full sm:w-auto gap-1"
+                                  variant="outline"
+                                  className="h-8 text-xs border-orange-500/60 text-orange-600 hover:bg-orange-50 dark:hover:bg-orange-950/25 flex-1 min-w-[125px] font-medium gap-1.5"
                                   onClick={() => {
-                                    setCompleteTaskId(task.id);
-                                    setCompletionNotes("");
+                                    setDelayTask(task);
+                                    setDelayReason(task.incomplete_reason || "");
+                                    if (task.due_datetime) {
+                                      const d = new Date(task.due_datetime);
+                                      setNewDueDate(format(d, "yyyy-MM-dd"));
+                                      setNewDueTime(format(d, "HH:mm"));
+                                    } else {
+                                      setNewDueDate("");
+                                      setNewDueTime("18:00");
+                                    }
                                   }}
                                 >
-                                  <CheckCircle2 className="h-3 w-3" /> Mark Completed
+                                  <Clock className="h-3.5 w-3.5 shrink-0" /> Extend Due Date
                                 </Button>
+
+                                {isAssignedToMe && (
+                                  <Button
+                                    size="sm"
+                                    className="h-8 text-xs bg-emerald-600 hover:bg-emerald-700 text-white flex-1 min-w-[125px] font-medium gap-1.5 shadow-sm"
+                                    onClick={() => {
+                                      setCompleteTaskId(task.id);
+                                      setCompletionNotes("");
+                                      setIncompleteReason("");
+                                    }}
+                                  >
+                                    <CheckCircle2 className="h-3.5 w-3.5 shrink-0" /> Mark Completed
+                                  </Button>
+                                )}
                               </div>
                             );
                           })()
@@ -783,11 +882,11 @@ export default function TaskManagement() {
 
                         {/* Manager Review Action Buttons */}
                         {isManagerOrAdmin && task.status === "completed" && (
-                          <div className="flex gap-2 w-full sm:w-auto">
+                          <div className="flex flex-wrap items-center gap-2 pt-0.5">
                             <Button
                               size="sm"
                               variant="outline"
-                              className="h-7 text-xs border-amber-500 text-amber-600 hover:bg-amber-50"
+                              className="h-8 text-xs border-amber-500/60 text-amber-600 hover:bg-amber-50 dark:hover:bg-amber-950/25 flex-1 min-w-[110px] font-medium"
                               onClick={() => {
                                 setReviewTaskId(task.id);
                                 setRevisionNotes("");
@@ -798,22 +897,14 @@ export default function TaskManagement() {
 
                             <Button
                               size="sm"
-                              className="h-7 text-xs bg-purple-600 hover:bg-purple-700 text-white gap-1"
+                              className="h-8 text-xs bg-purple-600 hover:bg-purple-700 text-white flex-1 min-w-[125px] font-medium gap-1.5 shadow-sm"
                               onClick={() => handleApproveReview(task.id)}
                             >
-                              <CheckCircle2 className="h-3 w-3" /> Approve & Review
+                              <CheckCircle2 className="h-3.5 w-3.5 shrink-0" /> Approve & Review
                             </Button>
                           </div>
                         )}
                       </div>
-
-                      {/* Show completion notes if submitted */}
-                      {task.completion_notes && (
-                        <div className="p-2 bg-emerald-500/10 rounded border border-emerald-500/20 text-xs text-foreground mt-2">
-                          <span className="font-semibold text-emerald-600 block">Completion Report / Deliverables:</span>
-                          <span className="whitespace-pre-line">{task.completion_notes}</span>
-                        </div>
-                      )}
                     </CardContent>
                   </Card>
                 );
@@ -842,7 +933,7 @@ export default function TaskManagement() {
               <div className="space-y-1.5">
                 <label className="text-xs font-semibold text-foreground">Task Title *</label>
                 <Input
-                  placeholder="e.g. Prepare Monthly Sales Performance Report"
+                  placeholder="e.g. Daily Outreach & Project Deliverables"
                   value={createForm.title}
                   onChange={(e) => setCreateForm({ ...createForm, title: e.target.value })}
                   required
@@ -924,7 +1015,7 @@ export default function TaskManagement() {
                   </span>
                 </div>
                 <Textarea
-                  placeholder="Enter instructions or numbered items:&#10;1. Finish CMHP&#10;2. Connect Feril's WhatsApp&#10;3. Interior SAAS testing"
+                  placeholder={"Enter task description or numbered checklist items:\n1. First task or milestone\n2. Second task or milestone\n3. Review and final submission"}
                   value={createForm.description}
                   onChange={(e) => setCreateForm({ ...createForm, description: e.target.value })}
                   rows={4}
@@ -985,6 +1076,17 @@ export default function TaskManagement() {
               onChange={(e) => setCompletionNotes(e.target.value)}
               rows={4}
             />
+            <div className="space-y-1.5 mt-3">
+              <label className="text-xs font-semibold text-foreground">
+                If task could not be fully completed — Reason <span className="text-muted-foreground">(optional)</span>
+              </label>
+              <Textarea
+                placeholder="Explain what was incomplete and why..."
+                value={incompleteReason}
+                onChange={(e) => setIncompleteReason(e.target.value)}
+                rows={3}
+              />
+            </div>
           </div>
 
           <DialogFooter>
@@ -1034,6 +1136,143 @@ export default function TaskManagement() {
               disabled={updateMutation.isPending || !revisionNotes.trim()}
             >
               {updateMutation.isPending ? "Submitting..." : "Send Revision Request"}
+            </Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
+      {/* Extend Due Date Modal */}
+      <Dialog open={delayTask !== null} onOpenChange={() => setDelayTask(null)}>
+        <DialogContent className="sm:max-w-lg">
+          <DialogHeader>
+            <DialogTitle className="flex items-center gap-2 text-orange-600">
+              <Clock className="h-5 w-5" /> Extend Task Due Date
+            </DialogTitle>
+            <DialogDescription>
+              Select a task, set a new timeline deadline, and provide an extension reason.
+            </DialogDescription>
+          </DialogHeader>
+
+          <div className="space-y-4 py-2">
+            {/* 1. Task Selection / Dropdown */}
+            <div className="space-y-1.5">
+              <div className="flex items-center justify-between">
+                <label className="text-xs font-semibold text-foreground">Select Task to Extend *</label>
+                <span className="text-[11px] text-muted-foreground">
+                  {eligibleExtendTasks.length} eligible task{eligibleExtendTasks.length !== 1 ? "s" : ""}
+                </span>
+              </div>
+              <Select
+                value={delayTask ? String(delayTask.id) : ""}
+                onValueChange={(taskIdStr) => {
+                  const found = tasks.find((t) => String(t.id) === taskIdStr);
+                  if (found) {
+                    setDelayTask(found);
+                    setDelayReason(found.incomplete_reason || "");
+                    if (found.due_datetime) {
+                      const d = new Date(found.due_datetime);
+                      setNewDueDate(format(d, "yyyy-MM-dd"));
+                      setNewDueTime(format(d, "HH:mm"));
+                    }
+                  }
+                }}
+              >
+                <SelectTrigger className="text-xs font-medium">
+                  <SelectValue placeholder="Choose a task to extend..." />
+                </SelectTrigger>
+                <SelectContent className="max-h-56">
+                  {eligibleExtendTasks.map((t) => (
+                    <SelectItem key={t.id} value={String(t.id)} className="text-xs">
+                      <span className="font-semibold text-foreground">{t.title}</span>
+                      {t.is_overdue && <span className="text-red-500 font-bold ml-1.5">(Overdue)</span>}
+                      <span className="text-muted-foreground ml-1.5">· {t.assigned_to_name}</span>
+                    </SelectItem>
+                  ))}
+                </SelectContent>
+              </Select>
+            </div>
+
+            {/* 2. Highlighted Selected Task Information Card */}
+            {delayTask && (
+              <div className="rounded-xl border border-orange-500/30 bg-orange-500/10 dark:bg-orange-950/25 p-3.5 space-y-2.5 text-xs">
+                <div className="flex items-start justify-between gap-2">
+                  <div className="space-y-0.5">
+                    <span className="text-[10px] font-bold uppercase tracking-wider text-orange-600 dark:text-orange-400 block">
+                      Target Task Selected
+                    </span>
+                    <span className="font-bold text-foreground text-sm leading-snug block">
+                      {delayTask.title}
+                    </span>
+                  </div>
+                  <div className="flex gap-1 shrink-0 pt-0.5">
+                    {getPriorityBadge(delayTask.priority)}
+                    {getStatusBadge(delayTask)}
+                  </div>
+                </div>
+
+                <div className="grid grid-cols-1 sm:grid-cols-2 gap-2 text-xs pt-2 border-t border-orange-500/20">
+                  <div className="flex items-center gap-1.5">
+                    <Calendar className="h-3.5 w-3.5 text-orange-500 shrink-0" />
+                    <span className="text-muted-foreground">
+                      Current Due:{" "}
+                      <strong className={delayTask.is_overdue ? "text-red-600 dark:text-red-400 font-bold" : "text-foreground font-semibold"}>
+                        {delayTask.due_datetime ? format(new Date(delayTask.due_datetime), "PP 'at' p") : "Not set"}
+                      </strong>
+                    </span>
+                  </div>
+                  <div>
+                    <span className="text-muted-foreground">
+                      Assigned to: <strong className="text-foreground font-semibold">{delayTask.assigned_to_name}</strong>
+                    </span>
+                  </div>
+                </div>
+              </div>
+            )}
+
+            {/* 3. New Due Date & New Due Time */}
+            <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
+              <div className="space-y-1.5">
+                <label className="text-xs font-semibold text-foreground">New Due Date *</label>
+                <Input
+                  type="date"
+                  value={newDueDate}
+                  onChange={(e) => setNewDueDate(e.target.value)}
+                  min={new Date().toISOString().split("T")[0]}
+                />
+              </div>
+              <div className="space-y-1.5">
+                <label className="text-xs font-semibold text-foreground">New Due Time</label>
+                <Input
+                  type="time"
+                  value={newDueTime}
+                  onChange={(e) => setNewDueTime(e.target.value)}
+                />
+              </div>
+            </div>
+
+            {/* 4. Reason for Extension */}
+            <div className="space-y-1.5">
+              <label className="text-xs font-semibold text-foreground">
+                Reason for Extension <span className="text-muted-foreground">(optional)</span>
+              </label>
+              <Textarea
+                placeholder="Explain why the deadline needs to be extended..."
+                value={delayReason}
+                onChange={(e) => setDelayReason(e.target.value)}
+                rows={3}
+              />
+            </div>
+          </div>
+
+          <DialogFooter>
+            <Button variant="outline" onClick={() => setDelayTask(null)}>
+              Cancel
+            </Button>
+            <Button
+              className="bg-orange-600 hover:bg-orange-700 text-white"
+              onClick={handleExtendDueDate}
+              disabled={updateMutation.isPending || !delayTask || !newDueDate}
+            >
+              {updateMutation.isPending ? "Saving..." : "Extend Deadline"}
             </Button>
           </DialogFooter>
         </DialogContent>

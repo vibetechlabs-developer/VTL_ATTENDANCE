@@ -3,7 +3,7 @@ import { motion, AnimatePresence } from "framer-motion";
 import {
   Play, Square, Coffee, Clock, CalendarDays, MessageSquare, User,
   Pause, AlertTriangle, Sparkles, CheckCircle2, ScanFace, MapPin, ArrowLeft, Loader2, Phone,
-  CheckSquare, HelpCircle, UserCheck
+  CheckSquare, HelpCircle, UserCheck, Users, ChevronRight, Mail, Briefcase
 } from "lucide-react";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
@@ -43,10 +43,17 @@ import {
   attendanceHistoryRequest,
   attendanceOvertimeNotifyRequest,
   attendanceSessionRequest,
+  attendanceAdminRequest,
+  employeeOverviewRequest,
   leaveBalanceRequest,
   leaveHistoryRequest,
   updatesPostRequest,
 } from "@/lib/api";
+import { Badge } from "@/components/ui/badge";
+import {
+  Sheet, SheetContent, SheetHeader, SheetTitle,
+} from "@/components/ui/sheet";
+import { ScrollArea } from "@/components/ui/scroll-area";
 import { LeaveBalanceRings, type LeaveBalanceShape } from "@/components/LeaveBalanceRings";
 import { Skeleton } from "@/components/ui/skeleton";
 import { Flame } from "lucide-react";
@@ -74,101 +81,49 @@ const EARLY_REASON_CHIPS = [
 ];
 
 type SalesDailyReport = {
-  blogPosts: string;
-  pptPosts: string;
-  businessListings: string;
-  classifiedAds: string;
-  blogLinks: string;
-  pptLinks: string;
-  businessListingLinks: string[];
-  classifiedAdsLinks: string[];
   totalCalls: string;
-  callsReceived: string;
   meetings: string;
-  clientsDone: string;
-  dataExtractedIndia: string;
-  dataExtractedAbroad: string;
-  mailSentB2B: string;
-  mailSentGeneral: string;
-  linkedinPost: "yes" | "no" | "";
+  mailSent: string;
   linkedinConnections: string;
   linkedinMessages: string;
-  linkedinDataExtraction: string;
-  newspaperRead: "yes" | "no" | "";
-  newspaperImportantNews: string;
-  groupPhotosAdded: boolean;
+  todaySummary: string;
 };
 
 const EMPTY_SALES_REPORT: SalesDailyReport = {
-  blogPosts: "",
-  pptPosts: "",
-  businessListings: "",
-  classifiedAds: "",
-  blogLinks: "",
-  pptLinks: "",
-  businessListingLinks: ["", "", "", "", ""],
-  classifiedAdsLinks: ["", "", "", "", ""],
   totalCalls: "",
-  callsReceived: "",
   meetings: "",
-  clientsDone: "",
-  dataExtractedIndia: "",
-  dataExtractedAbroad: "",
-  mailSentB2B: "",
-  mailSentGeneral: "",
-  linkedinPost: "",
+  mailSent: "",
   linkedinConnections: "",
   linkedinMessages: "",
-  linkedinDataExtraction: "",
-  newspaperRead: "",
-  newspaperImportantNews: "",
-  groupPhotosAdded: false,
+  todaySummary: "",
 };
 
 const SALES_REPORT_FIELD_META: { key: keyof SalesDailyReport; label: string; placeholder: string; apiKey?: string }[] = [
-  { key: "blogPosts", label: "1) Blog posts (OR with PPT, total min 1)", placeholder: "Count e.g. 1", apiKey: "blog_posts" },
-  { key: "pptPosts", label: "2) PPT posts (OR with Blog, total min 1)", placeholder: "Count e.g. 0 or 1", apiKey: "ppt_posts" },
-  { key: "businessListings", label: "3) Business listings (OR with Classified, total min 5)", placeholder: "Count e.g. 5", apiKey: "business_listings" },
-  { key: "classifiedAds", label: "4) Classified ads (OR with Business, total min 5)", placeholder: "Count e.g. 0 or 5", apiKey: "classified_ads" },
-  { key: "blogLinks", label: "Blog post links (URLs)", placeholder: "Paste blog URLs, one per line", apiKey: "blog_links" },
-  { key: "pptLinks", label: "PPT links (URLs)", placeholder: "Paste PPT URLs, one per line", apiKey: "ppt_links" },
-  { key: "businessListingLinks", label: "Business listing links (5 URLs)", placeholder: "https://...", apiKey: "business_links" },
-  { key: "classifiedAdsLinks", label: "Classified ad links (5 URLs)", placeholder: "https://...", apiKey: "classified_links" },
-  { key: "totalCalls", label: "5) Total calls (min 100)", placeholder: "e.g. 110", apiKey: "total_calls" },
-  { key: "callsReceived", label: "5b) Calls received (min 80)", placeholder: "e.g. 85", apiKey: "calls_received" },
-  { key: "meetings", label: "6) Total meetings", placeholder: "e.g. 3", apiKey: "meetings" },
-  { key: "clientsDone", label: "7) Total clients done", placeholder: "e.g. 1", apiKey: "clients_done" },
-  { key: "dataExtractedIndia", label: "8) Data extracted India (500)", placeholder: "e.g. 500", apiKey: "data_extracted_india" },
-  { key: "dataExtractedAbroad", label: "8b) Data extracted Abroad (500)", placeholder: "e.g. 500", apiKey: "data_extracted_abroad" },
-  { key: "mailSentB2B", label: "9) Mail sent B2B collaborations (10)", placeholder: "e.g. 12", apiKey: "mail_sent_b2b" },
-  { key: "mailSentGeneral", label: "10) Mail sent general business (10)", placeholder: "e.g. 10", apiKey: "mail_sent_general" },
+  { key: "totalCalls", label: "1) Total calls", placeholder: "e.g. 100", apiKey: "total_calls" },
+  { key: "meetings", label: "2) Total meetings (min 1)", placeholder: "e.g. 1", apiKey: "meetings" },
+  { key: "mailSent", label: "3) Mails sent — total (min 20)", placeholder: "e.g. 20", apiKey: "mail_sent" },
+  { key: "linkedinConnections", label: "4) LinkedIn connections (min 20)", placeholder: "e.g. 20", apiKey: "linkedin_connections" },
+  { key: "linkedinMessages", label: "5) LinkedIn messages sent", placeholder: "e.g. 15", apiKey: "linkedin_messages" },
 ];
 
 const SALES_MINIMUMS: Partial<Record<keyof SalesDailyReport, number>> = {
-  businessListings: 5,
-  classifiedAds: 5,
-  totalCalls: 100,
-  callsReceived: 80,
-  dataExtractedIndia: 500,
-  dataExtractedAbroad: 500,
-  mailSentB2B: 10,
-  mailSentGeneral: 10,
-  linkedinMessages: 100,
-  linkedinDataExtraction: 25,
+  meetings: 1,
+  mailSent: 20,
+  linkedinConnections: 20,
 };
 
 const SALES_API_FIELD_LABELS: Record<string, string> = {
   ...Object.fromEntries(
     SALES_REPORT_FIELD_META.filter((field) => field.apiKey).map((field) => [field.apiKey!, field.label]),
   ),
-  group_photos_added: "Photos added in group",
+  today_summary: "Today's work summary",
 };
 
 const SALES_API_TO_FRONTEND: Record<string, keyof SalesDailyReport> = {
   ...Object.fromEntries(
     SALES_REPORT_FIELD_META.filter((field) => field.apiKey).map((field) => [field.apiKey!, field.key]),
   ),
-  group_photos_added: "groupPhotosAdded",
+  today_summary: "todaySummary",
 };
 
 type CheckoutFieldError = {
@@ -193,6 +148,8 @@ function collectCheckoutErrors(
   earlyReason: string,
   isSales: boolean,
   isEarly: boolean,
+  callsMinimum: number = 0,
+  hasCallsTarget: boolean = false,
 ): CheckoutFieldError[] {
   const errors: CheckoutFieldError[] = [];
 
@@ -201,197 +158,83 @@ function collectCheckoutErrors(
   }
 
   if (isSales) {
-    const blogRaw = String(salesReport.blogPosts ?? "").trim();
-    const pptRaw = String(salesReport.pptPosts ?? "").trim();
-    const businessRaw = String(salesReport.businessListings ?? "").trim();
-    const classifiedRaw = String(salesReport.classifiedAds ?? "").trim();
-    const blogLinksRaw = String(salesReport.blogLinks ?? "").trim();
-    const pptLinksRaw = String(salesReport.pptLinks ?? "").trim();
-    const businessLinks = Array.isArray(salesReport.businessListingLinks) ? salesReport.businessListingLinks : [];
-    const classifiedLinks = Array.isArray(salesReport.classifiedAdsLinks) ? salesReport.classifiedAdsLinks : [];
-    const linkedinPost = salesReport.linkedinPost;
-    const linkedinConnectionsRaw = String(salesReport.linkedinConnections ?? "").trim();
-    const linkedinMessagesRaw = String(salesReport.linkedinMessages ?? "").trim();
-    const linkedinDataExtractionRaw = String(salesReport.linkedinDataExtraction ?? "").trim();
-    const newspaperRead = salesReport.newspaperRead;
-    const newspaperImportantNewsRaw = String(salesReport.newspaperImportantNews ?? "").trim();
-
     const parseMaybeNumber = (raw: string): number | null => {
       if (!raw) return null;
       const n = Number(raw);
       return Number.isFinite(n) ? n : null;
     };
 
-    const blogNum = parseMaybeNumber(blogRaw);
-    const pptNum = parseMaybeNumber(pptRaw);
-    const businessNum = parseMaybeNumber(businessRaw);
-    const classifiedNum = parseMaybeNumber(classifiedRaw);
-
-    const allValidUrls = (urls: string[]): boolean => urls.every((p) => /^https?:\/\//i.test(p));
-
-    // Validate numeric typing (only if user has typed something).
-    if (blogRaw && blogNum === null) {
-      errors.push({ fieldId: "blogPosts", message: "Blog post should be a number" });
-    }
-    if (pptRaw && pptNum === null) {
-      errors.push({ fieldId: "pptPosts", message: "PPT post should be a number" });
-    }
-    if (businessRaw && businessNum === null) {
-      errors.push({ fieldId: "businessListings", message: "Business listing should be a number" });
-    }
-    if (classifiedRaw && classifiedNum === null) {
-      errors.push({ fieldId: "classifiedAds", message: "Classified ads should be a number" });
-    }
-
-    const blogOk = (blogNum ?? 0) >= 1;
-    const pptOk = (pptNum ?? 0) >= 1;
-    if (!blogOk && !pptOk) {
-      errors.push({
-        fieldId: "blogPosts",
-        message: "Add at least 1 Blog post OR 1 PPT post",
-      });
-      errors.push({
-        fieldId: "pptPosts",
-        message: "Add at least 1 Blog post OR 1 PPT post",
-      });
-    }
-
-    const businessOk = (businessNum ?? 0) >= 5;
-    const classifiedOk = (classifiedNum ?? 0) >= 5;
-    if (!businessOk && !classifiedOk) {
-      errors.push({
-        fieldId: "businessListings",
-        message: "Add at least 5 Business listings OR 5 Classified ads",
-      });
-      errors.push({
-        fieldId: "classifiedAds",
-        message: "Add at least 5 Business listings OR 5 Classified ads",
-      });
-    }
-
-    // Link requirements tied to counts.
-    if (blogOk) {
-      const urls = splitUrls(blogLinksRaw);
-      if (!blogLinksRaw) {
-        errors.push({
-          fieldId: "blogLinks",
-          message: "Paste at least 1 blog URL (for your blog posts)",
-        });
-      } else if (!allValidUrls(urls)) {
-        errors.push({
-          fieldId: "blogLinks",
-          message: "Blog URLs must start with http or https (one per line)",
-        });
-      } else if (urls.length < 1) {
-        errors.push({ fieldId: "blogLinks", message: "Paste at least 1 blog URL" });
+    // total calls — only compulsory if manager explicitly assigned a calls target in task
+    const totalCallsRaw = String(salesReport.totalCalls ?? "").trim();
+    if (hasCallsTarget && callsMinimum > 0) {
+      if (!totalCallsRaw) {
+        errors.push({ fieldId: "totalCalls", message: `Total calls is required (Target: min ${callsMinimum} from manager's task)` });
+      } else {
+        const totalCallsNum = parseMaybeNumber(totalCallsRaw);
+        if (totalCallsNum === null) {
+          errors.push({ fieldId: "totalCalls", message: "Total calls: enter a valid number" });
+        } else if (totalCallsNum < callsMinimum) {
+          errors.push({ fieldId: "totalCalls", message: `Total calls: minimum ${callsMinimum} required as assigned by manager (you entered ${totalCallsNum})` });
+        }
       }
-    }
-    if (pptOk) {
-      const urls = splitUrls(pptLinksRaw);
-      if (!pptLinksRaw) {
-        errors.push({
-          fieldId: "pptLinks",
-          message: "Paste at least 1 PPT URL (for your PPT posts)",
-        });
-      } else if (!allValidUrls(urls)) {
-        errors.push({
-          fieldId: "pptLinks",
-          message: "PPT URLs must start with http or https (one per line)",
-        });
-      } else if (urls.length < 1) {
-        errors.push({ fieldId: "pptLinks", message: "Paste at least 1 PPT URL" });
-      }
-    }
-    if (businessOk) {
-      const filled = businessLinks.map((l) => String(l || "").trim());
-      if (filled.some((l) => !l)) {
-        errors.push({ fieldId: "businessListingLinks", message: "Business listing links: add all 5 URLs" });
-      } else if (!allValidUrls(filled)) {
-        errors.push({ fieldId: "businessListingLinks", message: "Business listing links: URLs must start with http/https" });
-      }
-    }
-    if (classifiedOk) {
-      const filled = classifiedLinks.map((l) => String(l || "").trim());
-      if (filled.some((l) => !l)) {
-        errors.push({ fieldId: "classifiedAdsLinks", message: "Classified ad links: add all 5 URLs" });
-      } else if (!allValidUrls(filled)) {
-        errors.push({ fieldId: "classifiedAdsLinks", message: "Classified ad links: URLs must start with http/https" });
+    } else if (totalCallsRaw) {
+      const totalCallsNum = parseMaybeNumber(totalCallsRaw);
+      if (totalCallsNum === null || totalCallsNum < 0) {
+        errors.push({ fieldId: "totalCalls", message: "Total calls: enter a valid number" });
       }
     }
 
-    // LinkedIn: Post Yes/No, Messages >= 100, Data extraction >= 25
-    if (!linkedinPost) {
-      errors.push({ fieldId: "linkedinPost", message: "LinkedIn post: select Yes or No" });
+    // meetings — min 1
+    const meetingsRaw = String(salesReport.meetings ?? "").trim();
+    if (!meetingsRaw) {
+      errors.push({ fieldId: "meetings", message: "Total meetings is required (min 1)" });
+    } else {
+      const meetingsNum = parseMaybeNumber(meetingsRaw);
+      if (meetingsNum === null) {
+        errors.push({ fieldId: "meetings", message: "Total meetings: enter a valid number" });
+      } else if (meetingsNum < 1) {
+        errors.push({ fieldId: "meetings", message: `Total meetings: minimum 1 (you entered ${meetingsNum})` });
+      }
     }
-    const linkedinConnections = parseMaybeNumber(linkedinConnectionsRaw);
+
+    // mail sent — min 20 combined
+    const mailSentRaw = String(salesReport.mailSent ?? "").trim();
+    if (!mailSentRaw) {
+      errors.push({ fieldId: "mailSent", message: "Mails sent is required (min 20)" });
+    } else {
+      const mailSentNum = parseMaybeNumber(mailSentRaw);
+      if (mailSentNum === null) {
+        errors.push({ fieldId: "mailSent", message: "Mails sent: enter a valid number" });
+      } else if (mailSentNum < 20) {
+        errors.push({ fieldId: "mailSent", message: `Mails sent: minimum 20 (you entered ${mailSentNum})` });
+      }
+    }
+
+    // linkedin connections — min 20
+    const linkedinConnectionsRaw = String(salesReport.linkedinConnections ?? "").trim();
     if (!linkedinConnectionsRaw) {
-      errors.push({ fieldId: "linkedinConnections", message: "LinkedIn connections is required" });
-    } else if (linkedinConnections === null) {
-      errors.push({ fieldId: "linkedinConnections", message: "LinkedIn connections: enter a valid number" });
+      errors.push({ fieldId: "linkedinConnections", message: "LinkedIn connections is required (min 20)" });
+    } else {
+      const lc = parseMaybeNumber(linkedinConnectionsRaw);
+      if (lc === null) {
+        errors.push({ fieldId: "linkedinConnections", message: "LinkedIn connections: enter a valid number" });
+      } else if (lc < 20) {
+        errors.push({ fieldId: "linkedinConnections", message: `LinkedIn connections: minimum 20 (you entered ${lc})` });
+      }
     }
-    const linkedinMessages = parseMaybeNumber(linkedinMessagesRaw);
+
+    // linkedin messages — required, no minimum
+    const linkedinMessagesRaw = String(salesReport.linkedinMessages ?? "").trim();
     if (!linkedinMessagesRaw) {
-      errors.push({ fieldId: "linkedinMessages", message: "LinkedIn messages is required (min 100)" });
-    } else if (linkedinMessages === null) {
+      errors.push({ fieldId: "linkedinMessages", message: "LinkedIn messages sent is required" });
+    } else if (parseMaybeNumber(linkedinMessagesRaw) === null) {
       errors.push({ fieldId: "linkedinMessages", message: "LinkedIn messages: enter a valid number" });
-    } else if (linkedinMessages < 100) {
-      errors.push({ fieldId: "linkedinMessages", message: `LinkedIn messages: minimum 100 (you entered ${linkedinMessages})` });
-    }
-    const linkedinDataExtraction = parseMaybeNumber(linkedinDataExtractionRaw);
-    if (!linkedinDataExtractionRaw) {
-      errors.push({ fieldId: "linkedinDataExtraction", message: "LinkedIn data extraction is required (min 25)" });
-    } else if (linkedinDataExtraction === null) {
-      errors.push({ fieldId: "linkedinDataExtraction", message: "LinkedIn data extraction: enter a valid number" });
-    } else if (linkedinDataExtraction < 25) {
-      errors.push({ fieldId: "linkedinDataExtraction", message: `LinkedIn data extraction: minimum 25 (you entered ${linkedinDataExtraction})` });
     }
 
-    // Newspaper: Yes/No + important news text required if Yes
-    if (!newspaperRead) {
-      errors.push({ fieldId: "newspaperRead", message: "Newspaper reading: select Yes or No" });
-    }
-    if (newspaperRead === "yes" && !newspaperImportantNewsRaw) {
-      errors.push({ fieldId: "newspaperImportantNews", message: "Important news is required (after reading newspaper)" });
-    }
-
-    if (!salesReport.groupPhotosAdded) {
-      errors.push({ fieldId: "groupPhotosAdded", message: "Confirm photos added in group (checkbox required)" });
-    }
-
-    // Validate all other fields normally (required + minimum where applicable).
-    for (const field of SALES_REPORT_FIELD_META) {
-      if (
-        field.key === "blogPosts" ||
-        field.key === "pptPosts" ||
-        field.key === "businessListings" ||
-        field.key === "classifiedAds" ||
-        field.key === "blogLinks" ||
-        field.key === "pptLinks" ||
-        field.key === "businessListingLinks" ||
-        field.key === "classifiedAdsLinks"
-      ) {
-        continue;
-      }
-
-      const raw = String(salesReport[field.key] ?? "").trim();
-      const cleanLabel = cleanFieldLabel(field.label);
-      if (!raw) {
-        errors.push({ fieldId: field.key, message: `${cleanLabel} is required` });
-        continue;
-      }
-
-      const minimum = SALES_MINIMUMS[field.key];
-      if (minimum === undefined) continue;
-
-      const numericValue = Number(raw);
-      if (!Number.isFinite(numericValue)) {
-        errors.push({ fieldId: field.key, message: `${cleanLabel}: enter a valid number` });
-      } else if (numericValue < minimum) {
-        errors.push({
-          fieldId: field.key,
-          message: `${cleanLabel}: minimum ${minimum} (you entered ${numericValue})`,
-        });
-      }
+    // today summary — required English text
+    const todaySummaryRaw = String(salesReport.todaySummary ?? "").trim();
+    if (!todaySummaryRaw) {
+      errors.push({ fieldId: "todaySummary", message: "Today's work summary is required" });
     }
   }
 
@@ -412,82 +255,19 @@ function mapApiCheckoutErrors(body: {
   const missing = body.missing_fields ?? [];
   const invalid = body.invalid_fields ?? [];
 
-  const hasBothBlogPpt = missing.includes("blog_posts") && missing.includes("ppt_posts");
-  const hasBothBizClass = missing.includes("business_listings") && missing.includes("classified_ads");
-
   for (const apiField of missing) {
-    if ((apiField === "blog_posts" || apiField === "ppt_posts") && hasBothBlogPpt) continue;
-    if (
-      (apiField === "business_listings" || apiField === "classified_ads") &&
-      hasBothBizClass
-    ) {
-      continue;
-    }
-
     const fieldId = SALES_API_TO_FRONTEND[apiField] ?? apiField;
     const label = SALES_API_FIELD_LABELS[apiField] ?? apiField;
     errors.push({ fieldId, message: `${cleanFieldLabel(label)} is required` });
   }
 
-  if (hasBothBlogPpt) {
-    errors.push({ fieldId: "blogPosts", message: "Add at least 1 Blog post OR 1 PPT post" });
-    errors.push({ fieldId: "pptPosts", message: "Add at least 1 Blog post OR 1 PPT post" });
-  }
-  if (hasBothBizClass) {
-    errors.push({
-      fieldId: "businessListings",
-      message: "Add at least 5 Business listings OR 5 Classified ads",
-    });
-    errors.push({
-      fieldId: "classifiedAds",
-      message: "Add at least 5 Business listings OR 5 Classified ads",
-    });
-  }
-
-  const hasBothBlogPptInvalid =
-    invalid.some((x) => x.field === "blog_posts") && invalid.some((x) => x.field === "ppt_posts");
-  const hasBothBizClassInvalid =
-    invalid.some((x) => x.field === "business_listings") && invalid.some((x) => x.field === "classified_ads");
-
   for (const item of invalid) {
-    if ((item.field === "blog_posts" || item.field === "ppt_posts") && hasBothBlogPptInvalid) continue;
-    if (
-      (item.field === "business_listings" || item.field === "classified_ads") &&
-      hasBothBizClassInvalid
-    ) {
-      continue;
-    }
-
     const fieldId = SALES_API_TO_FRONTEND[item.field] ?? item.field;
     const label = SALES_API_FIELD_LABELS[item.field] ?? item.field;
     const actual = item.actual ?? "invalid";
     errors.push({
       fieldId,
       message: `${cleanFieldLabel(label)}: minimum ${item.minimum} (you entered ${actual})`,
-    });
-  }
-
-  for (const dup of body.duplicate_links ?? []) {
-    const fieldId = SALES_API_TO_FRONTEND[dup.field] ?? dup.field;
-    const label = SALES_API_FIELD_LABELS[dup.field] ?? dup.field;
-    errors.push({
-      fieldId,
-      message: `${cleanFieldLabel(label)}: already submitted link — ${dup.url}`,
-    });
-  }
-
-  if (hasBothBlogPptInvalid) {
-    errors.push({ fieldId: "blogPosts", message: "Add at least 1 Blog post OR 1 PPT post" });
-    errors.push({ fieldId: "pptPosts", message: "Add at least 1 Blog post OR 1 PPT post" });
-  }
-  if (hasBothBizClassInvalid) {
-    errors.push({
-      fieldId: "businessListings",
-      message: "Add at least 5 Business listings OR 5 Classified ads",
-    });
-    errors.push({
-      fieldId: "classifiedAds",
-      message: "Add at least 5 Business listings OR 5 Classified ads",
     });
   }
 
@@ -546,6 +326,8 @@ export default function EmployeeDashboard() {
   });
   const [salesReport, setSalesReport] = useState<SalesDailyReport>(EMPTY_SALES_REPORT);
   const [checkoutErrors, setCheckoutErrors] = useState<CheckoutFieldError[]>([]);
+  const [callsMinimum, setCallsMinimum] = useState(0);
+  const [hasCallsTarget, setHasCallsTarget] = useState(false);
 
   const [showVerifyModal, setShowVerifyModal] = useState(false);
   const [showCheckoutVerifyModal, setShowCheckoutVerifyModal] = useState(false);
@@ -560,6 +342,58 @@ export default function EmployeeDashboard() {
   const [quickNote, setQuickNote] = useState("");
   const [quickNoteSending, setQuickNoteSending] = useState(false);
   const [onCallMode, setOnCallMode] = useState(false);
+
+  // Managed team state (visible for managers / users with subordinates)
+  const [teamRows, setTeamRows] = useState<any[]>([]);
+  const [teamLoading, setTeamLoading] = useState(false);
+  const [selectedEmployeePk, setSelectedEmployeePk] = useState<string | number | null>(null);
+  const [empOverview, setEmpOverview] = useState<any>(null);
+  const [empOverviewLoading, setEmpOverviewLoading] = useState(false);
+
+  useEffect(() => {
+    if (!accessToken) return;
+    let cancelled = false;
+    const fetchTeam = async () => {
+      setTeamLoading(true);
+      try {
+        const todayStr = format(new Date(), "yyyy-MM-dd");
+        const res = await attendanceAdminRequest(accessToken, todayStr);
+        if (res.ok && !cancelled) {
+          const rows = await res.json().catch(() => []);
+          setTeamRows(Array.isArray(rows) ? rows : []);
+        }
+      } catch {
+        // Not a manager or no subordinates; silently ignore
+      } finally {
+        if (!cancelled) setTeamLoading(false);
+      }
+    };
+    void fetchTeam();
+    return () => {
+      cancelled = true;
+    };
+  }, [accessToken]);
+
+  const loadEmployeeOverview = async (empPk: string | number) => {
+    if (!accessToken) return;
+    setSelectedEmployeePk(empPk);
+    setEmpOverview(null);
+    setEmpOverviewLoading(true);
+    try {
+      const res = await employeeOverviewRequest(accessToken, empPk);
+      if (res.ok) {
+        const data = await res.json();
+        setEmpOverview(data);
+      } else {
+        const errData = await res.json().catch(() => ({}));
+        toast.error(errData.error || "Could not load employee details.");
+      }
+    } catch {
+      toast.error("Failed to load employee overview.");
+    } finally {
+      setEmpOverviewLoading(false);
+    }
+  };
 
   useEffect(() => {
     const t = setInterval(() => setNow(Date.now()), 1000);
@@ -818,11 +652,42 @@ export default function EmployeeDashboard() {
     toast.success(body.message || "On a call — auto-break paused while you are on the phone.");
   };
 
+  const fetchCallsTarget = useCallback(async () => {
+    if (!accessToken) return { target: 0, hasTarget: false };
+    try {
+      const res = await fetch("/api/updates/tasks/my_calls_target/", {
+        headers: { Authorization: `Bearer ${accessToken}` },
+      });
+      if (res.ok) {
+        const data = (await res.json().catch(() => ({}))) as { calls_target?: number; has_target?: boolean };
+        const hasTgt = Boolean(data.has_target && (data.calls_target ?? 0) > 0);
+        const tgt = hasTgt ? Number(data.calls_target) : 0;
+        setCallsMinimum(tgt);
+        setHasCallsTarget(hasTgt);
+        return { target: tgt, hasTarget: hasTgt };
+      }
+    } catch {
+      // fallback
+    }
+    setCallsMinimum(0);
+    setHasCallsTarget(false);
+    return { target: 0, hasTarget: false };
+  }, [accessToken]);
+
+  useEffect(() => {
+    if (userHasRole(user, "sales")) {
+      void fetchCallsTarget();
+    }
+  }, [user, fetchCallsTarget]);
+
   const openCheckout = () => {
     if (checkoutAwaitingFace) {
       setShowCheckoutVerifyModal(true);
       toast.info("Your daily update is saved. Complete face scan to check out.");
       return;
+    }
+    if (userHasRole(user, "sales")) {
+      void fetchCallsTarget();
     }
     setWorkNote("");
     setEarlyReason("");
@@ -842,7 +707,15 @@ export default function EmployeeDashboard() {
 
   const confirmCheckout = async () => {
     const isSales = userHasRole(user, "sales");
-    const validationErrors = collectCheckoutErrors(workNote, salesReport, earlyReason, isSales, isEarly);
+    let targetMin = callsMinimum;
+    let hasTarget = hasCallsTarget;
+    if (isSales) {
+      const targetRes = await fetchCallsTarget();
+      targetMin = targetRes.target;
+      hasTarget = targetRes.hasTarget;
+    }
+
+    const validationErrors = collectCheckoutErrors(workNote, salesReport, earlyReason, isSales, isEarly, targetMin, hasTarget);
     if (validationErrors.length > 0) {
       setCheckoutErrors(validationErrors);
       showCheckoutValidationToast(
@@ -866,29 +739,12 @@ export default function EmployeeDashboard() {
         workNote.trim(),
         isSales
           ? {
-              blog_posts: Number(salesReport.blogPosts),
-              ppt_posts: Number(salesReport.pptPosts),
-              business_listings: Number(salesReport.businessListings),
-              classified_ads: Number(salesReport.classifiedAds),
-              blog_links: salesReport.blogLinks.trim(),
-              ppt_links: salesReport.pptLinks.trim(),
-              business_links: (Array.isArray(salesReport.businessListingLinks) ? salesReport.businessListingLinks : []).join("\n").trim(),
-              classified_links: (Array.isArray(salesReport.classifiedAdsLinks) ? salesReport.classifiedAdsLinks : []).join("\n").trim(),
               total_calls: Number(salesReport.totalCalls),
-              calls_received: Number(salesReport.callsReceived),
               meetings: Number(salesReport.meetings),
-              clients_done: Number(salesReport.clientsDone),
-              data_extracted_india: Number(salesReport.dataExtractedIndia),
-              data_extracted_abroad: Number(salesReport.dataExtractedAbroad),
-              mail_sent_b2b: Number(salesReport.mailSentB2B),
-              mail_sent_general: Number(salesReport.mailSentGeneral),
-              linkedin_post: salesReport.linkedinPost === "yes",
+              mail_sent: Number(salesReport.mailSent),
               linkedin_connections: Number(salesReport.linkedinConnections),
               linkedin_messages: Number(salesReport.linkedinMessages),
-              linkedin_data_extracted: Number(salesReport.linkedinDataExtraction),
-              newspaper_read: salesReport.newspaperRead === "yes",
-              newspaper_important_news: salesReport.newspaperImportantNews.trim(),
-              group_photos_added: salesReport.groupPhotosAdded,
+              today_summary: salesReport.todaySummary.trim(),
             }
           : undefined,
       );
@@ -1310,6 +1166,86 @@ export default function EmployeeDashboard() {
         ))}
       </div>
 
+      {/* Managed Team Section (for managers with subordinates) */}
+      {teamRows.length > 0 && (
+        <Card className="glass-card-premium border border-border/40 overflow-hidden shadow-sm">
+          <CardHeader className="pb-3 border-b border-border/30 flex flex-row items-center justify-between">
+            <div>
+              <CardTitle className="text-base flex items-center gap-2">
+                <Users className="h-5 w-5 text-primary" /> My Team &amp; Subordinates
+              </CardTitle>
+              <p className="text-xs text-muted-foreground mt-0.5">
+                Employees reporting to you — click any team member to track full profile, attendance, tasks &amp; daily updates.
+              </p>
+            </div>
+            <span className="text-xs px-2.5 py-1 rounded-full bg-primary/10 text-primary font-bold">
+              {teamRows.length} Member{teamRows.length !== 1 ? "s" : ""}
+            </span>
+          </CardHeader>
+          <CardContent className="p-4">
+            <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-3">
+              {teamRows.map((member) => {
+                const statusVariant =
+                  member.status === "Present"
+                    ? "bg-emerald-500/10 text-emerald-600 border-emerald-500/30"
+                    : member.status === "Late"
+                    ? "bg-amber-500/10 text-amber-600 border-amber-500/30"
+                    : member.status === "On Leave"
+                    ? "bg-blue-500/10 text-blue-600 border-blue-500/30"
+                    : "bg-red-500/10 text-red-600 border-red-500/30";
+
+                return (
+                  <div
+                    key={member.id}
+                    onClick={() => void loadEmployeeOverview(member.employeePk)}
+                    className="p-4 rounded-xl border border-border/50 bg-background/60 hover:bg-muted/40 hover:border-primary/40 transition-all cursor-pointer space-y-3 group shadow-sm hover:shadow"
+                  >
+                    <div className="flex items-start justify-between gap-2">
+                      <div className="flex items-center gap-2.5 min-w-0">
+                        <div className="h-10 w-10 rounded-full bg-primary/10 flex items-center justify-center font-bold text-primary shrink-0 text-sm">
+                          {member.name?.charAt(0)?.toUpperCase() ?? "?"}
+                        </div>
+                        <div className="min-w-0">
+                          <p className="font-semibold text-sm text-foreground truncate group-hover:text-primary transition-colors">
+                            {member.name}
+                          </p>
+                          <p className="text-[11px] text-muted-foreground truncate">
+                            {member.department} · {member.empId}
+                          </p>
+                        </div>
+                      </div>
+                      <span className={cn("text-[10px] font-bold px-2 py-0.5 rounded-full border uppercase tracking-wider shrink-0", statusVariant)}>
+                        {member.status}
+                      </span>
+                    </div>
+
+                    <div className="grid grid-cols-2 gap-2 text-xs pt-2 border-t border-border/30">
+                      <div>
+                        <span className="text-[10px] text-muted-foreground uppercase tracking-wider block">Today In:</span>
+                        <span className="font-medium text-foreground text-xs">
+                          {member.checkIn ? format(new Date(member.checkIn), "h:mm a") : "—"}
+                        </span>
+                      </div>
+                      <div>
+                        <span className="text-[10px] text-muted-foreground uppercase tracking-wider block">Hours:</span>
+                        <span className="font-medium text-foreground text-xs">
+                          {member.hours > 0 ? `${member.hours}h` : "—"}
+                        </span>
+                      </div>
+                    </div>
+
+                    <div className="pt-1 flex items-center justify-between text-xs text-primary font-medium group-hover:underline">
+                      <span>Track Attendance &amp; Tasks</span>
+                      <ChevronRight className="h-3.5 w-3.5 transition-transform group-hover:translate-x-0.5" />
+                    </div>
+                  </div>
+                );
+              })}
+            </div>
+          </CardContent>
+        </Card>
+      )}
+
       {/* Break history */}
       <Card className="card-3d border-0">
         <CardHeader className="pb-2 flex flex-row items-center justify-between">
@@ -1484,318 +1420,80 @@ export default function EmployeeDashboard() {
               ) : null}
             </div>
 
-            {userHasRole(user, "sales") && (() => {
-              const blogCount = Number(salesReport.blogPosts) || 0;
-              const pptCount = Number(salesReport.pptPosts) || 0;
-              const businessCount = Number(salesReport.businessListings) || 0;
-              const classifiedCount = Number(salesReport.classifiedAds) || 0;
-
-              const isLinkEnabled = (key: keyof SalesDailyReport): boolean => {
-                if (key === "blogLinks") return blogCount >= 1;
-                if (key === "pptLinks") return pptCount >= 1;
-                if (key === "businessListingLinks") return businessCount >= 5;
-                if (key === "classifiedAdsLinks") return classifiedCount >= 5;
-                return true;
-              };
-
-              const getLinkHint = (key: keyof SalesDailyReport): string | null => {
-                if (key === "blogLinks") return blogCount < 1 ? `Enter Blog posts count (min 1) above to unlock` : null;
-                if (key === "pptLinks") return pptCount < 1 ? `Enter PPT posts count (min 1) above to unlock` : null;
-                if (key === "businessListingLinks") return businessCount < 5 ? `Enter Business listings count (min 5) above to unlock` : null;
-                if (key === "classifiedAdsLinks") return classifiedCount < 5 ? `Enter Classified ads count (min 5) above to unlock` : null;
-                return null;
-              };
-
-              return (
-                <div className="min-w-0 space-y-3 rounded-2xl border border-border/80 bg-muted/20 p-3 sm:p-4">
+            {userHasRole(user, "sales") && (
+              <div className="min-w-0 space-y-3 rounded-2xl border border-border/80 bg-muted/20 p-3 sm:p-4">
+                <div className="flex flex-col gap-0.5 sm:flex-row sm:items-center sm:justify-between">
                   <p className="text-xs font-semibold text-foreground">
-                    Sales/BDE compulsory daily report (all fields required)
+                    Sales daily report — Compulsory before check-out
                   </p>
-                  <div className="grid grid-cols-1 gap-2.5 sm:grid-cols-2">
-                    {SALES_REPORT_FIELD_META.map((field) => {
-                      const isLink = field.key.endsWith("Links");
-                      const enabled = isLinkEnabled(field.key);
-                      const hint = getLinkHint(field.key);
-
-                      return (
-                        <div key={field.key} className={cn("space-y-1.5", isLink ? "sm:col-span-2" : "")}>
-                          <Label className={cn("text-[11px] leading-snug", isLink && !enabled && "text-muted-foreground/50")}>
-                            {field.label} {!isLink && <span className="text-destructive">*</span>}
-                            {isLink && enabled && <span className="text-destructive"> *</span>}
-                          </Label>
-
-                          {/* Disabled hint when link field is locked */}
-                          {isLink && !enabled && (
-                            <div className="flex items-center gap-2 rounded-xl border border-border/40 bg-muted/30 px-3 py-2 text-[11px] text-muted-foreground/60 select-none">
-                              <svg className="h-3.5 w-3.5 shrink-0" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}><path strokeLinecap="round" strokeLinejoin="round" d="M12 15v2m-6 4h12a2 2 0 002-2v-6a2 2 0 00-2-2H6a2 2 0 00-2 2v6a2 2 0 002 2zm10-10V7a4 4 0 00-8 0v4h8z" /></svg>
-                              {hint}
-                            </div>
-                          )}
-
-                          {/* Business/Classified 5-link grid */}
-                          {isLink && enabled && (field.key === "businessListingLinks" || field.key === "classifiedAdsLinks") && (
-                            <div className={cn(
-                              "rounded-xl border border-border bg-background/40 p-2 space-y-2",
-                              checkoutErrorFieldIds.has(field.key) && "border-destructive ring-1 ring-destructive/50",
-                            )}>
-                              <p className="text-[11px] text-muted-foreground">
-                                Add exactly 5 links (each must start with http/https)
-                              </p>
-                              <div className="grid grid-cols-1 sm:grid-cols-2 gap-2">
-                                {((salesReport[field.key] as unknown as string[]) || ["", "", "", "", ""]).slice(0, 5).map((val, idx) => (
-                                  <div key={idx} className="flex items-center gap-2">
-                                    <span className="text-[11px] text-muted-foreground w-5">{idx + 1}.</span>
-                                    <input
-                                      type="url"
-                                      value={val}
-                                      onChange={(e) => {
-                                        const next = e.target.value;
-                                        setSalesReport((prev) => {
-                                          const arr = Array.isArray(prev[field.key])
-                                            ? ([...prev[field.key]] as string[])
-                                            : ["", "", "", "", ""];
-                                          while (arr.length < 5) arr.push("");
-                                          arr[idx] = next;
-                                          return { ...prev, [field.key]: arr } as SalesDailyReport;
-                                        });
-                                        if (checkoutErrorFieldIds.has(field.key)) {
-                                          setCheckoutErrors((prev) => prev.filter((error) => error.fieldId !== field.key));
-                                        }
-                                      }}
-                                      placeholder={field.placeholder}
-                                      className="flex h-9 w-full rounded-xl border border-input bg-background px-3 py-1 text-xs shadow-sm transition-colors placeholder:text-muted-foreground focus-visible:outline-none focus-visible:ring-1 focus-visible:ring-ring"
-                                    />
-                                  </div>
-                                ))}
-                              </div>
-                            </div>
-                          )}
-
-                          {/* Blog/PPT textarea links */}
-                          {isLink && enabled && field.key !== "businessListingLinks" && field.key !== "classifiedAdsLinks" && (
-                            <Textarea
-                              value={salesReport[field.key] as unknown as string}
-                              onChange={(e) => {
-                                const value = e.target.value;
-                                setSalesReport((prev) => ({ ...prev, [field.key]: value }));
-                                if (checkoutErrorFieldIds.has(field.key)) {
-                                  setCheckoutErrors((prev) => prev.filter((error) => error.fieldId !== field.key));
-                                }
-                              }}
-                              placeholder={field.placeholder}
-                              className={cn(
-                                "min-h-[68px] w-full min-w-0 resize-none rounded-xl text-xs",
-                                checkoutErrorFieldIds.has(field.key) && "border-destructive ring-1 ring-destructive/50",
-                              )}
-                            />
-                          )}
-
-                          {/* Number inputs */}
-                          {!isLink && (
-                            <input
-                              type="number"
-                              min={0}
-                              value={salesReport[field.key]}
-                              onChange={(e) => {
-                                const value = e.target.value;
-                                setSalesReport((prev) => ({ ...prev, [field.key]: value }));
-                                if (checkoutErrorFieldIds.has(field.key)) {
-                                  setCheckoutErrors((prev) => prev.filter((error) => error.fieldId !== field.key));
-                                }
-                              }}
-                              placeholder={field.placeholder}
-                              className={cn(
-                                "flex h-9 w-full rounded-xl border border-input bg-background px-3 py-1 text-xs shadow-sm transition-colors placeholder:text-muted-foreground focus-visible:outline-none focus-visible:ring-1 focus-visible:ring-ring",
-                                checkoutErrorFieldIds.has(field.key) && "border-destructive ring-1 ring-destructive/50",
-                              )}
-                            />
-                          )}
-                        </div>
-                      );
-                    })}
-                  </div>
+                  <span className="text-[11px] font-medium text-emerald-600 dark:text-emerald-400">
+                    {hasCallsTarget && callsMinimum > 0
+                      ? `Target: ${callsMinimum} calls · min 1 meeting · min 20 mails · min 20 connections`
+                      : `Target: min 1 meeting · min 20 mails · min 20 connections`}
+                  </span>
                 </div>
-              );
-            })()}
-
-            {userHasRole(user, "sales") && (
-              <div className="min-w-0 space-y-3 rounded-2xl border border-border/80 bg-muted/20 p-3 sm:p-4">
-                <p className="text-xs font-semibold text-foreground">LinkedIn report</p>
-
-                <div className="space-y-1.5">
-                  <Label className="text-[11px] leading-snug">LinkedIn post today? <span className="text-destructive">*</span></Label>
-                  <div className="flex flex-wrap gap-2">
-                    {(["yes", "no"] as const).map((v) => (
-                      <button
-                        key={v}
-                        type="button"
-                        onClick={() => {
-                          setSalesReport((prev) => ({ ...prev, linkedinPost: v }));
-                          if (checkoutErrorFieldIds.has("linkedinPost")) {
-                            setCheckoutErrors((prev) => prev.filter((e) => e.fieldId !== "linkedinPost"));
-                          }
-                        }}
-                        className={cn(
-                          "rounded-full border px-3 py-1.5 text-xs transition-colors",
-                          salesReport.linkedinPost === v
-                            ? "border-primary bg-primary text-primary-foreground"
-                            : "border-border bg-muted/50 hover:bg-muted",
-                          checkoutErrorFieldIds.has("linkedinPost") && "border-destructive",
-                        )}
-                      >
-                        {v.toUpperCase()}
-                      </button>
-                    ))}
-                  </div>
-                </div>
-
                 <div className="grid grid-cols-1 gap-2.5 sm:grid-cols-2">
-                  <div className="space-y-1.5">
-                    <Label className="text-[11px] leading-snug">Connections <span className="text-destructive">*</span></Label>
-                    <input
-                      type="number"
-                      min={0}
-                      value={salesReport.linkedinConnections}
-                      onChange={(e) => {
-                        setSalesReport((prev) => ({ ...prev, linkedinConnections: e.target.value }));
-                        if (checkoutErrorFieldIds.has("linkedinConnections")) {
-                          setCheckoutErrors((prev) => prev.filter((err) => err.fieldId !== "linkedinConnections"));
-                        }
-                      }}
-                      placeholder="e.g. 30"
-                      className={cn(
-                        "flex h-9 w-full rounded-xl border border-input bg-background px-3 py-1 text-xs shadow-sm transition-colors placeholder:text-muted-foreground focus-visible:outline-none focus-visible:ring-1 focus-visible:ring-ring",
-                        checkoutErrorFieldIds.has("linkedinConnections") && "border-destructive ring-1 ring-destructive/50",
-                      )}
-                    />
-                  </div>
-                  <div className="space-y-1.5">
-                    <Label className="text-[11px] leading-snug">Messages sent <span className="text-destructive">*</span> <span className="text-muted-foreground">(min 100)</span></Label>
-                    <input
-                      type="number"
-                      min={0}
-                      value={salesReport.linkedinMessages}
-                      onChange={(e) => {
-                        setSalesReport((prev) => ({ ...prev, linkedinMessages: e.target.value }));
-                        if (checkoutErrorFieldIds.has("linkedinMessages")) {
-                          setCheckoutErrors((prev) => prev.filter((err) => err.fieldId !== "linkedinMessages"));
-                        }
-                      }}
-                      placeholder="e.g. 120"
-                      className={cn(
-                        "flex h-9 w-full rounded-xl border border-input bg-background px-3 py-1 text-xs shadow-sm transition-colors placeholder:text-muted-foreground focus-visible:outline-none focus-visible:ring-1 focus-visible:ring-ring",
-                        checkoutErrorFieldIds.has("linkedinMessages") && "border-destructive ring-1 ring-destructive/50",
-                      )}
-                    />
-                  </div>
-                  <div className="space-y-1.5 sm:col-span-2">
-                    <Label className="text-[11px] leading-snug">Data extracted <span className="text-destructive">*</span> <span className="text-muted-foreground">(min 25)</span></Label>
-                    <input
-                      type="number"
-                      min={0}
-                      value={salesReport.linkedinDataExtraction}
-                      onChange={(e) => {
-                        setSalesReport((prev) => ({ ...prev, linkedinDataExtraction: e.target.value }));
-                        if (checkoutErrorFieldIds.has("linkedinDataExtraction")) {
-                          setCheckoutErrors((prev) => prev.filter((err) => err.fieldId !== "linkedinDataExtraction"));
-                        }
-                      }}
-                      placeholder="e.g. 30"
-                      className={cn(
-                        "flex h-9 w-full rounded-xl border border-input bg-background px-3 py-1 text-xs shadow-sm transition-colors placeholder:text-muted-foreground focus-visible:outline-none focus-visible:ring-1 focus-visible:ring-ring",
-                        checkoutErrorFieldIds.has("linkedinDataExtraction") && "border-destructive ring-1 ring-destructive/50",
-                      )}
-                    />
-                  </div>
-                </div>
-              </div>
-            )}
+                  {SALES_REPORT_FIELD_META.map((field) => {
+                    const isTotalCalls = field.key === "totalCalls";
+                    const isCompulsory = !isTotalCalls || (hasCallsTarget && callsMinimum > 0);
+                    const labelText = isTotalCalls
+                      ? (hasCallsTarget && callsMinimum > 0
+                          ? `1) Total calls (Target: ${callsMinimum} from task)`
+                          : `1) Total calls (No target assigned)`)
+                      : field.label;
 
-            {userHasRole(user, "sales") && (
-              <div className="min-w-0 space-y-3 rounded-2xl border border-border/80 bg-muted/20 p-3 sm:p-4">
-                <p className="text-xs font-semibold text-foreground">Newspaper task</p>
-
-                <div className="space-y-1.5">
-                  <Label className="text-[11px] leading-snug">Did you read newspaper today? <span className="text-destructive">*</span></Label>
-                  <div className="flex flex-wrap gap-2">
-                    {(["yes", "no"] as const).map((v) => (
-                      <button
-                        key={v}
-                        type="button"
-                        onClick={() => {
-                          setSalesReport((prev) => ({ ...prev, newspaperRead: v }));
-                          if (checkoutErrorFieldIds.has("newspaperRead")) {
-                            setCheckoutErrors((prev) => prev.filter((e) => e.fieldId !== "newspaperRead"));
-                          }
-                        }}
-                        className={cn(
-                          "rounded-full border px-3 py-1.5 text-xs transition-colors",
-                          salesReport.newspaperRead === v
-                            ? "border-primary bg-primary text-primary-foreground"
-                            : "border-border bg-muted/50 hover:bg-muted",
-                          checkoutErrorFieldIds.has("newspaperRead") && "border-destructive",
-                        )}
-                      >
-                        {v.toUpperCase()}
-                      </button>
-                    ))}
-                  </div>
+                    return (
+                      <div key={field.key} className="space-y-1.5">
+                        <Label className={cn("text-[11px] leading-snug", checkoutErrorFieldIds.has(field.key) && "text-destructive")}>
+                          {labelText} {isCompulsory && <span className="text-destructive">*</span>}
+                        </Label>
+                        <input
+                          type="number"
+                          min={0}
+                          value={String(salesReport[field.key] ?? "")}
+                          onChange={(e) => {
+                            const val = e.target.value;
+                            setSalesReport((prev) => ({ ...prev, [field.key]: val } as SalesDailyReport));
+                            if (checkoutErrorFieldIds.has(field.key)) {
+                              setCheckoutErrors((prev) => prev.filter((err) => err.fieldId !== field.key));
+                            }
+                          }}
+                          placeholder={isTotalCalls && !hasCallsTarget ? "e.g. 25 (no target set)" : field.placeholder}
+                          className={cn(
+                            "w-full rounded-xl border border-input bg-background px-3 py-2 text-sm shadow-sm transition-colors placeholder:text-muted-foreground focus-visible:outline-none focus-visible:ring-1 focus-visible:ring-ring",
+                            checkoutErrorFieldIds.has(field.key) && "border-destructive ring-1 ring-destructive/50",
+                          )}
+                        />
+                      </div>
+                    );
+                  })}
                 </div>
 
+                {/* Today's summary — full width */}
                 <div className="space-y-1.5">
-                  <Label className="text-[11px] leading-snug">Important news <span className={cn(salesReport.newspaperRead === "yes" ? "text-destructive" : "text-muted-foreground")}>*</span></Label>
+                  <Label className={cn("text-[11px] leading-snug", checkoutErrorFieldIds.has("todaySummary") && "text-destructive")}>
+                    6) Today&apos;s Work Summary <span className="text-destructive">*</span>
+                  </Label>
                   <Textarea
-                    value={salesReport.newspaperImportantNews}
+                    value={salesReport.todaySummary}
                     onChange={(e) => {
-                      setSalesReport((prev) => ({ ...prev, newspaperImportantNews: e.target.value }));
-                      if (checkoutErrorFieldIds.has("newspaperImportantNews")) {
-                        setCheckoutErrors((prev) => prev.filter((err) => err.fieldId !== "newspaperImportantNews"));
+                      setSalesReport((prev) => ({ ...prev, todaySummary: e.target.value }));
+                      if (checkoutErrorFieldIds.has("todaySummary")) {
+                        setCheckoutErrors((prev) => prev.filter((err) => err.fieldId !== "todaySummary"));
                       }
                     }}
-                    placeholder="Write 2–5 key points you read today..."
+                    placeholder="Summarize today's key achievements, client discussions, and progress..."
                     className={cn(
-                      "min-h-[68px] w-full min-w-0 resize-none rounded-xl text-xs",
-                      checkoutErrorFieldIds.has("newspaperImportantNews") && "border-destructive ring-1 ring-destructive/50",
+                      "min-h-[80px] w-full min-w-0 resize-none rounded-xl text-xs",
+                      checkoutErrorFieldIds.has("todaySummary") && "border-destructive ring-1 ring-destructive/50",
                     )}
                   />
                   <p className="text-[11px] leading-snug text-muted-foreground">
-                    Required only when you select YES.
+                    Brief summary of today&apos;s work — required before check-out.
                   </p>
                 </div>
               </div>
             )}
-
-            {userHasRole(user, "sales") && (
-              <div
-                className={cn(
-                  "min-w-0 space-y-2 rounded-2xl border border-border/80 bg-muted/20 p-3 sm:p-4",
-                  checkoutErrorFieldIds.has("groupPhotosAdded") && "border-destructive ring-1 ring-destructive/50",
-                )}
-              >
-                <div className="flex items-start gap-3">
-                  <Checkbox
-                    id="groupPhotosAdded"
-                    checked={salesReport.groupPhotosAdded}
-                    onCheckedChange={(checked) => {
-                      const value = checked === true;
-                      setSalesReport((prev) => ({ ...prev, groupPhotosAdded: value }));
-                      if (checkoutErrorFieldIds.has("groupPhotosAdded")) {
-                        setCheckoutErrors((prev) => prev.filter((e) => e.fieldId !== "groupPhotosAdded"));
-                      }
-                    }}
-                  />
-                  <div className="space-y-1">
-                    <Label htmlFor="groupPhotosAdded" className="text-xs font-medium leading-snug cursor-pointer">
-                      Photos added in group <span className="text-destructive">*</span>
-                    </Label>
-                    <p className="text-[11px] leading-snug text-muted-foreground">
-                      Required before check-out — confirm you shared today&apos;s photos in the team group.
-                    </p>
-                  </div>
-                </div>
-              </div>
-            )}
-
             {isEarly && (
               <div className="min-w-0 space-y-1.5">
                 <Label className="text-sm">Reason for early check-out <span className="text-destructive">*</span></Label>
@@ -1847,6 +1545,158 @@ export default function EmployeeDashboard() {
           </DialogFooter>
         </DialogContent>
       </Dialog>
+
+      {/* Employee Overview Sheet */}
+      <Sheet open={selectedEmployeePk !== null} onOpenChange={(open) => { if (!open) { setSelectedEmployeePk(null); setEmpOverview(null); } }}>
+        <SheetContent side="right" className="w-full sm:max-w-2xl p-0 flex flex-col">
+          <SheetHeader className="p-5 pb-3 border-b border-border/40 shrink-0">
+            <SheetTitle className="flex items-center gap-2 text-base">
+              <Users className="h-4 w-4 text-primary" />
+              {empOverview?.employee?.name ?? "Employee"} — Full Profile &amp; Tracking
+            </SheetTitle>
+          </SheetHeader>
+          <ScrollArea className="flex-1 overflow-y-auto">
+            {empOverviewLoading && (
+              <div className="p-8 text-center text-sm text-muted-foreground">Loading employee details...</div>
+            )}
+            {!empOverviewLoading && empOverview && (() => {
+              const emp = empOverview.employee;
+              const todayAtt = empOverview.today_attendance;
+              const history: any[] = empOverview.attendance_history ?? [];
+              const tasks: any[] = empOverview.tasks ?? [];
+              const updates: any[] = empOverview.daily_updates ?? [];
+              const leaves: any[] = empOverview.leaves ?? [];
+              const statusColor = (s: string) =>
+                s === "Present" ? "text-emerald-600" : s === "Late" ? "text-amber-600" : s === "On Leave" ? "text-blue-600" : "text-red-500";
+              return (
+                <div className="p-5 space-y-5">
+                  <div className="rounded-xl border border-border/40 bg-muted/20 p-4 space-y-3">
+                    <div className="flex items-center gap-3">
+                      {emp.avatar ? (
+                        <img src={emp.avatar} alt={emp.name} className="h-14 w-14 rounded-full object-cover border-2 border-primary/20" />
+                      ) : (
+                        <div className="h-14 w-14 rounded-full bg-primary/10 flex items-center justify-center text-xl font-bold text-primary">
+                          {emp.name?.charAt(0)?.toUpperCase() ?? "?"}
+                        </div>
+                      )}
+                      <div>
+                        <p className="font-bold text-base text-foreground">{emp.name}</p>
+                        <p className="text-xs text-muted-foreground">{emp.designation} · {emp.empId}</p>
+                        <div className="flex gap-1.5 mt-1 flex-wrap">
+                          {(emp.roles ?? [emp.role]).map((r: string) => (
+                            <Badge key={r} variant="secondary" className="text-[10px] px-1.5 py-0 capitalize">{r}</Badge>
+                          ))}
+                        </div>
+                      </div>
+                    </div>
+                    <div className="grid grid-cols-2 gap-x-4 gap-y-1.5 text-xs">
+                      <div className="flex items-center gap-1.5 text-muted-foreground"><Mail className="h-3 w-3" />{emp.email}</div>
+                      {emp.phone && <div className="flex items-center gap-1.5 text-muted-foreground"><Phone className="h-3 w-3" />{emp.phone}</div>}
+                      <div className="flex items-center gap-1.5 text-muted-foreground"><Briefcase className="h-3 w-3" />{emp.department}</div>
+                      {emp.date_of_joining && <div className="flex items-center gap-1.5 text-muted-foreground"><CalendarDays className="h-3 w-3" />Joined: {emp.date_of_joining}</div>}
+                      <div className="text-muted-foreground col-span-2">Reports to: <span className="text-foreground font-medium">{emp.reports_to}</span></div>
+                      {emp.is_wfh && <Badge variant="outline" className="text-[10px] w-fit">Work From Home</Badge>}
+                    </div>
+                  </div>
+
+                  <div className="rounded-xl border border-border/40 bg-muted/10 p-4">
+                    <p className="text-xs font-semibold uppercase tracking-wider text-muted-foreground mb-3">Today Attendance</p>
+                    <div className="flex flex-wrap gap-4 text-sm">
+                      <div><span className="text-muted-foreground text-xs">Status </span><span className={"font-bold " + statusColor(todayAtt.status)}>{todayAtt.status}</span></div>
+                      <div><span className="text-muted-foreground text-xs">In </span><span className="font-medium">{todayAtt.check_in ? format(new Date(todayAtt.check_in), "h:mm a") : "—"}</span></div>
+                      <div><span className="text-muted-foreground text-xs">Out </span><span className="font-medium">{todayAtt.check_out ? format(new Date(todayAtt.check_out), "h:mm a") : "—"}</span></div>
+                      <div><span className="text-muted-foreground text-xs">Hours </span><span className="font-medium">{todayAtt.hours > 0 ? todayAtt.hours + "h" : "—"}</span></div>
+                    </div>
+                  </div>
+
+                  {history.length > 0 && (
+                    <div className="rounded-xl border border-border/40 overflow-hidden">
+                      <div className="px-4 py-2.5 bg-muted/20 border-b border-border/40">
+                        <p className="text-xs font-semibold uppercase tracking-wider text-muted-foreground">Attendance History (Last 14 Days)</p>
+                      </div>
+                      <div className="overflow-x-auto">
+                        <table className="w-full text-xs">
+                          <thead><tr className="border-b border-border/30 text-muted-foreground">
+                            <th className="text-left py-2 px-3 font-semibold">Date</th>
+                            <th className="text-left py-2 px-3 font-semibold">Status</th>
+                            <th className="text-left py-2 px-3 font-semibold">In</th>
+                            <th className="text-left py-2 px-3 font-semibold">Out</th>
+                            <th className="text-left py-2 px-3 font-semibold">Hrs</th>
+                          </tr></thead>
+                          <tbody>{history.map((h) => (
+                            <tr key={h.id} className="border-b border-border/20 hover:bg-muted/20">
+                              <td className="py-2 px-3">{h.date}</td>
+                              <td className={"py-2 px-3 font-medium " + statusColor(h.status)}>{h.status}</td>
+                              <td className="py-2 px-3">{h.check_in ? format(new Date(h.check_in), "h:mm a") : "—"}</td>
+                              <td className="py-2 px-3">{h.check_out ? format(new Date(h.check_out), "h:mm a") : "—"}</td>
+                              <td className="py-2 px-3">{h.hours > 0 ? h.hours + "h" : "—"}</td>
+                            </tr>
+                          ))}</tbody>
+                        </table>
+                      </div>
+                    </div>
+                  )}
+
+                  <div className="space-y-2">
+                    <p className="text-xs font-semibold uppercase tracking-wider text-muted-foreground">Tasks ({tasks.length})</p>
+                    {tasks.length === 0 ? (
+                      <div className="p-3 rounded-lg border border-border/40 bg-muted/10 text-xs text-muted-foreground text-center">
+                        No tasks assigned to this employee.
+                      </div>
+                    ) : (
+                      tasks.map((t) => (
+                        <div key={t.id} className={"rounded-lg border p-3 text-xs space-y-1.5 " + (t.is_overdue ? "border-red-400/40 bg-red-500/5" : t.status === "reviewed" ? "border-purple-400/30 bg-purple-500/5" : t.status === "completed" ? "border-emerald-400/30 bg-emerald-500/5" : "border-border/40")}>
+                          <div className="flex items-start justify-between gap-2">
+                            <span className="font-semibold text-foreground leading-snug">{t.title}</span>
+                            <div className="flex gap-1 shrink-0">
+                              <Badge variant="outline" className="text-[10px] px-1.5 py-0 capitalize">{t.priority}</Badge>
+                              <Badge variant="outline" className={"text-[10px] px-1.5 py-0 " + (t.is_overdue ? "border-red-400 text-red-600" : (t.status === "completed" || t.status === "reviewed") ? "border-emerald-400 text-emerald-600" : "")}>
+                                {t.is_overdue ? "Overdue" : t.status.replace("_", " ")}
+                              </Badge>
+                            </div>
+                          </div>
+                          {t.description && <p className="text-xs text-muted-foreground whitespace-pre-wrap">{t.description}</p>}
+                          {t.due_datetime && <p className="text-muted-foreground">Due: {format(new Date(t.due_datetime), "PP p")}</p>}
+                          {t.completion_notes && <p className="text-emerald-700 dark:text-emerald-400"><span className="font-semibold">Report: </span>{t.completion_notes}</p>}
+                          {t.incomplete_reason && <p className="text-orange-600"><span className="font-semibold">Delay: </span>{t.incomplete_reason}</p>}
+                        </div>
+                      ))
+                    )}
+                  </div>
+
+                  {updates.length > 0 && (
+                    <div className="space-y-2">
+                      <p className="text-xs font-semibold uppercase tracking-wider text-muted-foreground">Recent Daily Updates</p>
+                      {updates.map((u) => (
+                        <div key={u.id} className="rounded-lg border border-border/40 p-3 text-xs space-y-1">
+                          <p className="text-muted-foreground font-medium">{u.date}</p>
+                          <p className="text-foreground whitespace-pre-wrap">{u.update_text}</p>
+                        </div>
+                      ))}
+                    </div>
+                  )}
+
+                  {leaves.length > 0 && (
+                    <div className="space-y-2">
+                      <p className="text-xs font-semibold uppercase tracking-wider text-muted-foreground">Leave Requests</p>
+                      {leaves.map((lr) => (
+                        <div key={lr.id} className="rounded-lg border border-border/40 p-3 text-xs flex items-start justify-between gap-2">
+                          <div>
+                            <p className="font-medium capitalize">{(lr.leave_type ?? "").replace(/_/g, " ")} leave</p>
+                            <p className="text-muted-foreground">{lr.start_date} to {lr.end_date}</p>
+                            {lr.reason && <p className="text-muted-foreground mt-0.5">{lr.reason}</p>}
+                          </div>
+                          <Badge variant="outline" className={"text-[10px] capitalize shrink-0 " + (lr.status === "approved" ? "border-emerald-400 text-emerald-600" : lr.status === "rejected" ? "border-red-400 text-red-600" : "")}>{lr.status}</Badge>
+                        </div>
+                      ))}
+                    </div>
+                  )}
+                </div>
+              );
+            })()}
+          </ScrollArea>
+        </SheetContent>
+      </Sheet>
     </div>
   );
 }

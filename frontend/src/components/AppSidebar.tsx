@@ -67,7 +67,6 @@ const managerNav: SidebarNavSection[] = [
     items: [
       { title: "My Dashboard", url: "/employee", icon: LayoutDashboard, end: true },
       { title: "My Attendance", url: "/employee/attendance", icon: Clock },
-      { title: "Task Assignments", url: "/tasks", icon: CheckSquare },
       { title: "Daily Updates", url: "/employee/updates", icon: MessageSquare },
       { title: "My Leaves", url: "/employee/leaves", icon: CalendarDays },
       { title: "Approvals", url: "/employee/approvals", icon: CheckCircle2 },
@@ -76,6 +75,7 @@ const managerNav: SidebarNavSection[] = [
   {
     group: "Team",
     items: [
+      { title: "Manager Dashboard", url: "/admin", icon: LayoutDashboard, end: true },
       { title: "Team Attendance", url: "/admin/attendance", icon: Users },
       { title: "Task Assignments", url: "/tasks", icon: CheckSquare },
       { title: "Change Requests Queue", url: "/admin/change-requests", icon: UserCheck },
@@ -89,7 +89,6 @@ const hrNav: SidebarNavSection[] = [
     items: [
       { title: "My Dashboard", url: "/employee", icon: LayoutDashboard, end: true },
       { title: "My Attendance", url: "/employee/attendance", icon: Clock },
-      { title: "Task Assignments", url: "/tasks", icon: CheckSquare },
       { title: "Daily Updates", url: "/employee/updates", icon: MessageSquare },
       { title: "My Leaves", url: "/employee/leaves", icon: CalendarDays },
       { title: "Approvals", url: "/employee/approvals", icon: CheckCircle2 },
@@ -98,6 +97,7 @@ const hrNav: SidebarNavSection[] = [
   {
     group: "Team",
     items: [
+      { title: "Manager Dashboard", url: "/admin", icon: LayoutDashboard, end: true },
       { title: "Team Attendance", url: "/admin/attendance", icon: Users },
       { title: "Task Assignments", url: "/tasks", icon: CheckSquare },
       { title: "Change Requests Queue", url: "/admin/change-requests", icon: UserCheck },

@@ -7,36 +7,18 @@ from .serializers import DailyUpdateSerializer
 
 SALES_REQUIRED_REPORT_FIELDS = [
     "total_calls",
-    "calls_received",
     "meetings",
-    "clients_done",
-    "data_extracted_india",
-    "data_extracted_abroad",
-    "mail_sent_b2b",
-    "mail_sent_general",
-    "linkedin_post",
+    "mail_sent",
     "linkedin_connections",
     "linkedin_messages",
-    "linkedin_data_extracted",
-    "newspaper_read",
-    "newspaper_important_news",
-    "group_photos_added",
+    "today_summary",
 ]
 
 SALES_MINIMUMS = {
-    "total_calls": 100,
-    "calls_received": 80,
-    "data_extracted_india": 500,
-    "data_extracted_abroad": 500,
-    "mail_sent_b2b": 10,
-    "mail_sent_general": 10,
-    "linkedin_connections": 0,
-    "linkedin_messages": 100,
-    "linkedin_data_extracted": 25,
+    "meetings": 1,
+    "mail_sent": 20,
+    "linkedin_connections": 20,
 }
-
-SALES_BLOG_PPT_MIN = 1
-SALES_BUSINESS_CLASSIFIED_MIN = 5
 
 
 def _int_or_none(value):
@@ -105,127 +87,74 @@ class DailyUpdateView(APIView):
             if not isinstance(report_data, dict):
                 return Response({'error': 'Sales daily report is compulsory before check-out.'}, status=400)
 
-            # 1) Required fields (except Blog/PPT and Business/Classified OR-groups)
-            required_single_fields = [
-                f
-                for f in SALES_REQUIRED_REPORT_FIELDS
-                if f
-                not in [
-                    "blog_posts",
-                    "ppt_posts",
-                    "business_listings",
-                    "classified_ads",
-                    "newspaper_important_news",  # required only when newspaper_read is true
-                ]
-            ]
-            missing_fields = [field for field in required_single_fields if report_data.get(field) in [None, ""]]
-            # Booleans: group_photos_added must be explicitly confirmed (True).
-            if report_data.get("group_photos_added") is not True and "group_photos_added" not in missing_fields:
-                missing_fields.append("group_photos_added")
+            # 1) Fetch calls target from active task assigned to this employee (if any)
+            import re as _re
+            from .models import Task
+            today = timezone.now().date()
+            emp = request.user.employee
+            active_task = Task.objects.filter(
+                assigned_to=emp,
+                status__in=['pending', 'in_progress'],
+            ).order_by('-created_at').first()
+
+            calls_minimum = 0
+            has_calls_target = False
+            if active_task:
+                desc = f"{active_task.title or ''} {active_task.description or ''}"
+                match = _re.search(r'(\d+)\s*(?:calls?|total\s*calls?)', desc, _re.IGNORECASE)
+                if not match:
+                    match = _re.search(r'(?:calls?|total\s*calls?)\s*[:=-]?\s*(\d+)', desc, _re.IGNORECASE)
+                if match:
+                    calls_minimum = int(match.group(1))
+                    has_calls_target = True
+
+            # 2) Required fields — all must be present and non-empty
+            # (total_calls is only compulsory if manager assigned a calls target)
+            missing_fields = []
+            for field in SALES_REQUIRED_REPORT_FIELDS:
+                if field == "total_calls" and not has_calls_target:
+                    continue
+                val = report_data.get(field)
+                if val is None or (isinstance(val, str) and not val.strip()):
+                    missing_fields.append(field)
+
             if missing_fields:
                 return Response({
                     'error': 'Sales daily report is incomplete. Fill all compulsory fields before check-out.',
                     'missing_fields': missing_fields,
                 }, status=400)
 
-            # 2) OR-group: (Blog OR PPT) => minimum 1 in either
-            blog_num = _int_or_none(report_data.get("blog_posts"))
-            ppt_num = _int_or_none(report_data.get("ppt_posts"))
-            blog_ok = blog_num is not None and blog_num >= SALES_BLOG_PPT_MIN
-            ppt_ok = ppt_num is not None and ppt_num >= SALES_BLOG_PPT_MIN
-
+            # 3) Numeric minimums
             invalid_fields = []
-            if not (blog_ok or ppt_ok):
-                invalid_fields.extend([
-                    {"field": "blog_posts", "minimum": SALES_BLOG_PPT_MIN, "actual": report_data.get("blog_posts")},
-                    {"field": "ppt_posts", "minimum": SALES_BLOG_PPT_MIN, "actual": report_data.get("ppt_posts")},
-                ])
 
-            # 3) OR-group: (Business listings OR Classified ads) => minimum 5 in either
-            business_num = _int_or_none(report_data.get("business_listings"))
-            classified_num = _int_or_none(report_data.get("classified_ads"))
-            business_ok = business_num is not None and business_num >= SALES_BUSINESS_CLASSIFIED_MIN
-            classified_ok = classified_num is not None and classified_num >= SALES_BUSINESS_CLASSIFIED_MIN
+            # total_calls — only enforced if manager explicitly assigned a calls target
+            total_calls_val = _int_or_none(report_data.get('total_calls'))
+            if has_calls_target and calls_minimum > 0:
+                if total_calls_val is None:
+                    invalid_fields.append({'field': 'total_calls', 'minimum': calls_minimum, 'actual': report_data.get('total_calls')})
+                elif total_calls_val < calls_minimum:
+                    invalid_fields.append({'field': 'total_calls', 'minimum': calls_minimum, 'actual': total_calls_val})
 
-            if not (business_ok or classified_ok):
-                invalid_fields.extend([
-                    {"field": "business_listings", "minimum": SALES_BUSINESS_CLASSIFIED_MIN, "actual": report_data.get("business_listings")},
-                    {"field": "classified_ads", "minimum": SALES_BUSINESS_CLASSIFIED_MIN, "actual": report_data.get("classified_ads")},
-                ])
+            # meetings — min 1
+            meetings_val = _int_or_none(report_data.get('meetings'))
+            if meetings_val is None:
+                invalid_fields.append({'field': 'meetings', 'minimum': 1, 'actual': report_data.get('meetings')})
+            elif meetings_val < 1:
+                invalid_fields.append({'field': 'meetings', 'minimum': 1, 'actual': meetings_val})
 
-            # 3b) If counts are ok, require corresponding links
-            blog_links = (report_data.get("blog_links") or "").strip()
-            ppt_links = (report_data.get("ppt_links") or "").strip()
-            business_links = (report_data.get("business_links") or "").strip()
-            classified_links = (report_data.get("classified_links") or "").strip()
+            # mail_sent — combined total min 20
+            mail_val = _int_or_none(report_data.get('mail_sent'))
+            if mail_val is None:
+                invalid_fields.append({'field': 'mail_sent', 'minimum': 20, 'actual': report_data.get('mail_sent')})
+            elif mail_val < 20:
+                invalid_fields.append({'field': 'mail_sent', 'minimum': 20, 'actual': mail_val})
 
-            if blog_ok and not blog_links:
-                invalid_fields.append({"field": "blog_links", "minimum": 1, "actual": 0})
-            if ppt_ok and not ppt_links:
-                invalid_fields.append({"field": "ppt_links", "minimum": 1, "actual": 0})
-            if business_ok and not business_links:
-                invalid_fields.append({"field": "business_links", "minimum": 5, "actual": 0})
-            if classified_ok and not classified_links:
-                invalid_fields.append({"field": "classified_links", "minimum": 5, "actual": 0})
-
-            # If 5 target reached, ensure at least 5 links are provided.
-            if business_ok and business_links:
-                business_link_count = len([l for l in business_links.replace(",", "\n").splitlines() if l.strip()])
-                if business_link_count < 5:
-                    invalid_fields.append({"field": "business_links", "minimum": 5, "actual": business_link_count})
-            if classified_ok and classified_links:
-                classified_link_count = len([l for l in classified_links.replace(",", "\n").splitlines() if l.strip()])
-                if classified_link_count < 5:
-                    invalid_fields.append({"field": "classified_links", "minimum": 5, "actual": classified_link_count})
-
-            # Newspaper important news only required when newspaper_read is true.
-            newspaper_read = report_data.get("newspaper_read")
-            if newspaper_read is True and not (report_data.get("newspaper_important_news") or "").strip():
-                invalid_fields.append({"field": "newspaper_important_news", "minimum": 1, "actual": 0})
-
-            # 3c) Links must be new (not submitted earlier by same employee)
-            current_links_by_field = {
-                "blog_links": _split_links(blog_links),
-                "ppt_links": _split_links(ppt_links),
-                "business_links": _split_links(business_links),
-                "classified_links": _split_links(classified_links),
-            }
-
-            previous_updates = (
-                DailyUpdate.objects
-                .filter(employee=request.user.employee)
-                .exclude(report_data__isnull=True)
-                .order_by("-created_at")[:200]
-            )
-
-            previously_used_links = set()
-            for prev in previous_updates:
-                prev_data = prev.report_data if isinstance(prev.report_data, dict) else {}
-                for k in ["blog_links", "ppt_links", "business_links", "classified_links"]:
-                    previously_used_links.update(_split_links(prev_data.get(k) or ""))
-
-            duplicate_links = []
-            for field, links in current_links_by_field.items():
-                for link in links:
-                    if link in previously_used_links:
-                        duplicate_links.append({"field": field, "url": link})
-
-            if duplicate_links:
-                return Response({
-                    "error": "Some links were already submitted before. Please add new links.",
-                    "duplicate_links": duplicate_links,
-                }, status=400)
-
-            # 4) Remaining numeric minimums
-            for field, minimum in SALES_MINIMUMS.items():
-                raw_value = report_data.get(field)
-                numeric_value = _int_or_none(raw_value)
-                if numeric_value is None:
-                    # Keep the error consistent with other minimum failures
-                    invalid_fields.append({'field': field, 'minimum': minimum, 'actual': raw_value})
-                    continue
-                if numeric_value < minimum:
-                    invalid_fields.append({'field': field, 'minimum': minimum, 'actual': numeric_value})
+            # linkedin_connections — min 20
+            lc_val = _int_or_none(report_data.get('linkedin_connections'))
+            if lc_val is None:
+                invalid_fields.append({'field': 'linkedin_connections', 'minimum': 20, 'actual': report_data.get('linkedin_connections')})
+            elif lc_val < 20:
+                invalid_fields.append({'field': 'linkedin_connections', 'minimum': 20, 'actual': lc_val})
 
             if invalid_fields:
                 return Response({
@@ -328,21 +257,22 @@ class TaskViewSet(viewsets.ModelViewSet):
         user = self.request.user
         emp = get_or_create_employee(user)
         queryset = Task.objects.select_related('assigned_to', 'assigned_by').all()
+        managed_emps = Employee.objects.filter(Q(manager=user) | Q(managers=user))
+        is_manager_or_admin = user.role in ['admin', 'manager', 'hr'] or user.is_superuser or managed_emps.exists()
 
         scope = self.request.query_params.get('scope')
         if scope == 'mine' and emp:
             queryset = queryset.filter(assigned_to=emp)
         elif scope == 'assigned_by_me':
             queryset = queryset.filter(assigned_by=user)
-        elif user.role not in ['admin', 'manager', 'hr'] and not user.is_superuser:
+        elif not is_manager_or_admin:
             # Normal employees and interns only see tasks assigned to them
             if emp:
                 queryset = queryset.filter(assigned_to=emp)
             else:
                 queryset = Task.objects.none()
-        elif user.role in ['manager', 'hr'] and not user.is_superuser and user.role != 'admin':
-            # Managers see tasks assigned to them, created by them, or assigned to employees reporting to them
-            managed_emps = Employee.objects.filter(Q(manager=user) | Q(managers=user))
+        elif user.role != 'admin' and not user.is_superuser:
+            # Managers / Sales Managers see tasks assigned to them, created by them, or assigned to employees reporting to them
             queryset = queryset.filter(Q(assigned_to=emp) | Q(assigned_by=user) | Q(assigned_to__in=managed_emps))
 
         # Status filter
@@ -359,10 +289,16 @@ class TaskViewSet(viewsets.ModelViewSet):
 
     def perform_create(self, serializer):
         user = self.request.user
+        managed_emps = Employee.objects.filter(Q(manager=user) | Q(managers=user))
+        can_assign = (
+            user.role in ['admin', 'manager', 'hr'] or
+            user.is_staff or
+            user.is_superuser or
+            managed_emps.exists()
+        )
 
-        # Employees and Interns CANNOT assign tasks
-        if user.role in ['employee', 'intern'] and not user.is_staff and not user.is_superuser:
-            raise exceptions.PermissionDenied("Employees and Interns cannot assign tasks.")
+        if not can_assign:
+            raise exceptions.PermissionDenied("You do not have permission to assign tasks.")
 
         assigned_to_id = self.request.data.get('assigned_to')
         if not assigned_to_id:
@@ -375,16 +311,14 @@ class TaskViewSet(viewsets.ModelViewSet):
         # Super Admin / Admin can assign to anyone
         if user.role == 'admin' or user.is_superuser:
             pass
-        elif user.role in ['manager', 'hr']:
-            # Managers can only assign to employees or interns reporting to them
+        else:
             is_subordinate = (
                 target_emp.manager == user or
-                user in target_emp.managers.all()
+                user in target_emp.managers.all() or
+                target_emp in managed_emps
             )
             if not is_subordinate:
                 raise exceptions.PermissionDenied("Managers can only assign tasks to employees or interns reporting to them.")
-        else:
-            raise exceptions.PermissionDenied("You do not have permission to assign tasks.")
 
         due_datetime_raw = self.request.data.get('due_datetime')
         extra_kwargs = {'assigned_by': user}
@@ -417,29 +351,36 @@ class TaskViewSet(viewsets.ModelViewSet):
         user = self.request.user
         instance = serializer.instance
         status_val = self.request.data.get('status')
+        emp = get_or_create_employee(user)
 
-        # Employee/Intern permission check
-        if user.role in ['employee', 'intern'] and not user.is_staff and not user.is_superuser:
-            emp = get_or_create_employee(user)
-            if not emp or instance.assigned_to != emp:
-                raise exceptions.PermissionDenied("You can only update tasks assigned to you.")
-            
-            # Employees/Interns can only change status to 'in_progress' or 'completed', and update 'completion_notes'
-            allowed_statuses = ['in_progress', 'completed']
+        is_creator = (instance.assigned_by == user)
+        is_manager_of_assignee = (
+            instance.assigned_to.manager == user or
+            user in instance.assigned_to.managers.all()
+        )
+        is_assignee = (emp and instance.assigned_to == emp)
+        is_admin = (user.role == 'admin' or user.is_superuser)
+
+        if not (is_admin or is_creator or is_manager_of_assignee or is_assignee):
+            raise exceptions.PermissionDenied("You do not have permission to update this task.")
+
+        # Employee (assignee) updating: can accept, complete, toggle status, update completion notes, delay reason, or extend due date
+        if is_assignee and not (is_admin or is_creator or is_manager_of_assignee):
+            allowed_statuses = ['pending', 'in_progress', 'completed', 'reopened']
             if status_val and status_val not in allowed_statuses:
-                raise exceptions.PermissionDenied("Employees and Interns can only accept or complete assigned tasks.")
+                raise exceptions.PermissionDenied("Employees and Interns can only accept, complete, or update assigned tasks.")
 
-        # Manager permission check
-        elif user.role in ['manager', 'hr'] and not user.is_superuser and user.role != 'admin':
-            is_creator = (instance.assigned_by == user)
-            is_manager_of_assignee = (
-                instance.assigned_to.manager == user or
-                user in instance.assigned_to.managers.all()
-            )
-            if not is_creator and not is_manager_of_assignee:
-                raise exceptions.PermissionDenied("Managers can only update tasks assigned by them or belonging to their team.")
-
+        due_datetime_raw = self.request.data.get('due_datetime')
         extra_kwargs = {}
+        if due_datetime_raw:
+            if isinstance(due_datetime_raw, str):
+                from django.utils.dateparse import parse_datetime
+                parsed_dt = parse_datetime(due_datetime_raw)
+                if parsed_dt:
+                    extra_kwargs['due_datetime'] = parsed_dt
+            else:
+                extra_kwargs['due_datetime'] = due_datetime_raw
+
         if status_val == 'completed' and not instance.completed_at:
             extra_kwargs['completed_at'] = timezone.now()
 
@@ -447,23 +388,22 @@ class TaskViewSet(viewsets.ModelViewSet):
 
     def perform_destroy(self, instance):
         user = self.request.user
-        if user.role in ['employee', 'intern'] and not user.is_staff and not user.is_superuser:
-            raise exceptions.PermissionDenied("Employees and Interns cannot delete tasks.")
-        
-        if user.role in ['manager', 'hr'] and not user.is_superuser and user.role != 'admin':
-            is_creator = (instance.assigned_by == user)
-            is_manager_of_assignee = (
-                instance.assigned_to.manager == user or
-                user in instance.assigned_to.managers.all()
-            )
-            if not is_creator and not is_manager_of_assignee:
-                raise exceptions.PermissionDenied("Managers can only delete tasks created by them or belonging to their team.")
+        is_creator = (instance.assigned_by == user)
+        is_manager_of_assignee = (
+            instance.assigned_to.manager == user or
+            user in instance.assigned_to.managers.all()
+        )
+        is_admin = (user.role == 'admin' or user.is_superuser)
+
+        if not (is_admin or is_creator or is_manager_of_assignee):
+            raise exceptions.PermissionDenied("You do not have permission to delete this task.")
 
         instance.delete()
 
     @action(detail=False, methods=['get'])
     def assignable_employees(self, request):
         user = request.user
+        managed_emps = Employee.objects.filter(Q(manager=user) | Q(managers=user))
 
         if user.role == 'admin' or user.is_superuser:
             # Super Admin can assign tasks to anyone except themselves
@@ -472,8 +412,15 @@ class TaskViewSet(viewsets.ModelViewSet):
                 .select_related('user')
                 .exclude(user=user)
             )
+        elif managed_emps.exists():
+            # Managers (including sales managers) can assign only to employees reporting to them
+            emps = (
+                managed_emps
+                .select_related('user')
+                .exclude(user=user)
+                .distinct()
+            )
         elif user.role in ['manager', 'hr']:
-            # Managers can assign only to employees or interns reporting to them
             emps = (
                 Employee.objects
                 .select_related('user')
@@ -482,7 +429,7 @@ class TaskViewSet(viewsets.ModelViewSet):
                 .distinct()
             )
         else:
-            # Regular employees and interns see no assignable users
+            # Regular employees with no subordinates see no assignable users
             emps = Employee.objects.none()
 
         data = [
@@ -496,3 +443,37 @@ class TaskViewSet(viewsets.ModelViewSet):
             for e in emps
         ]
         return Response(data)
+
+    @action(detail=False, methods=['get'])
+    def my_calls_target(self, request):
+        emp = get_or_create_employee(request.user)
+        target = 0
+        has_target = False
+        task_info = None
+        if emp:
+            active_task = (
+                Task.objects.filter(
+                    assigned_to=emp,
+                    status__in=['pending', 'in_progress'],
+                )
+                .order_by('-created_at')
+                .first()
+            )
+            if active_task:
+                text = f"{active_task.title or ''} {active_task.description or ''}"
+                import re as _re
+                match = _re.search(r'(\d+)\s*(?:calls?|total\s*calls?)', text, _re.IGNORECASE)
+                if not match:
+                    match = _re.search(r'(?:calls?|total\s*calls?)\s*[:=-]?\s*(\d+)', text, _re.IGNORECASE)
+                if match:
+                    target = int(match.group(1))
+                    has_target = True
+                task_info = {
+                    'id': active_task.id,
+                    'title': active_task.title,
+                }
+        return Response({
+            'calls_target': target,
+            'has_target': has_target,
+            'task': task_info,
+        })

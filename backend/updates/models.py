@@ -43,6 +43,7 @@ class Task(models.Model):
     priority = models.CharField(max_length=20, choices=PRIORITY_CHOICES, default='medium')
     status = models.CharField(max_length=20, choices=STATUS_CHOICES, default='pending')
     due_datetime = models.DateTimeField()
+    incomplete_reason = models.TextField(blank=True, default='')
     completion_notes = models.TextField(blank=True, default='')
     completed_at = models.DateTimeField(null=True, blank=True)
     created_at = models.DateTimeField(auto_now_add=True)

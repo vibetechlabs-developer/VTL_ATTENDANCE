@@ -13,6 +13,12 @@ import {
   AlertTriangle,
   CheckCircle2,
   Sparkles,
+  X,
+  ChevronRight,
+  CalendarDays,
+  Briefcase,
+  Mail,
+  Phone,
 } from "lucide-react";
 import { toast } from "sonner";
 
@@ -24,9 +30,14 @@ import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { Label } from "@/components/ui/label";
 import { Textarea } from "@/components/ui/textarea";
+import { Badge } from "@/components/ui/badge";
 import {
   Select, SelectContent, SelectItem, SelectTrigger, SelectValue,
 } from "@/components/ui/select";
+import {
+  Sheet, SheetContent, SheetHeader, SheetTitle,
+} from "@/components/ui/sheet";
+import { ScrollArea } from "@/components/ui/scroll-area";
 
 import { useAuthStore } from "@/store/authStore";
 import { useAttendanceStore } from "@/store/attendanceStore";
@@ -36,6 +47,7 @@ import {
   attendanceBreakStartRequest,
   attendanceSessionRequest,
   appraisalCreateRequest,
+  employeeOverviewRequest,
 } from "@/lib/api";
 
 const FULL_DAY_MS = 8 * 60 * 60 * 1000;
@@ -91,6 +103,32 @@ export default function ManagerDashboard() {
   const [appraisalRating, setAppraisalRating] = useState("5");
   const [appraisalMessage, setAppraisalMessage] = useState("");
   const [appraisalSending, setAppraisalSending] = useState(false);
+
+  // Employee Overview Sheet state
+  const [selectedEmployeePk, setSelectedEmployeePk] = useState<string | null>(null);
+  const [empOverview, setEmpOverview] = useState<any>(null);
+  const [empOverviewLoading, setEmpOverviewLoading] = useState(false);
+
+  const loadEmployeeOverview = async (empPk: string) => {
+    if (!accessToken) return;
+    setSelectedEmployeePk(empPk);
+    setEmpOverview(null);
+    setEmpOverviewLoading(true);
+    try {
+      const res = await employeeOverviewRequest(accessToken, empPk);
+      if (res.ok) {
+        const data = await res.json();
+        setEmpOverview(data);
+      } else {
+        const errData = await res.json().catch(() => ({}));
+        toast.error(errData.error || "Could not load employee details.");
+      }
+    } catch {
+      toast.error("Failed to load employee overview.");
+    } finally {
+      setEmpOverviewLoading(false);
+    }
+  };
 
   useEffect(() => {
     const t = window.setInterval(() => setNow(Date.now()), 1000);
@@ -156,12 +194,7 @@ export default function ManagerDashboard() {
         if (!res.ok) return;
 
         const rows = (await res.json().catch(() => [])) as AttendanceAdminRow[];
-        const dept = user?.department;
-        const filtered = rows
-          .filter((r) => (dept ? r.department === dept : true))
-          .filter((r) => r.role === "employee" || r.role === "sales");
-
-        setTeamRows(filtered);
+        setTeamRows(Array.isArray(rows) ? rows : []);
       } finally {
         setTeamLoading(false);
       }
@@ -434,6 +467,7 @@ export default function ManagerDashboard() {
                   <th className="text-left py-3 px-2 font-semibold text-muted-foreground text-xs uppercase tracking-wider">Check Out</th>
                   <th className="text-left py-3 px-2 font-semibold text-muted-foreground text-xs uppercase tracking-wider">Hours</th>
                   <th className="text-left py-3 px-2 font-semibold text-muted-foreground text-xs uppercase tracking-wider">Status</th>
+                  <th className="text-left py-3 px-2 font-semibold text-muted-foreground text-xs uppercase tracking-wider">Profile</th>
                 </tr>
               </thead>
               <tbody>
@@ -456,7 +490,8 @@ export default function ManagerDashboard() {
                       initial={{ opacity: 0, y: 4 }}
                       animate={{ opacity: 1, y: 0 }}
                       transition={{ delay: i * 0.03 }}
-                      className="border-b border-border/30 hover:bg-muted/30 transition-smooth"
+                      className="border-b border-border/30 hover:bg-primary/5 transition-smooth cursor-pointer"
+                      onClick={() => void loadEmployeeOverview(a.employeePk)}
                     >
                       <td className="py-3 px-2 font-medium">{a.name}</td>
                       <td className="py-3 px-2 text-muted-foreground">{a.department}</td>
@@ -483,6 +518,16 @@ export default function ManagerDashboard() {
                                   : "info"
                           }
                         />
+                      </td>
+                      <td className="py-3 px-2">
+                        <Button
+                          size="sm"
+                          variant="ghost"
+                          className="h-7 text-xs text-primary gap-1 px-2"
+                          onClick={(e) => { e.stopPropagation(); void loadEmployeeOverview(a.employeePk); }}
+                        >
+                          View <ChevronRight className="h-3 w-3" />
+                        </Button>
                       </td>
                     </motion.tr>
                   ))
@@ -551,6 +596,158 @@ export default function ManagerDashboard() {
           </Button>
         </CardContent>
       </Card>
+
+      {/* Employee Overview Sheet */}
+      <Sheet open={selectedEmployeePk !== null} onOpenChange={(open) => { if (!open) { setSelectedEmployeePk(null); setEmpOverview(null); } }}>
+        <SheetContent side="right" className="w-full sm:max-w-2xl p-0 flex flex-col">
+          <SheetHeader className="p-5 pb-3 border-b border-border/40 shrink-0">
+            <SheetTitle className="flex items-center gap-2 text-base">
+              <Users className="h-4 w-4 text-primary" />
+              {empOverview?.employee?.name ?? "Employee"} — Full Profile
+            </SheetTitle>
+          </SheetHeader>
+          <ScrollArea className="flex-1 overflow-y-auto">
+            {empOverviewLoading && (
+              <div className="p-8 text-center text-sm text-muted-foreground">Loading employee details...</div>
+            )}
+            {!empOverviewLoading && empOverview && (() => {
+              const emp = empOverview.employee;
+              const todayAtt = empOverview.today_attendance;
+              const history: any[] = empOverview.attendance_history ?? [];
+              const tasks: any[] = empOverview.tasks ?? [];
+              const updates: any[] = empOverview.daily_updates ?? [];
+              const leaves: any[] = empOverview.leaves ?? [];
+              const statusColor = (s: string) =>
+                s === "Present" ? "text-emerald-600" : s === "Late" ? "text-amber-600" : s === "On Leave" ? "text-blue-600" : "text-red-500";
+              return (
+                <div className="p-5 space-y-5">
+                  <div className="rounded-xl border border-border/40 bg-muted/20 p-4 space-y-3">
+                    <div className="flex items-center gap-3">
+                      {emp.avatar ? (
+                        <img src={emp.avatar} alt={emp.name} className="h-14 w-14 rounded-full object-cover border-2 border-primary/20" />
+                      ) : (
+                        <div className="h-14 w-14 rounded-full bg-primary/10 flex items-center justify-center text-xl font-bold text-primary">
+                          {emp.name?.charAt(0)?.toUpperCase() ?? "?"}
+                        </div>
+                      )}
+                      <div>
+                        <p className="font-bold text-base text-foreground">{emp.name}</p>
+                        <p className="text-xs text-muted-foreground">{emp.designation} · {emp.empId}</p>
+                        <div className="flex gap-1.5 mt-1 flex-wrap">
+                          {(emp.roles ?? [emp.role]).map((r: string) => (
+                            <Badge key={r} variant="secondary" className="text-[10px] px-1.5 py-0 capitalize">{r}</Badge>
+                          ))}
+                        </div>
+                      </div>
+                    </div>
+                    <div className="grid grid-cols-2 gap-x-4 gap-y-1.5 text-xs">
+                      <div className="flex items-center gap-1.5 text-muted-foreground"><Mail className="h-3 w-3" />{emp.email}</div>
+                      {emp.phone && <div className="flex items-center gap-1.5 text-muted-foreground"><Phone className="h-3 w-3" />{emp.phone}</div>}
+                      <div className="flex items-center gap-1.5 text-muted-foreground"><Briefcase className="h-3 w-3" />{emp.department}</div>
+                      {emp.date_of_joining && <div className="flex items-center gap-1.5 text-muted-foreground"><CalendarDays className="h-3 w-3" />Joined: {emp.date_of_joining}</div>}
+                      <div className="text-muted-foreground col-span-2">Reports to: <span className="text-foreground font-medium">{emp.reports_to}</span></div>
+                      {emp.is_wfh && <Badge variant="outline" className="text-[10px] w-fit">Work From Home</Badge>}
+                    </div>
+                  </div>
+
+                  <div className="rounded-xl border border-border/40 bg-muted/10 p-4">
+                    <p className="text-xs font-semibold uppercase tracking-wider text-muted-foreground mb-3">Today Attendance</p>
+                    <div className="flex flex-wrap gap-4 text-sm">
+                      <div><span className="text-muted-foreground text-xs">Status </span><span className={"font-bold " + statusColor(todayAtt.status)}>{todayAtt.status}</span></div>
+                      <div><span className="text-muted-foreground text-xs">In </span><span className="font-medium">{todayAtt.check_in ? format(new Date(todayAtt.check_in), "h:mm a") : "—"}</span></div>
+                      <div><span className="text-muted-foreground text-xs">Out </span><span className="font-medium">{todayAtt.check_out ? format(new Date(todayAtt.check_out), "h:mm a") : "—"}</span></div>
+                      <div><span className="text-muted-foreground text-xs">Hours </span><span className="font-medium">{todayAtt.hours > 0 ? todayAtt.hours + "h" : "—"}</span></div>
+                    </div>
+                  </div>
+
+                  {history.length > 0 && (
+                    <div className="rounded-xl border border-border/40 overflow-hidden">
+                      <div className="px-4 py-2.5 bg-muted/20 border-b border-border/40">
+                        <p className="text-xs font-semibold uppercase tracking-wider text-muted-foreground">Attendance History (Last 14 Days)</p>
+                      </div>
+                      <div className="overflow-x-auto">
+                        <table className="w-full text-xs">
+                          <thead><tr className="border-b border-border/30 text-muted-foreground">
+                            <th className="text-left py-2 px-3 font-semibold">Date</th>
+                            <th className="text-left py-2 px-3 font-semibold">Status</th>
+                            <th className="text-left py-2 px-3 font-semibold">In</th>
+                            <th className="text-left py-2 px-3 font-semibold">Out</th>
+                            <th className="text-left py-2 px-3 font-semibold">Hrs</th>
+                          </tr></thead>
+                          <tbody>{history.map((h) => (
+                            <tr key={h.id} className="border-b border-border/20 hover:bg-muted/20">
+                              <td className="py-2 px-3">{h.date}</td>
+                              <td className={"py-2 px-3 font-medium " + statusColor(h.status)}>{h.status}</td>
+                              <td className="py-2 px-3">{h.check_in ? format(new Date(h.check_in), "h:mm a") : "—"}</td>
+                              <td className="py-2 px-3">{h.check_out ? format(new Date(h.check_out), "h:mm a") : "—"}</td>
+                              <td className="py-2 px-3">{h.hours > 0 ? h.hours + "h" : "—"}</td>
+                            </tr>
+                          ))}</tbody>
+                        </table>
+                      </div>
+                    </div>
+                  )}
+
+                  <div className="space-y-2">
+                    <p className="text-xs font-semibold uppercase tracking-wider text-muted-foreground">Tasks ({tasks.length})</p>
+                    {tasks.length === 0 ? (
+                      <div className="p-3 rounded-lg border border-border/40 bg-muted/10 text-xs text-muted-foreground text-center">
+                        No tasks assigned to this employee.
+                      </div>
+                    ) : (
+                      tasks.map((t) => (
+                        <div key={t.id} className={"rounded-lg border p-3 text-xs space-y-1.5 " + (t.is_overdue ? "border-red-400/40 bg-red-500/5" : t.status === "reviewed" ? "border-purple-400/30 bg-purple-500/5" : t.status === "completed" ? "border-emerald-400/30 bg-emerald-500/5" : "border-border/40")}>
+                          <div className="flex items-start justify-between gap-2">
+                            <span className="font-semibold text-foreground leading-snug">{t.title}</span>
+                            <div className="flex gap-1 shrink-0">
+                              <Badge variant="outline" className="text-[10px] px-1.5 py-0 capitalize">{t.priority}</Badge>
+                              <Badge variant="outline" className={"text-[10px] px-1.5 py-0 " + (t.is_overdue ? "border-red-400 text-red-600" : (t.status === "completed" || t.status === "reviewed") ? "border-emerald-400 text-emerald-600" : "")}>
+                                {t.is_overdue ? "Overdue" : t.status.replace("_", " ")}
+                              </Badge>
+                            </div>
+                          </div>
+                          {t.description && <p className="text-xs text-muted-foreground whitespace-pre-wrap">{t.description}</p>}
+                          {t.due_datetime && <p className="text-muted-foreground">Due: {format(new Date(t.due_datetime), "PP p")}</p>}
+                          {t.completion_notes && <p className="text-emerald-700 dark:text-emerald-400"><span className="font-semibold">Report: </span>{t.completion_notes}</p>}
+                          {t.incomplete_reason && <p className="text-orange-600"><span className="font-semibold">Delay: </span>{t.incomplete_reason}</p>}
+                        </div>
+                      ))
+                    )}
+                  </div>
+
+                  {updates.length > 0 && (
+                    <div className="space-y-2">
+                      <p className="text-xs font-semibold uppercase tracking-wider text-muted-foreground">Recent Daily Updates</p>
+                      {updates.map((u) => (
+                        <div key={u.id} className="rounded-lg border border-border/40 p-3 text-xs space-y-1">
+                          <p className="text-muted-foreground font-medium">{u.date}</p>
+                          <p className="text-foreground whitespace-pre-wrap">{u.update_text}</p>
+                        </div>
+                      ))}
+                    </div>
+                  )}
+
+                  {leaves.length > 0 && (
+                    <div className="space-y-2">
+                      <p className="text-xs font-semibold uppercase tracking-wider text-muted-foreground">Leave Requests</p>
+                      {leaves.map((lr) => (
+                        <div key={lr.id} className="rounded-lg border border-border/40 p-3 text-xs flex items-start justify-between gap-2">
+                          <div>
+                            <p className="font-medium capitalize">{(lr.leave_type ?? "").replace(/_/g, " ")} leave</p>
+                            <p className="text-muted-foreground">{lr.start_date} to {lr.end_date}</p>
+                            {lr.reason && <p className="text-muted-foreground mt-0.5">{lr.reason}</p>}
+                          </div>
+                          <Badge variant="outline" className={"text-[10px] capitalize shrink-0 " + (lr.status === "approved" ? "border-emerald-400 text-emerald-600" : lr.status === "rejected" ? "border-red-400 text-red-600" : "")}>{lr.status}</Badge>
+                        </div>
+                      ))}
+                    </div>
+                  )}
+                </div>
+              );
+            })()}
+          </ScrollArea>
+        </SheetContent>
+      </Sheet>
     </div>
   );
 }

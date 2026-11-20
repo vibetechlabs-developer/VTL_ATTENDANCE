@@ -94,11 +94,13 @@ export default function AttendanceManagement() {
       const body = (await res.json().catch(() => null)) as any[] | { error?: string } | null;
       if (!res.ok) {
         const msg =
-          body && typeof body === "object" && !Array.isArray(body) && typeof body.error === "string"
-            ? body.error
-            : res.status === 401
-              ? "Session expired. Please sign in again."
-              : "Could not load attendance. Check your connection and try again.";
+          body && typeof body === "object" && !Array.isArray(body) && typeof (body as any).error === "string"
+            ? (body as any).error
+            : body && typeof body === "object" && !Array.isArray(body) && typeof (body as any).detail === "string"
+              ? (body as any).detail
+              : res.status === 401
+                ? "Session expired. Please sign in again."
+                : "Could not load attendance. Check your connection and try again.";
         setLoadError(msg);
         setAttendance([]);
         toast.error(msg);

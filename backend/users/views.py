@@ -9,7 +9,9 @@ from django.conf import settings
 from django.db import IntegrityError
 from django.db.utils import IntegrityError as DbIntegrityError
 from django.utils import timezone
+from django.db.models import Q
 import logging
+from datetime import datetime, time, timedelta
 from django.core.files.base import ContentFile
 import base64
 import uuid
@@ -29,7 +31,7 @@ from .models import Employee, PushSubscription, User, Appraisal, AppNotification
 from attendance.face_utils import decode_base64_image, get_face_encoding, is_valid_stored_encoding
 from attendance.models import AttendanceLog
 from leaves.models import LeaveRequest
-from updates.models import DailyUpdate
+from updates.models import DailyUpdate, Task
 from .push_utils import send_push_message
 
 logger = logging.getLogger(__name__)
@@ -805,3 +807,176 @@ class MyAppraisalsView(APIView):
                 'created_at': a.created_at.isoformat(),
             })
         return Response(rows)
+
+
+class EmployeeOverviewView(APIView):
+    permission_classes = [IsAuthenticated]
+
+    def get(self, request, pk):
+        try:
+            # Query by Employee ID first. Only fall back to User ID if not found.
+            emp = Employee.objects.select_related('user', 'manager').prefetch_related('managers').filter(id=pk).first()
+            if not emp:
+                emp = Employee.objects.select_related('user', 'manager').prefetch_related('managers').filter(user__id=pk).first()
+            if not emp:
+                return Response({'error': 'Employee not found.'}, status=404)
+
+            user = request.user
+            managed_emps = Employee.objects.filter(Q(manager=user) | Q(managers=user))
+            is_admin = user.role in ['admin', 'hr'] or user.is_superuser
+            is_mgr = user.role == 'manager' or managed_emps.exists()
+            is_subordinate = (
+                emp.manager_id == user.id
+                or emp.managers.filter(id=user.id).exists()
+                or managed_emps.filter(id=emp.id).exists()
+                or (is_mgr and getattr(user, 'employee', None) and user.employee.department and user.employee.department == emp.department)
+            )
+            is_self = (getattr(user, 'employee', None) and user.employee.id == emp.id)
+
+            if not (is_admin or is_mgr or is_subordinate or is_self):
+                return Response({'error': 'Permission denied.'}, status=403)
+
+            # 1. Employee info
+            avatar = None
+            if emp.profile_photo:
+                try:
+                    avatar = request.build_absolute_uri(emp.profile_photo.url)
+                except Exception:
+                    avatar = None
+
+            reports_to_list = []
+            if emp.manager:
+                reports_to_list.append(emp.manager.username)
+            for m in emp.managers.all():
+                if m.username not in reports_to_list:
+                    reports_to_list.append(m.username)
+
+            emp_data = {
+                'id': emp.id,
+                'userId': emp.user.id,
+                'name': emp.name,
+                'email': emp.user.email,
+                'empId': f'VTL-{str(emp.id).zfill(3)}',
+                'role': emp.user.role,
+                'roles': all_roles(emp.user),
+                'department': emp.department,
+                'designation': emp.designation or emp.department or 'Team Member',
+                'phone': emp.phone,
+                'date_of_joining': emp.date_of_joining.isoformat() if emp.date_of_joining else (emp.created_at.strftime('%Y-%m-%d') if emp.created_at else None),
+                'is_wfh': emp.is_wfh,
+                'avatar': avatar,
+                'reports_to': ', '.join(reports_to_list) if reports_to_list else 'None',
+            }
+
+            # 2. Today's attendance
+            today = timezone.now().date()
+            today_log = AttendanceLog.objects.filter(employee=emp, date=today).first()
+            late_cutoff = timezone.make_aware(
+                datetime.combine(today, time(10, 15)),
+                timezone.get_current_timezone()
+            )
+            today_status = 'Absent'
+            if LeaveRequest.objects.filter(employee=emp, status='approved', start_date__lte=today, end_date__gte=today).exists():
+                today_status = 'On Leave'
+            elif today_log and today_log.check_in:
+                c_in = today_log.check_in
+                if timezone.is_naive(c_in):
+                    c_in = timezone.make_aware(c_in, timezone.get_current_timezone())
+                today_status = 'Late' if c_in > late_cutoff else 'Present'
+
+            today_attendance = {
+                'status': today_status,
+                'check_in': today_log.check_in.isoformat() if today_log and today_log.check_in else None,
+                'check_out': today_log.check_out.isoformat() if today_log and today_log.check_out else None,
+                'hours': float(today_log.total_hours or 0) if today_log else 0,
+                'overtime_hours': float(today_log.overtime_hours or 0) if today_log else 0,
+            }
+
+            # 3. Attendance history (last 14 days)
+            fourteen_days_ago = today - timedelta(days=14)
+            history_logs = AttendanceLog.objects.filter(
+                employee=emp,
+                date__gte=fourteen_days_ago,
+                date__lte=today
+            ).order_by('-date')
+
+            attendance_history = []
+            for l in history_logs:
+                l_cutoff = timezone.make_aware(
+                    datetime.combine(l.date, time(10, 15)),
+                    timezone.get_current_timezone()
+                )
+                s = 'Absent'
+                if l.check_in:
+                    c_in = l.check_in
+                    if timezone.is_naive(c_in):
+                        c_in = timezone.make_aware(c_in, timezone.get_current_timezone())
+                    s = 'Late' if c_in > l_cutoff else 'Present'
+                attendance_history.append({
+                    'id': str(l.id),
+                    'date': l.date.isoformat(),
+                    'status': s,
+                    'check_in': l.check_in.isoformat() if l.check_in else None,
+                    'check_out': l.check_out.isoformat() if l.check_out else None,
+                    'hours': float(l.total_hours or 0),
+                    'overtime_hours': float(l.overtime_hours or 0),
+                })
+
+            # 4. Tasks assigned to this employee
+            tasks_qs = Task.objects.filter(
+                Q(assigned_to=emp) | Q(assigned_to__user=emp.user)
+            ).order_by('-created_at')[:50]
+            tasks_list = []
+            for t in tasks_qs:
+                tasks_list.append({
+                    'id': t.id,
+                    'title': t.title,
+                    'description': t.description,
+                    'priority': t.priority,
+                    'status': t.status,
+                    'due_datetime': t.due_datetime.isoformat() if t.due_datetime else None,
+                    'is_overdue': t.is_overdue,
+                    'incomplete_reason': t.incomplete_reason or '',
+                    'completion_notes': t.completion_notes or '',
+                    'completed_at': t.completed_at.isoformat() if t.completed_at else None,
+                    'created_at': t.created_at.isoformat() if t.created_at else None,
+                })
+
+            # 5. Recent daily updates (last 10)
+            updates_qs = DailyUpdate.objects.filter(employee=emp).order_by('-date', '-created_at')[:10]
+            updates_list = []
+            for u in updates_qs:
+                updates_list.append({
+                    'id': u.id,
+                    'date': u.date.isoformat() if u.date else None,
+                    'update_text': u.update_text,
+                    'report_data': u.report_data,
+                    'created_at': u.created_at.isoformat() if u.created_at else None,
+                })
+
+            # 6. Leaves summary
+            recent_leaves = LeaveRequest.objects.filter(employee=emp).order_by('-applied_at')[:5]
+            leaves_list = []
+            for lr in recent_leaves:
+                leaves_list.append({
+                    'id': lr.id,
+                    'leave_type': lr.leave_type,
+                    'start_date': lr.start_date.isoformat() if lr.start_date else None,
+                    'end_date': lr.end_date.isoformat() if lr.end_date else None,
+                    'status': lr.status,
+                    'reason': lr.reason,
+                    'applied_at': lr.applied_at.isoformat() if lr.applied_at else None,
+                })
+
+            return Response({
+                'employee': emp_data,
+                'today_attendance': today_attendance,
+                'attendance_history': attendance_history,
+                'tasks': tasks_list,
+                'daily_updates': updates_list,
+                'leaves': leaves_list,
+            })
+        except Exception as exc:
+            import traceback
+            traceback.print_exc()
+            return Response({'error': f'Failed to retrieve employee overview: {str(exc)}'}, status=500)

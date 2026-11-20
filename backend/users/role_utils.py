@@ -39,6 +39,15 @@ def all_roles(user):
     for r in getattr(user, "extra_roles", None) or []:
         if isinstance(r, str) and r in VALID_ROLES and r not in roles:
             roles.append(r)
+    # If user manages any team members, they hold manager responsibility
+    if "manager" not in roles:
+        try:
+            from .models import Employee
+            from django.db.models import Q
+            if Employee.objects.filter(Q(manager=user) | Q(managers=user)).exists():
+                roles.append("manager")
+        except Exception:
+            pass
     return roles
 
 

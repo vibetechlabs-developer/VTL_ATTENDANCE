@@ -198,47 +198,29 @@ const [bdeReportData, setBdeReportData] = useState<Record<string, any>>({
 
           {u?.report_data && u?.role === "sales" && (
             <div className="mt-3 rounded-xl border border-border/60 bg-muted/30 p-3 space-y-2">
-              <p className="text-xs font-semibold">Sales/BDE report</p>
+              <p className="text-xs font-semibold">Sales report</p>
               <div className="grid grid-cols-1 sm:grid-cols-2 gap-2">
                 <div className="rounded-lg border border-border/60 bg-background/40 p-2 space-y-1.5">
-                  <p className="text-[11px] font-semibold">Work counts</p>
-                  {reportLine("Blog posts", u.report_data.blog_posts)}
-                  {reportLine("PPT posts", u.report_data.ppt_posts)}
-                  {reportLine("Business listings", u.report_data.business_listings)}
-                  {reportLine("Classified ads", u.report_data.classified_ads)}
-                  {reportLine("Calls (total/received)", `${u.report_data.total_calls ?? "—"} / ${u.report_data.calls_received ?? "—"}`)}
+                  <p className="text-[11px] font-semibold">Activity counts</p>
+                  {reportLine("Total calls", u.report_data.total_calls)}
                   {reportLine("Meetings", u.report_data.meetings)}
-                  {reportLine("Clients done", u.report_data.clients_done)}
-                  {reportLine("Data extracted (India/Abroad)", `${u.report_data.data_extracted_india ?? "—"} / ${u.report_data.data_extracted_abroad ?? "—"}`)}
-                  {reportLine("Mails (B2B/General)", `${u.report_data.mail_sent_b2b ?? "—"} / ${u.report_data.mail_sent_general ?? "—"}`)}
+                  {reportLine("Mails sent", u.report_data.mail_sent ?? (u.report_data.mail_sent_b2b != null ? `${u.report_data.mail_sent_b2b} (B2B) + ${u.report_data.mail_sent_general ?? 0} (Gen)` : undefined))}
+                  {u.report_data.calls_received != null && reportLine("Calls received (legacy)", u.report_data.calls_received)}
+                  {u.report_data.clients_done != null && reportLine("Clients done (legacy)", u.report_data.clients_done)}
                 </div>
                 <div className="rounded-lg border border-border/60 bg-background/40 p-2 space-y-1.5">
-                  <p className="text-[11px] font-semibold">LinkedIn + Newspaper</p>
-                  {reportLine("LinkedIn post", u.report_data.linkedin_post === true ? "YES" : u.report_data.linkedin_post === false ? "NO" : "—")}
+                  <p className="text-[11px] font-semibold">LinkedIn</p>
                   {reportLine("LinkedIn connections", u.report_data.linkedin_connections)}
-                  {reportLine("LinkedIn messages", u.report_data.linkedin_messages)}
-                  {reportLine("LinkedIn data extracted", u.report_data.linkedin_data_extracted)}
-                  {reportLine("Newspaper read", u.report_data.newspaper_read === true ? "YES" : u.report_data.newspaper_read === false ? "NO" : "—")}
-                  {reportLine("Important news", u.report_data.newspaper_important_news)}
-                  {reportLine("Photos added in group", u.report_data.group_photos_added === true ? "YES" : u.report_data.group_photos_added === false ? "NO" : "—")}
+                  {reportLine("LinkedIn messages sent", u.report_data.linkedin_messages)}
+                  {u.report_data.linkedin_data_extracted != null && reportLine("LinkedIn data extracted", u.report_data.linkedin_data_extracted)}
                 </div>
               </div>
-              <div className="rounded-lg border border-border/60 bg-background/40 p-2 space-y-1.5">
-                <p className="text-[11px] font-semibold">Links</p>
-                <div className="grid grid-cols-1 sm:grid-cols-2 gap-2">
-                  {["blog_links", "ppt_links", "business_links", "classified_links"].map((key) => (
-                    <div key={key} className="space-y-1">
-                      <p className="text-[11px] text-muted-foreground capitalize">{key.replace("_links", "")} links ({splitUrls(u.report_data[key]).length})</p>
-                      <div className="space-y-1">
-                        {splitUrls(u.report_data[key]).slice(0, 5).map((l: string) => (
-                          <a key={l} href={l} target="_blank" rel="noreferrer" className="text-[11px] text-primary underline break-all block">{l}</a>
-                        ))}
-                      </div>
-                    </div>
-                  ))}
+              {u.report_data.today_summary && (
+                <div className="rounded-lg border border-border/60 bg-background/40 p-2 space-y-1">
+                  <p className="text-[11px] font-semibold">Today&apos;s work summary</p>
+                  <p className="text-xs text-foreground/90 whitespace-pre-wrap">{u.report_data.today_summary}</p>
                 </div>
-                <p className="text-[10px] text-muted-foreground">Showing first 5 links in each section.</p>
-              </div>
+              )}
             </div>
           )}
         </div>

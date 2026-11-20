@@ -6,7 +6,7 @@ from .views import (
     AuditLogsView, SecurityOverviewView, EmployeeFaceDataView,
     PushPublicKeyView, PushSubscribeView, PushUnsubscribeView, PushLunchReminderView,
     MyNotificationsView, MarkNotificationsReadView,
-    AppraisalCreateView, MyAppraisalsView,
+    AppraisalCreateView, MyAppraisalsView, EmployeeOverviewView,
 )
 
 urlpatterns = [
@@ -16,6 +16,7 @@ urlpatterns = [
     path('me/', MeView.as_view(), name='me'),
     path('me/update/', MeUpdateView.as_view(), name='me-update'),
     path('employees/', EmployeesListView.as_view(), name='employees-list'),
+    path('employees/<int:pk>/overview/', EmployeeOverviewView.as_view(), name='employee-overview'),
     path('employees/create/', EmployeesCreateView.as_view(), name='employees-create'),
     path('employees/<int:pk>/update/', EmployeesUpdateView.as_view(), name='employees-update'),
     path('employees/<int:pk>/delete/', EmployeesDeleteView.as_view(), name='employees-delete'),
